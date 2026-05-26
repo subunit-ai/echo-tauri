@@ -169,3 +169,14 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
     c.account_email.clear();
     c.save().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await {
+        Ok(Some(u)) => Ok(Some(u.version)),
+        Ok(None) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
