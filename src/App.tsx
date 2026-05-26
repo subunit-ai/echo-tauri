@@ -3,7 +3,9 @@ import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
+import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
+import { Vocabulary } from "./sections/Vocabulary";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 
 function Placeholder({ title }: { title: string }) {
@@ -22,6 +24,9 @@ function Shell() {
   if (!config) {
     return <div className="empty" style={{ paddingTop: 90 }}>Lädt…</div>;
   }
+  if (!config.has_seen_onboarding) {
+    return <Onboarding />;
+  }
 
   return (
     <div className="app">
@@ -32,7 +37,7 @@ function Shell() {
         {section === "history" && <History />}
         {section === "settings" && <Settings />}
         {section === "meetings" && <Placeholder title="Meetings" />}
-        {section === "vocabulary" && <Placeholder title="Vocabulary" />}
+        {section === "vocabulary" && <Vocabulary />}
         {section === "help" && <Placeholder title="Hilfe" />}
       </main>
     </div>

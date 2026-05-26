@@ -406,3 +406,104 @@ input:focus {
   color: var(--muted);
   margin-top: 8px;
 }
+
+/* ---------- Vocabulary table ---------- */
+.vocab {
+  width: 100%;
+  border-collapse: collapse;
+}
+.vocab th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0 8px 10px;
+}
+.vocab td {
+  padding: 4px 8px;
+}
+.vocab input,
+.vocab select {
+  width: 100%;
+  min-width: 0;
+}
+.rowdel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+}
+.rowdel:hover {
+  color: var(--rec);
+  border-color: var(--rec);
+}
+
+/* ---------- Onboarding ---------- */
+.onb {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(900px 600px at 50% 0%, rgba(34, 211, 238, 0.1), transparent 60%),
+    var(--bg);
+}
+.onb-card {
+  width: min(560px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 38px 34px;
+  text-align: center;
+}
+.onb-card h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 14px 0 8px;
+}
+.onb-card p {
+  color: var(--muted);
+  margin: 6px 0;
+}
+.onb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.onb-row:last-of-type {
+  border-bottom: none;
+}
+.onb-dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 26px 0 18px;
+}
+.onb-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.onb-dots span.on {
+  background: var(--accent);
+}
+.onb-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.onb-primary {
+  border-color: var(--accent);
+  color: var(--bg);
+  background: var(--accent);
+}
