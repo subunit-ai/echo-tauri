@@ -18,6 +18,8 @@ use crate::config::Config;
 #[derive(Clone, Debug, Default)]
 pub struct Target {
     pub id: String,
+    /// Window title (for Auto-Mode style selection). Best-effort.
+    pub title: String,
 }
 
 /// Capture the currently focused window so we can paste back into it later.
@@ -31,7 +33,14 @@ pub fn capture_active_window() -> Target {
             if out.status.success() {
                 let id = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !id.is_empty() {
-                    return Target { id };
+                    let title = std::process::Command::new("xdotool")
+                        .args(["getwindowname", &id])
+                        .output()
+                        .ok()
+                        .filter(|o| o.status.success())
+                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                        .unwrap_or_default();
+                    return Target { id, title };
                 }
             }
         }

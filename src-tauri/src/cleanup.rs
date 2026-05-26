@@ -6,11 +6,11 @@ use std::time::Duration;
 
 use crate::config::Config;
 
-pub fn maybe_cleanup(cfg: &Config, text: &str) -> String {
+pub fn maybe_cleanup(cfg: &Config, text: &str, style: &str) -> String {
     if !cfg.cleanup_enabled || text.trim().is_empty() {
         return text.to_string();
     }
-    match cleanup(cfg, text) {
+    match cleanup(cfg, text, style) {
         Ok(t) if !t.trim().is_empty() => t,
         Ok(_) => text.to_string(),
         Err(e) => {
@@ -20,7 +20,7 @@ pub fn maybe_cleanup(cfg: &Config, text: &str) -> String {
     }
 }
 
-fn cleanup(cfg: &Config, text: &str) -> anyhow::Result<String> {
+fn cleanup(cfg: &Config, text: &str, style: &str) -> anyhow::Result<String> {
     // Derive the cleanup endpoint from the (configurable) transcribe endpoint.
     let url = cfg.subunit_endpoint.replace("/transcribe", "/cleanup");
     let client = reqwest::blocking::Client::builder()
@@ -29,7 +29,7 @@ fn cleanup(cfg: &Config, text: &str) -> anyhow::Result<String> {
     let mut req = client.post(&url).json(&serde_json::json!({
         "text": text,
         "language": cfg.language,
-        "style": cfg.cleanup_style,
+        "style": style,
     }));
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);

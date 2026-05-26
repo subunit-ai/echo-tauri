@@ -40,6 +40,16 @@ pub struct TranscriptPayload {
 
 pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Option<String>) {
     let _ = app.emit(EVT_STATE, StatePayload { state, detail });
+    // Dynamic tray tooltip reflecting the current state.
+    if let Some(tray) = app.tray_by_id("tray") {
+        let tip = match state {
+            EngineState::Recording => "Echo — Aufnahme…",
+            EngineState::Transcribing => "Echo — Transkribiere…",
+            EngineState::Error => "Echo — Fehler",
+            _ => "Echo",
+        };
+        let _ = tray.set_tooltip(Some(tip));
+    }
 }
 
 pub fn emit_level<R: Runtime>(app: &AppHandle<R>, level: f32) {

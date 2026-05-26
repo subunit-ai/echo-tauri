@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
+import { SoundFx } from "./components/SoundFx";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Onboarding } from "./sections/Onboarding";
@@ -30,6 +31,7 @@ function Shell() {
 
   return (
     <div className="app">
+      <SoundFx />
       <Header />
       <Sidebar active={section} onSelect={setSection} />
       <main className="content">

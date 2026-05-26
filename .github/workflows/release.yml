@@ -27,8 +27,7 @@ jobs:
             args: ""
           - platform: windows-11-arm      # Windows ARM64 (Erik's Surface) — native, no emulation
             args: ""
-          - platform: macos-14            # Apple Silicon
-            args: ""
+          # macOS = Phase 2 (needs Apple signing/notarization to distribute) — re-add then.
 
     runs-on: ${{ matrix.platform }}
     steps:

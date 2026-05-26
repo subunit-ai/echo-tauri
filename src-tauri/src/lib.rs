@@ -1,6 +1,7 @@
 //! Echo — Tauri backend entrypoint.
 
 mod auth;
+mod auto_mode;
 mod cleanup;
 mod commands;
 mod config;
@@ -69,7 +70,7 @@ pub fn run() {
                 .separator()
                 .item(&quit)
                 .build()?;
-            let mut tray = TrayIconBuilder::new().menu(&menu).on_menu_event(|app, event| {
+            let mut tray = TrayIconBuilder::with_id("tray").menu(&menu).on_menu_event(|app, event| {
                 match event.id().as_ref() {
                     "open" => {
                         if let Some(w) = app.get_webview_window("main") {

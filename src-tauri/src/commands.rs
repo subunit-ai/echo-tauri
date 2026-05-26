@@ -95,10 +95,19 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         }
     };
 
+    // Target window (captured at record-start) + Auto-Mode style from its title.
+    let target = state.target.lock().take();
+    let title = target.as_ref().map(|t| t.title.clone()).unwrap_or_default();
+    let style = if cfg.cleanup_auto_mode {
+        crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
+    } else {
+        cfg.cleanup_style.clone()
+    };
+
     // Post-process: optional server AI-cleanup + DACH formatting (both best-effort).
     let mut text = result.text;
     if cfg.cleanup_enabled {
-        text = crate::cleanup::maybe_cleanup(&cfg, &text);
+        text = crate::cleanup::maybe_cleanup(&cfg, &text, &style);
     }
     if cfg.dach_format_enabled {
         text = crate::dach::dach_format(&text);
@@ -109,7 +118,6 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     };
 
     // Paste-back into the captured target window (clipboard + paste per config).
-    let target = state.target.lock().take();
     if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
         log::warn!("inject failed: {e}");
     }
