@@ -84,6 +84,7 @@ export interface Config {
   history_size: number;
   history: Array<Record<string, unknown>>;
   history_enabled: boolean;
+  meetings: Array<Record<string, unknown>>;
 
   total_transcriptions: number;
   total_audio_seconds: number;

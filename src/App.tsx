@@ -4,6 +4,7 @@ import { Sidebar, type Section } from "./components/Sidebar";
 import { SoundFx } from "./components/SoundFx";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
+import { Meetings } from "./sections/Meetings";
 import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
@@ -38,7 +39,7 @@ function Shell() {
         {section === "home" && <Home />}
         {section === "history" && <History />}
         {section === "settings" && <Settings />}
-        {section === "meetings" && <Placeholder title="Meetings" />}
+        {section === "meetings" && <Meetings />}
         {section === "vocabulary" && <Vocabulary />}
         {section === "help" && <Placeholder title="Hilfe" />}
       </main>

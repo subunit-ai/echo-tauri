@@ -180,6 +180,8 @@ pub struct Config {
     /// Lossless passthrough of history entries (shape owned by the transcription path).
     pub history: Vec<Value>,
     pub history_enabled: bool,
+    /// Long-form recordings (>= long_form_threshold_seconds) kept separately.
+    pub meetings: Vec<Value>,
 
     pub total_transcriptions: i64,
     pub total_audio_seconds: f64,
@@ -270,6 +272,7 @@ impl Default for Config {
             history_size: 50,
             history: Vec::new(),
             history_enabled: true,
+            meetings: Vec::new(),
 
             total_transcriptions: 0,
             total_audio_seconds: 0.0,

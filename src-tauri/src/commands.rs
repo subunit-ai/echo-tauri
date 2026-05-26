@@ -95,18 +95,25 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         }
     };
 
-    // Target window (captured at record-start) + Auto-Mode style from its title.
+    // Duration → long-form detection (Python parity: switch style + store separately).
+    let duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
+    let is_long =
+        cfg.long_form_threshold_seconds > 0 && duration_s >= cfg.long_form_threshold_seconds as f64;
+
+    // Target window (captured at record-start) + style (long-form > auto-mode > config).
     let target = state.target.lock().take();
     let title = target.as_ref().map(|t| t.title.clone()).unwrap_or_default();
-    let style = if cfg.cleanup_auto_mode {
+    let style = if is_long {
+        cfg.long_form_cleanup_style.clone()
+    } else if cfg.cleanup_auto_mode {
         crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
     } else {
         cfg.cleanup_style.clone()
     };
 
-    // Post-process: optional server AI-cleanup + DACH formatting (both best-effort).
+    // Post-process: optional server AI-cleanup ("raw" = passthrough) + DACH formatting.
     let mut text = result.text;
-    if cfg.cleanup_enabled {
+    if cfg.cleanup_enabled && style != "raw" {
         text = crate::cleanup::maybe_cleanup(&cfg, &text, &style);
     }
     if cfg.dach_format_enabled {
@@ -126,12 +133,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     {
         let mut c = state.config.lock();
         c.total_transcriptions += 1;
-        c.total_audio_seconds += cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
+        c.total_audio_seconds += duration_s;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         if c.history_enabled && !result.text.trim().is_empty() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
             let entry = serde_json::json!({
                 "text": result.text,
                 "quality_mode": result.quality_mode,
@@ -141,6 +148,18 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             let max = c.history_size.max(0) as usize;
             if c.history.len() > max {
                 c.history.truncate(max);
+            }
+        }
+        if is_long && !result.text.trim().is_empty() {
+            let m = serde_json::json!({
+                "ts": now,
+                "text": result.text,
+                "quality_mode": result.quality_mode,
+                "duration_s": duration_s as i64,
+            });
+            c.meetings.insert(0, m);
+            if c.meetings.len() > 100 {
+                c.meetings.truncate(100);
             }
         }
         let _ = c.save();
