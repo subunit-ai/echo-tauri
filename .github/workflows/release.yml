@@ -1,0 +1,72 @@
+name: release
+
+# Tag a version (e.g. v0.2.0) to build + publish signed installers for all
+# platforms. tauri-action creates the GitHub Release and the updater manifest
+# (latest.json) when the signing key is present.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04        # Linux x86_64 (AppImage + deb)
+            args: "--features local-whisper"
+          - platform: windows-latest      # Windows x86_64
+            args: "--features local-whisper"
+          - platform: windows-11-arm      # Windows ARM64 (Erik's Surface) — native, no emulation
+            args: "--features local-whisper"
+          - platform: macos-14            # Apple Silicon (later)
+            args: "--features local-whisper --target aarch64-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev \
+            libasound2-dev libxdo-dev libssl-dev patchelf \
+            build-essential clang libclang-dev cmake
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Updater signing (minisign). Public key lives in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Crash reporting DSNs (no-op if unset).
+          ECHO_SENTRY_DSN: ${{ secrets.ECHO_SENTRY_DSN }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          # Windows Authenticode via Azure Trusted Signing — configure in
+          # tauri.conf.json bundle.windows + add the Azure secrets here.
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Echo ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

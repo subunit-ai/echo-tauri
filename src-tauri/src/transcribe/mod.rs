@@ -6,6 +6,8 @@
 //! land in a later pass.
 
 mod cloud;
+#[cfg(feature = "local-whisper")]
+mod local;
 pub mod vocab;
 
 use crate::config::Config;
@@ -17,15 +19,27 @@ pub struct TranscriptResult {
     pub quality_mode: String,
 }
 
-pub fn run(cfg: &Config, wav: Vec<u8>) -> anyhow::Result<TranscriptResult> {
+/// Dispatch by mode. Cloud encodes WAV from the samples; local resamples to
+/// 16 kHz and runs whisper.cpp.
+pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<TranscriptResult> {
     match cfg.mode.as_str() {
-        // Local whisper.cpp (whisper-rs) lands in the local-STT task, with a
-        // verified build + DE benchmark before it's wired in.
         "local" => {
-            let _ = wav;
-            anyhow::bail!("local engine not yet built (whisper.cpp via whisper-rs) — switch to Cloud for now")
+            #[cfg(feature = "local-whisper")]
+            {
+                local::run(cfg, samples, sample_rate)
+            }
+            #[cfg(not(feature = "local-whisper"))]
+            {
+                let _ = (samples, sample_rate);
+                anyhow::bail!(
+                    "local engine not built — build with `--features local-whisper`, or use Cloud"
+                )
+            }
         }
-        "subunit" => cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast),
+        "subunit" => {
+            let wav = samples_to_wav(samples, sample_rate)?;
+            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast)
+        }
         other => anyhow::bail!("transcription mode `{other}` not implemented yet"),
     }
 }

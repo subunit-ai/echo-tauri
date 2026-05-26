@@ -63,8 +63,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, String> {
     }
     let cfg = state.config.lock().clone();
 
-    let wav = transcribe::samples_to_wav(&cap.samples, cap.sample_rate).map_err(|e| e.to_string())?;
-    let result = match transcribe::run(&cfg, wav) {
+    let result = match transcribe::run(&cfg, &cap.samples, cap.sample_rate) {
         Ok(r) => r,
         Err(e) => {
             emit_state(app, EngineState::Error, Some(e.to_string()));
