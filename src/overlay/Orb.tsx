@@ -34,6 +34,7 @@ export function Orb() {
   const style = useRef("ping");
   const color = useRef(THEME.cyan);
   const idlePulse = useRef(true);
+  const autoHide = useRef(false);
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
@@ -41,6 +42,7 @@ export function Orb() {
         style.current = (c.orb_overlay_style as string) || "ping";
         color.current = THEME[c.orb_color_theme as string] || THEME.cyan;
         idlePulse.current = c.orb_idle_pulse !== false;
+        autoHide.current = c.orb_overlay_auto_hide === true;
       })
       .catch(() => {});
     const un = onState((p) => {
@@ -95,6 +97,12 @@ export function Orb() {
       const dotR = size * 0.1;
 
       ctx.clearRect(0, 0, w, h);
+
+      // Auto-hide: render nothing while idle (canvas already cleared).
+      if (autoHide.current && st === "idle") {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
 
       // breathing factor for idle / transcribing
       const breathe =

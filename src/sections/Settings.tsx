@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { BigModeSwitch } from "../components/BigModeSwitch";
+import { HotkeyCapture } from "../components/HotkeyCapture";
 import { Toggle } from "../components/Toggle";
 import { listAudioDevices, patchForUiMode, uiModeOf, type Config } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
@@ -50,6 +51,7 @@ export function Settings() {
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
 
   useEffect(() => {
     listAudioDevices().then(setDevices).catch(() => {});
@@ -73,6 +75,15 @@ export function Settings() {
   const doLogout = async () => {
     await invoke("logout").catch(() => {});
     await reload();
+  };
+  const doUpdate = async () => {
+    setUpdateMsg("Suche…");
+    try {
+      const v = await invoke<string | null>("check_for_updates");
+      setUpdateMsg(v ? `Update verfügbar: v${v}` : "Aktuell — kein Update");
+    } catch (e) {
+      setUpdateMsg(`Fehler: ${String(e)}`);
+    }
   };
 
   return (
@@ -102,6 +113,9 @@ export function Settings() {
                   ["toggle", "Umschalten"],
                 ]}
               />
+            </Row>
+            <Row name="Hotkey" hint="Klicken, dann Tastenkombination drücken">
+              <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
             </Row>
             <Row name="Mikrofon">
               <Sel
@@ -304,6 +318,11 @@ export function Settings() {
             </Row>
             <Row name="Auto-Update">
               <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
+            </Row>
+            <Row name="Updates" hint={updateMsg}>
+              <button className="sub-tab" onClick={doUpdate}>
+                Nach Updates suchen
+              </button>
             </Row>
           </>
         )}
