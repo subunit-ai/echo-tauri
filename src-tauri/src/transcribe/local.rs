@@ -6,8 +6,8 @@
 //! ctranslate2/ONNX split the Python build needed.
 
 use std::fs;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -124,14 +124,38 @@ fn ensure_model(model: &str) -> anyhow::Result<PathBuf> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(1800))
         .build()?;
+    let tmp = path.with_extension("part");
+    let _ = fs::remove_file(&tmp); // clean any stale partial first
     let mut resp = client.get(&url).header("User-Agent", "Echo/0.1").send()?;
     if !resp.status().is_success() {
         anyhow::bail!("model download {}", resp.status());
     }
-    let tmp = path.with_extension("part");
-    let mut f = fs::File::create(&tmp)?;
-    resp.copy_to(&mut f)?;
-    f.flush()?;
+    {
+        let mut f = fs::File::create(&tmp)?;
+        resp.copy_to(&mut f)?;
+        f.flush()?;
+    }
+    // Integrity gate before activating: a redirect/HTML error page or truncated
+    // download must not be renamed into place. (Per-model SHA-256 pinning is the
+    // follow-up — needs the authoritative hashes.)
+    if let Err(e) = verify_ggml(&tmp) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
     fs::rename(&tmp, &path)?;
     Ok(path)
+}
+
+/// Sanity-check a downloaded model: plausible size + GGML/GGUF magic bytes.
+fn verify_ggml(path: &Path) -> anyhow::Result<()> {
+    let len = fs::metadata(path)?.len();
+    if len < 1_000_000 {
+        anyhow::bail!("model too small ({len} bytes) — download likely failed");
+    }
+    let mut magic = [0u8; 4];
+    fs::File::open(path)?.read_exact(&mut magic)?;
+    if &magic != b"ggml" && &magic != b"GGUF" {
+        anyhow::bail!("model magic mismatch — not a GGML/GGUF file");
+    }
+    Ok(())
 }

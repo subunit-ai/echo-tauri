@@ -19,28 +19,61 @@ pub struct TranscriptResult {
     pub quality_mode: String,
 }
 
+/// Structured error across the IPC boundary so the frontend branches on `code`
+/// (e.g. "trial_expired" → paywall, "auth" → re-login) instead of string matching.
+#[derive(Debug, Clone, Serialize)]
+pub struct EngineError {
+    pub code: String,
+    pub message: String,
+}
+
+impl EngineError {
+    pub fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.into(),
+        }
+    }
+}
+impl std::fmt::Display for EngineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+impl std::error::Error for EngineError {}
+
 /// Dispatch by mode. Cloud encodes WAV from the samples; local resamples to
 /// 16 kHz and runs whisper.cpp.
-pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<TranscriptResult> {
+pub fn run(
+    cfg: &Config,
+    samples: &[f32],
+    sample_rate: u32,
+) -> Result<TranscriptResult, EngineError> {
     match cfg.mode.as_str() {
         "local" => {
             #[cfg(feature = "local-whisper")]
             {
                 local::run(cfg, samples, sample_rate)
+                    .map_err(|e| EngineError::new("local", e.to_string()))
             }
             #[cfg(not(feature = "local-whisper"))]
             {
                 let _ = (samples, sample_rate);
-                anyhow::bail!(
-                    "local engine not built — build with `--features local-whisper`, or use Cloud"
-                )
+                Err(EngineError::new(
+                    "model_missing",
+                    "local engine not built — switch to Cloud",
+                ))
             }
         }
         "subunit" => {
-            let wav = samples_to_wav(samples, sample_rate)?;
+            let wav = samples_to_wav(samples, sample_rate)
+                .map_err(|e| EngineError::new("internal", e.to_string()))?;
             cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast)
         }
-        other => anyhow::bail!("transcription mode `{other}` not implemented yet"),
+        other => Err(EngineError::new(
+            "unsupported",
+            format!("mode `{other}` not implemented yet"),
+        )),
     }
 }
 

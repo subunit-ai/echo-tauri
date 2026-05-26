@@ -12,7 +12,7 @@ mod transcribe;
 use commands::AppState;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -100,9 +100,12 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     if let Ok(updater) = handle.updater() {
                         match updater.check().await {
+                            // Don't silently install on launch (high blast radius).
+                            // Surface availability; install is user-triggered via
+                            // the check_for_updates command.
                             Ok(Some(update)) => {
                                 log::info!("update available: {}", update.version);
-                                let _ = update.download_and_install(|_, _| {}, || {}).await;
+                                let _ = handle.emit("echo://update-available", update.version);
                             }
                             Ok(None) => {}
                             Err(e) => log::debug!("update check: {e}"),

@@ -16,6 +16,10 @@ use std::sync::Arc;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use parking_lot::Mutex;
 
+/// Hard cap on a single recording (bounds memory). 30 min is far beyond any
+/// dictation; long-form meeting capture (M3) will stream to disk instead.
+const MAX_RECORD_SECONDS: usize = 1800;
+
 pub struct Capture {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
@@ -148,6 +152,9 @@ fn build_stream(
     let fmt = supported.sample_format();
     let config: cpal::StreamConfig = supported.into();
     let buf = Arc::new(Mutex::new(Vec::<f32>::new()));
+    // Hard cap so a forgotten (toggle) recording can't exhaust memory. Long-form
+    // meeting capture (M3) will stream to disk instead.
+    let max_samples = sample_rate as usize * MAX_RECORD_SECONDS;
     let err_fn = |e| log::error!("recorder: stream error: {e}");
 
     let stream = match fmt {
@@ -155,7 +162,7 @@ fn build_stream(
             let (b, l) = (buf.clone(), level.clone());
             device.build_input_stream(
                 &config,
-                move |data: &[f32], _| ingest(data, channels, &b, &l),
+                move |data: &[f32], _| ingest(data, channels, max_samples, &b, &l),
                 err_fn,
                 None,
             )?
@@ -166,7 +173,7 @@ fn build_stream(
                 &config,
                 move |data: &[i16], _| {
                     let f: Vec<f32> = data.iter().map(|s| *s as f32 / 32768.0).collect();
-                    ingest(&f, channels, &b, &l);
+                    ingest(&f, channels, max_samples, &b, &l);
                 },
                 err_fn,
                 None,
@@ -178,7 +185,7 @@ fn build_stream(
                 &config,
                 move |data: &[u16], _| {
                     let f: Vec<f32> = data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0).collect();
-                    ingest(&f, channels, &b, &l);
+                    ingest(&f, channels, max_samples, &b, &l);
                 },
                 err_fn,
                 None,
@@ -190,28 +197,42 @@ fn build_stream(
     Ok((stream, buf, sample_rate))
 }
 
-/// Downmix to mono, append to the buffer, and publish a boosted RMS level (0..1).
-fn ingest(data: &[f32], channels: usize, buf: &Arc<Mutex<Vec<f32>>>, level: &Arc<AtomicU32>) {
+/// Downmix to mono, append to the buffer (bounded by `max`), and publish a
+/// boosted RMS level (0..1). Level keeps updating even once the buffer is capped.
+fn ingest(
+    data: &[f32],
+    channels: usize,
+    max: usize,
+    buf: &Arc<Mutex<Vec<f32>>>,
+    level: &Arc<AtomicU32>,
+) {
     let mut sum_sq = 0f32;
     let n;
     {
         let mut guard = buf.lock();
+        let capped = guard.len() >= max;
         if channels <= 1 {
-            guard.extend_from_slice(data);
+            if !capped {
+                guard.extend_from_slice(data);
+            }
             for &s in data {
                 sum_sq += s * s;
             }
             n = data.len();
         } else {
             let frames = data.len() / channels;
-            guard.reserve(frames);
+            if !capped {
+                guard.reserve(frames);
+            }
             for f in 0..frames {
                 let mut acc = 0f32;
                 for c in 0..channels {
                     acc += data[f * channels + c];
                 }
                 let m = acc / channels as f32;
-                guard.push(m);
+                if !capped {
+                    guard.push(m);
+                }
                 sum_sq += m * m;
             }
             n = frames;

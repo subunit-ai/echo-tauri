@@ -321,9 +321,8 @@ impl Config {
 
     fn fresh() -> Self {
         let mut c = Self::default();
-        // No hardware probe yet — device routing lives in the transcriber.
-        // Mark the GPU-aware migration as done so existing logic doesn't re-run.
         c.gpu_aware_migrated = true;
+        c.route_default_engine();
         c.seed_default_vocabulary();
         let _ = c.save();
         c
@@ -340,6 +339,17 @@ impl Config {
         if self.cloud_quality_mode.is_empty() || self.cloud_quality_mode == "auto" {
             // v0.9.14: auto's instant/fast tiers degraded German accuracy.
             self.cloud_quality_mode = "quality".to_string();
+        }
+        self.route_default_engine();
+    }
+
+    /// If this build has no on-device engine (`local-whisper` off), a blind
+    /// "local" default can't transcribe — route it to the cloud (Subunit). This
+    /// is the GPU-aware-default equivalent: an explicit choice on a build that
+    /// *can* run local is left untouched.
+    fn route_default_engine(&mut self) {
+        if self.mode == "local" && !cfg!(feature = "local-whisper") {
+            self.mode = "subunit".to_string();
         }
     }
 

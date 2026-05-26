@@ -40,13 +40,22 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
                 patterns.push(a);
             }
         }
+        // Longest alias first so e.g. "M.C.P." wins over a shorter overlap.
+        patterns.sort_by_key(|p| std::cmp::Reverse(p.len()));
         for p in patterns {
             if p.eq_ignore_ascii_case(target) {
                 continue;
             }
-            let pat = format!(r"(?i)\b{}\b", regex::escape(p));
+            // Whole-token, case-insensitive, with boundaries CAPTURED (the regex
+            // crate has no lookaround). Handles aliases ending in punctuation
+            // ("Echo.", "M.C.P.", "T.J.") that a plain \b…\b would miss.
+            let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
             if let Ok(re) = Regex::new(&pat) {
-                out = re.replace_all(&out, target).into_owned();
+                out = re
+                    .replace_all(&out, |caps: &regex::Captures| {
+                        format!("{}{}{}", &caps[1], target, &caps[2])
+                    })
+                    .into_owned();
             }
         }
     }

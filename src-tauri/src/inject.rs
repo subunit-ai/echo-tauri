@@ -1,25 +1,73 @@
 //! Paste-back / target injection (port of the heart of `target_lock.py`).
 //!
-//! Two paths:
-//!  * **paste** — set the clipboard (arboard) + synthesize the platform paste
-//!    chord (enigo). Fast, preserves the user's layout.
-//!  * **type_text** — modifier-free Unicode typing (enigo `.text`). This is the
-//!    robust path on Win-ARM, where synthetic Ctrl+V loses the modifier through
-//!    x64 emulation; also used for streaming dictation. enigo's `.text` maps to
-//!    `KEYEVENTF_UNICODE` on Windows — exactly the `_win_type_unicode` approach.
+//! Capture the focused window at record-start, then focus it again right before
+//! pasting — so dictation lands in the user's app even if focus moved (e.g. the
+//! in-app record button). For the global-hotkey flow the target already has
+//! focus, so this is belt-and-suspenders there.
 //!
-//! When triggered by the global hotkey, the user's target app is focused (the
-//! Echo window is hidden/unfocused), so the paste lands in the right place.
+//! Paths:
+//!  * **paste** — clipboard (arboard) + platform paste chord (enigo Ctrl/Cmd+V).
+//!  * **type_text** — modifier-free Unicode typing (enigo `.text`), the robust
+//!    path on Win-ARM (synthetic Ctrl+V loses the modifier under x64 emulation);
+//!    also for streaming dictation.
 
 use crate::config::Config;
 
-/// Deliver the transcript: always copy to clipboard; paste if `autopaste`.
-pub fn deliver(text: &str, cfg: &Config) -> anyhow::Result<()> {
+/// A captured target window. Platform-encoded in `id` (empty = none) so the
+/// struct stays `Send` for the shared state without per-OS enum variants.
+#[derive(Clone, Debug, Default)]
+pub struct Target {
+    pub id: String,
+}
+
+/// Capture the currently focused window so we can paste back into it later.
+pub fn capture_active_window() -> Target {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(out) = std::process::Command::new("xdotool")
+            .arg("getactivewindow")
+            .output()
+        {
+            if out.status.success() {
+                let id = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !id.is_empty() {
+                    return Target { id };
+                }
+            }
+        }
+    }
+    // Windows/macOS target capture is a follow-up (needs windows / core-graphics
+    // crates + a build on those platforms). The hotkey flow doesn't steal focus,
+    // so paste lands correctly there without it.
+    Target::default()
+}
+
+fn focus(target: &Target) {
+    if target.id.is_empty() {
+        return;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdotool")
+            .args(["windowactivate", "--sync", &target.id])
+            .status();
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+}
+
+/// Deliver the transcript: always copy to clipboard; paste if `autopaste`
+/// (focusing the captured target first when `target_lock` is on).
+pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         return Ok(());
     }
     set_clipboard(text)?;
     if cfg.autopaste {
+        if cfg.target_lock {
+            if let Some(t) = target {
+                focus(t);
+            }
+        }
         paste()?;
     }
     Ok(())

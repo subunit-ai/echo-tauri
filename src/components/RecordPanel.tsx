@@ -47,7 +47,19 @@ export function RecordPanel() {
   }, [state]);
 
   const start = () => invoke("start_recording").catch((e) => setDetail(String(e)));
-  const stop = () => invoke("stop_and_transcribe").catch((e) => setDetail(String(e)));
+  const stop = () =>
+    invoke("stop_and_transcribe").catch((e: { code?: string; message?: string }) => {
+      const code = e?.code;
+      setDetail(
+        code === "trial_expired"
+          ? "Testzeitraum abgelaufen — bitte Plan upgraden."
+          : code === "auth"
+            ? "Nicht angemeldet — in den Einstellungen anmelden."
+            : code === "model_missing"
+              ? "Lokale Engine nicht verfügbar — auf Cloud umstellen."
+              : (e?.message ?? String(e)),
+      );
+    });
 
   const recording = state === "recording";
 

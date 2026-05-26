@@ -9,21 +9,23 @@ use std::time::Duration;
 
 use reqwest::blocking::multipart;
 
-use super::{vocab, TranscriptResult};
+use super::{vocab, EngineError, TranscriptResult};
 use crate::config::Config;
 
 pub fn transcribe_subunit(
     cfg: &Config,
     wav: Vec<u8>,
     superfast: bool,
-) -> anyhow::Result<TranscriptResult> {
+) -> Result<TranscriptResult, EngineError> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))
-        .build()?;
+        .build()
+        .map_err(|e| EngineError::new("internal", e.to_string()))?;
 
     let part = multipart::Part::bytes(wav)
         .file_name("audio.wav")
-        .mime_str("audio/wav")?;
+        .mime_str("audio/wav")
+        .map_err(|e| EngineError::new("internal", e.to_string()))?;
     let mut form = multipart::Form::new()
         .part("file", part)
         .text("language", cfg.language.clone())
@@ -44,17 +46,23 @@ pub fn transcribe_subunit(
         req = req.header("X-API-Key", cfg.subunit_api_key.clone());
     }
 
-    let resp = req.send()?;
+    let resp = req
+        .send()
+        .map_err(|e| EngineError::new("network", e.to_string()))?;
     let status = resp.status();
-    if status.as_u16() == 402 {
-        anyhow::bail!("TRIAL_EXPIRED");
-    }
-    if !status.is_success() {
-        let body = resp.text().unwrap_or_default();
-        anyhow::bail!("transcribe server {status}: {body}");
+    match status.as_u16() {
+        402 => return Err(EngineError::new("trial_expired", "Testzeitraum abgelaufen")),
+        401 => return Err(EngineError::new("auth", "Nicht angemeldet oder Token abgelaufen")),
+        s if !(200..300).contains(&s) => {
+            let body = resp.text().unwrap_or_default();
+            return Err(EngineError::new("server", format!("Server {s}: {body}")));
+        }
+        _ => {}
     }
 
-    let json: serde_json::Value = resp.json()?;
+    let json: serde_json::Value = resp
+        .json()
+        .map_err(|e| EngineError::new("server", e.to_string()))?;
     let text = json
         .get("text")
         .and_then(|v| v.as_str())

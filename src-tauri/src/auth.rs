@@ -18,7 +18,8 @@ use tauri::{AppHandle, Manager};
 use crate::commands::AppState;
 
 const AUTH_BASE: &str = "https://auth.subunit.ai";
-const LOGIN_TIMEOUT_SECS: u64 = 300;
+// 30 min — matches the Python flow; tolerates slow email-code delivery.
+const LOGIN_TIMEOUT_SECS: u64 = 1800;
 
 fn now_secs() -> f64 {
     SystemTime::now()
@@ -61,26 +62,29 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
+                // Blocking + bounded read so a silent local client can't wedge login.
                 stream.set_nonblocking(false).ok();
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
                 let reqline = read_request_line(&stream).unwrap_or_default();
                 let path = reqline.split_whitespace().nth(1).unwrap_or("").to_string();
+                let route = path.splitn(2, '?').next().unwrap_or("");
 
-                if !path.starts_with("/callback") {
+                // Exact route only; keep serving until a VALID callback or deadline
+                // (stray/forged requests are answered and ignored, not fatal).
+                if route != "/callback" {
                     let _ = write_html(&mut stream, "Echo", "Warte auf Login…");
                     continue;
                 }
-
                 let qs = path.splitn(2, '?').nth(1).unwrap_or("");
                 let params = query_params(qs);
-
                 if params.get("state").map(String::as_str) != Some(state.as_str()) {
-                    let _ = write_html(&mut stream, "Fehler", "Ungültiger State (CSRF).");
-                    anyhow::bail!("state mismatch");
+                    let _ = write_html(&mut stream, "Echo", "Warte auf Login…");
+                    continue; // CSRF / stale tab — ignore, keep waiting
                 }
                 let access = params.get("access_token").cloned().unwrap_or_default();
                 if access.is_empty() {
-                    let _ = write_html(&mut stream, "Fehler", "Kein Token erhalten.");
-                    anyhow::bail!("no access_token in callback");
+                    let _ = write_html(&mut stream, "Echo", "Warte auf Login…");
+                    continue;
                 }
                 let refresh = params.get("refresh_token").cloned().unwrap_or_default();
                 let expires: i32 = params
@@ -157,7 +161,18 @@ pub fn ensure_fresh(app: &AppHandle) {
             c.subunit_token_issued_at = now;
             let _ = c.save();
         }
-        Err(e) => log::warn!("token refresh failed: {e}"),
+        Err(e) => {
+            log::warn!("token refresh failed: {e}");
+            // The access token is expired (that's why we refreshed) and refresh
+            // failed → drop it so the X-API-Key fallback in cloud.rs can apply.
+            // Keep the refresh token for a later retry.
+            let st = app.state::<AppState>();
+            let mut c = st.config.lock();
+            c.subunit_access_token.clear();
+            c.subunit_token_issued_at = 0.0;
+            c.subunit_token_expires_in = 0;
+            let _ = c.save();
+        }
     }
 }
 
@@ -173,8 +188,16 @@ fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
         anyhow::bail!("refresh {}", resp.status());
     }
     let j: serde_json::Value = resp.json()?;
+    let access = j
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if access.is_empty() {
+        anyhow::bail!("refresh returned no access token");
+    }
     Ok((
-        j.get("access_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        access,
         j.get("refresh_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
         j.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
     ))

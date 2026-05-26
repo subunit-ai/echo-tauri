@@ -4,12 +4,26 @@
 //! toggle mode flips on each press. Combo is parsed from `config.hotkey`
 //! (`<ctrl>+<space>` style).
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
 };
 
 use crate::commands::AppState;
+
+// Debounce toggle presses — the OS can emit repeated Pressed (key auto-repeat),
+// which would otherwise start+immediately-stop a recording.
+static LAST_TOGGLE_MS: AtomicU64 = AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
     let combo = app.state::<AppState>().config.lock().hotkey.clone();
@@ -35,13 +49,18 @@ pub fn on_event(app: &AppHandle, _shortcut: &Shortcut, event: ShortcutEvent) {
     match event.state() {
         ShortcutState::Pressed => {
             if toggle {
+                let now = now_ms();
+                if now.saturating_sub(LAST_TOGGLE_MS.load(Ordering::Relaxed)) < 250 {
+                    return; // debounce auto-repeat
+                }
+                LAST_TOGGLE_MS.store(now, Ordering::Relaxed);
                 if state.recorder.is_recording() {
                     spawn_transcribe(app);
                 } else {
                     crate::commands::do_start(app);
                 }
             } else {
-                // hold: record while held
+                // hold: record while held (recorder.start is idempotent if already active)
                 crate::commands::do_start(app);
             }
         }
