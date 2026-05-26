@@ -1,9 +1,11 @@
 //! Echo — Tauri backend entrypoint.
 
+mod auth;
 mod commands;
 mod config;
 mod events;
 mod hotkey;
+mod inject;
 mod recorder;
 mod transcribe;
 
@@ -30,6 +32,8 @@ pub fn run() {
             commands::start_recording,
             commands::cancel_recording,
             commands::stop_and_transcribe,
+            commands::login,
+            commands::logout,
         ])
         .setup(|app| {
             if let Err(e) = hotkey::register_from_config(app.handle()) {

@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { Toggle } from "../components/Toggle";
@@ -45,9 +46,10 @@ function Sel({
 }
 
 export function Settings() {
-  const { config, patch } = useConfig();
+  const { config, patch, reload } = useConfig();
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     listAudioDevices().then(setDevices).catch(() => {});
@@ -56,6 +58,22 @@ export function Settings() {
   if (!config) return null;
   const c = config;
   const set = <K extends keyof Config>(k: K, v: Config[K]) => patch({ [k]: v } as Partial<Config>);
+
+  const doLogin = async () => {
+    setBusy(true);
+    try {
+      await invoke("login");
+      await reload();
+    } catch (e) {
+      console.error("login failed", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doLogout = async () => {
+    await invoke("logout").catch(() => {});
+    await reload();
+  };
 
   return (
     <div>
@@ -258,10 +276,19 @@ export function Settings() {
 
         {tab === "account" && (
           <>
-            <Row name="Konto">
-              <span style={{ color: "var(--muted)" }}>
-                {c.account_email || "Nicht angemeldet"}
-              </span>
+            <Row
+              name="Konto"
+              hint={c.account_email || "Mit auth.subunit.ai anmelden für Cloud-Transkription"}
+            >
+              {c.account_email ? (
+                <button className="sub-tab" onClick={doLogout}>
+                  Abmelden
+                </button>
+              ) : (
+                <button className="sub-tab" onClick={doLogin} disabled={busy}>
+                  {busy ? "Browser geöffnet…" : "Anmelden"}
+                </button>
+              )}
             </Row>
             <Row name="Plan">
               <span style={{ textTransform: "uppercase", fontWeight: 700 }}>{c.plan}</span>

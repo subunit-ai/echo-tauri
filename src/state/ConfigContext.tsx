@@ -12,9 +12,15 @@ interface Ctx {
   config: Config | null;
   /** Merge a partial patch into the config and persist it to disk. */
   patch: (p: Partial<Config>) => Promise<void>;
+  /** Re-fetch the config from Rust (e.g. after login changes tokens). */
+  reload: () => Promise<void>;
 }
 
-const ConfigCtx = createContext<Ctx>({ config: null, patch: async () => {} });
+const ConfigCtx = createContext<Ctx>({
+  config: null,
+  patch: async () => {},
+  reload: async () => {},
+});
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const [config, setLocal] = useState<Config | null>(null);
@@ -45,7 +51,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  return <ConfigCtx.Provider value={{ config, patch }}>{children}</ConfigCtx.Provider>;
+  const reload = useCallback(async () => {
+    try {
+      setLocal(await getConfig());
+    } catch (e) {
+      console.error("reload failed", e);
+    }
+  }, []);
+
+  return (
+    <ConfigCtx.Provider value={{ config, patch, reload }}>{children}</ConfigCtx.Provider>
+  );
 }
 
 export const useConfig = () => useContext(ConfigCtx);

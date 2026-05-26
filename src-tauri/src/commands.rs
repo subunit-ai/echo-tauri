@@ -56,6 +56,11 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, String> {
     }
 
     emit_state(app, EngineState::Transcribing, None);
+
+    // Cloud path: refresh the access token if it's expired before we call out.
+    if state.config.lock().mode == "subunit" {
+        crate::auth::ensure_fresh(app);
+    }
     let cfg = state.config.lock().clone();
 
     let wav = transcribe::samples_to_wav(&cap.samples, cap.sample_rate).map_err(|e| e.to_string())?;
@@ -66,6 +71,11 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, String> {
             return Err(e.to_string());
         }
     };
+
+    // Paste-back into the focused app (clipboard + paste, per config.autopaste).
+    if let Err(e) = crate::inject::deliver(&result.text, &cfg) {
+        log::warn!("inject failed: {e}");
+    }
 
     {
         let mut c = state.config.lock();
@@ -141,4 +151,21 @@ pub fn cancel_recording(app: AppHandle) {
 #[tauri::command]
 pub fn stop_and_transcribe(app: AppHandle) -> Result<TranscriptResult, String> {
     do_transcribe(&app)
+}
+
+#[tauri::command]
+pub fn login(app: AppHandle) -> Result<String, String> {
+    crate::auth::login(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
+    let mut c = state.config.lock();
+    c.subunit_access_token.clear();
+    c.subunit_refresh_token.clear();
+    c.subunit_token_issued_at = 0.0;
+    c.subunit_token_expires_in = 0;
+    c.subunit_workspace_id.clear();
+    c.account_email.clear();
+    c.save().map_err(|e| e.to_string())
 }

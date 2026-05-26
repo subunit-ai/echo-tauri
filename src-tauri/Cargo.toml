@@ -33,6 +33,12 @@ cpal = "0.15"
 hound = "3"
 # Vocabulary post-replace (whole-word, case-insensitive).
 regex = "1"
+# Synthetic input (paste-back / Unicode-type) + clipboard.
+enigo = "0.2"
+arboard = "3"
+# OAuth loopback CSRF state + JWT email claim decode.
+rand = "0.8"
+base64 = "0.22"
 # HTTP client (rustls — no OpenSSL link, avoids the Win-ARM `requests`/urllib3
 # WSAEACCES class of bugs that plagued the Python build).
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json", "blocking"] }
