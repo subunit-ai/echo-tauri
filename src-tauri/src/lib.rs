@@ -6,6 +6,7 @@ mod config;
 mod events;
 mod hotkey;
 mod inject;
+mod overlay;
 mod recorder;
 mod transcribe;
 
@@ -93,6 +94,13 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+
+            // Floating orb overlay window (transparent, always-on-top, click-through).
+            if app.state::<AppState>().config.lock().use_orb_overlay {
+                if let Err(e) = overlay::create(app.handle()) {
+                    log::warn!("overlay: {e}");
+                }
+            }
 
             // Best-effort auto-update check (no-op until signed releases exist).
             if app.state::<AppState>().config.lock().auto_update_check {
