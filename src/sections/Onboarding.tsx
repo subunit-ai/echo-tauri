@@ -3,6 +3,7 @@ import { BigModeSwitch } from "../components/BigModeSwitch";
 import { BrandMark } from "../components/BrandMark";
 import { Toggle } from "../components/Toggle";
 import { patchForUiMode, uiModeOf } from "../lib/ipc";
+import { LANGUAGES } from "../lib/languages";
 import { useConfig } from "../state/ConfigContext";
 
 const LAST = 3;
@@ -44,7 +45,13 @@ export function Onboarding() {
             <h1>Sprache &amp; Features</h1>
             <div className="onb-row">
               <span>Transkriptions-Sprache</span>
-              <input value={config.language} onChange={(e) => patch({ language: e.target.value })} />
+              <select value={config.language} onChange={(e) => patch({ language: e.target.value })}>
+                {LANGUAGES.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="onb-row">
               <span>Auto-Paste</span>

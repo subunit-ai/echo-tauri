@@ -4,6 +4,7 @@ import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { Toggle } from "../components/Toggle";
 import { listAudioDevices, patchForUiMode, uiModeOf, type Config } from "../lib/ipc";
+import { LANGUAGES } from "../lib/languages";
 import { useConfig } from "../state/ConfigContext";
 
 type Tab = "general" | "transcription" | "overlay" | "account";
@@ -179,12 +180,8 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Transkriptions-Sprache" hint='ISO-Code, "auto" für Auto-Erkennung'>
-              <input
-                type="text"
-                value={c.language}
-                onChange={(e) => set("language", e.target.value)}
-              />
+            <Row name="Transkriptions-Sprache" hint='"Automatisch erkennen" für gemischte Sprachen'>
+              <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
             </Row>
             <Row name="Cloud-Qualität">
               <Sel
