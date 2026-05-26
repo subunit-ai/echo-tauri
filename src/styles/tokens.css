@@ -1,0 +1,54 @@
+/* Echo design tokens — ported from the PyQt6 theme.py palette.
+   Brand accent (cyan) is identical across dark/light so the orb + hover states
+   stay recognisable. Dark is the default (Subunit brand). */
+
+:root {
+  /* Brand accent */
+  --accent: #06b6d4;
+  --accent-bright: #22d3ee;
+  --accent-dim: #0891b2;
+
+  /* Dark palette (default) */
+  --bg: #0f172a; /* deep navy */
+  --bg-deep: #0a1424;
+  --surface: #1e293b;
+  --surface-alt: #293548;
+  --border: #334155;
+  --border-strong: #475569;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+
+  /* State colors (orb / bubble / status) */
+  --rec: #ff5c5c;
+  --ok: #50dc82;
+  --warn: #ffc450;
+  --superfast: #f5a623;
+  --violet: #aa6eff;
+  --mint: #6ee6be;
+
+  /* Radii */
+  --r-card: 12px;
+  --r-btn: 8px;
+  --r-chip: 6px;
+
+  /* Typography — native Apple/SF on Apple devices, system sans elsewhere.
+     (TJ 2026-05-26: product UI uses native Apple typography, no web fonts.) */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1); /* OutCubic-ish */
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f8fafc;
+  --bg-deep: #ffffff;
+  --surface: #ffffff;
+  --surface-alt: #f1f5f9;
+  --border: #cbd5e1;
+  --border-strong: #94a3b8;
+  --text: #0f172a;
+  --muted: #64748b;
+  color-scheme: light;
+}
