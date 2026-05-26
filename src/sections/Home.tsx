@@ -1,4 +1,5 @@
 import { BigModeSwitch } from "../components/BigModeSwitch";
+import { RecordPanel } from "../components/RecordPanel";
 import { patchForUiMode, uiModeOf } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
@@ -14,6 +15,8 @@ export function Home() {
         Hotkey: <b>{config.hotkey}</b> ·{" "}
         {config.recording_mode === "hold" ? "Halten zum Aufnehmen" : "Umschalten zum Aufnehmen"}
       </p>
+
+      <RecordPanel />
 
       <BigModeSwitch value={uiModeOf(config)} onChange={(m) => patch(patchForUiMode(m))} />
 
