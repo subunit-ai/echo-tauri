@@ -16,15 +16,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # NOTE: local-whisper is OFF for now (cloud is the default path) so the
+        # first releases build reliably without the whisper.cpp/clang cross-platform
+        # toolchain. Re-enable per platform (args: "--features local-whisper")
+        # once each runner's clang/cmake setup is verified.
         include:
           - platform: ubuntu-22.04        # Linux x86_64 (AppImage + deb)
-            args: "--features local-whisper"
+            args: ""
           - platform: windows-latest      # Windows x86_64
-            args: "--features local-whisper"
+            args: ""
           - platform: windows-11-arm      # Windows ARM64 (Erik's Surface) — native, no emulation
-            args: "--features local-whisper"
-          - platform: macos-14            # Apple Silicon (later)
-            args: "--features local-whisper --target aarch64-apple-darwin"
+            args: ""
+          - platform: macos-14            # Apple Silicon
+            args: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
