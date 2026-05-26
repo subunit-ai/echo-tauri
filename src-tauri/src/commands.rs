@@ -95,6 +95,19 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         }
     };
 
+    // Post-process: optional server AI-cleanup + DACH formatting (both best-effort).
+    let mut text = result.text;
+    if cfg.cleanup_enabled {
+        text = crate::cleanup::maybe_cleanup(&cfg, &text);
+    }
+    if cfg.dach_format_enabled {
+        text = crate::dach::dach_format(&text);
+    }
+    let result = TranscriptResult {
+        text,
+        quality_mode: result.quality_mode,
+    };
+
     // Paste-back into the captured target window (clipboard + paste per config).
     let target = state.target.lock().take();
     if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {

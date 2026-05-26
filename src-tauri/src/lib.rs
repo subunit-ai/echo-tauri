@@ -1,8 +1,10 @@
 //! Echo — Tauri backend entrypoint.
 
 mod auth;
+mod cleanup;
 mod commands;
 mod config;
+mod dach;
 mod events;
 mod hotkey;
 mod inject;
