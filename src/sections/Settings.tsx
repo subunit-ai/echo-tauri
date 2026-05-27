@@ -137,6 +137,16 @@ export function Settings() {
             <Row name="Sounds">
               <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />
             </Row>
+            <Row name="Lautstärke">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={c.sound_volume}
+                onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
+              />
+            </Row>
             <Row name="Design">
               <Sel
                 value={c.ui_theme}
