@@ -14,16 +14,20 @@ interface Ctx {
   patch: (p: Partial<Config>) => Promise<void>;
   /** Re-fetch the config from Rust (e.g. after login changes tokens). */
   reload: () => Promise<void>;
+  /** Timestamp of the last successful save — drives the "Gespeichert ✓" hint. */
+  savedTick: number;
 }
 
 const ConfigCtx = createContext<Ctx>({
   config: null,
   patch: async () => {},
   reload: async () => {},
+  savedTick: 0,
 });
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const [config, setLocal] = useState<Config | null>(null);
+  const [savedTick, setSavedTick] = useState(0);
 
   useEffect(() => {
     getConfig()
@@ -43,8 +47,11 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       setLocal((prev) => {
         if (!prev) return prev;
         const next = { ...prev, ...p };
-        // Persist (fire-and-forget; surface errors in console).
-        setConfig(next).catch((e) => console.error("setConfig failed", e));
+        // Persist (fire-and-forget; surface errors in console). On success bump
+        // savedTick so the UI can flash a "Gespeichert ✓" confirmation.
+        setConfig(next)
+          .then(() => setSavedTick(Date.now()))
+          .catch((e) => console.error("setConfig failed", e));
         return next;
       });
     },
@@ -60,7 +67,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ConfigCtx.Provider value={{ config, patch, reload }}>{children}</ConfigCtx.Provider>
+    <ConfigCtx.Provider value={{ config, patch, reload, savedTick }}>{children}</ConfigCtx.Provider>
   );
 }
 

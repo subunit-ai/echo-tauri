@@ -49,15 +49,24 @@ function Sel({
 }
 
 export function Settings() {
-  const { config, patch, reload } = useConfig();
+  const { config, patch, reload, savedTick } = useConfig();
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     listAudioDevices().then(setDevices).catch(() => {});
   }, []);
+
+  // Flash a brief "Gespeichert ✓" after each auto-save (no manual save button).
+  useEffect(() => {
+    if (!savedTick) return;
+    setShowSaved(true);
+    const id = window.setTimeout(() => setShowSaved(false), 1400);
+    return () => window.clearTimeout(id);
+  }, [savedTick]);
 
   if (!config) return null;
   const c = config;
@@ -90,7 +99,27 @@ export function Settings() {
 
   return (
     <div>
-      <h1 className="section-title">Einstellungen</h1>
+      <h1 className="section-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        Einstellungen
+        <span
+          aria-live="polite"
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            color: "#22d3ee",
+            background: "rgba(34,211,238,0.12)",
+            border: "1px solid rgba(34,211,238,0.35)",
+            borderRadius: 999,
+            padding: "3px 10px",
+            opacity: showSaved ? 1 : 0,
+            transform: showSaved ? "translateY(0)" : "translateY(-2px)",
+            transition: "opacity 0.25s ease, transform 0.25s ease",
+            pointerEvents: "none",
+          }}
+        >
+          Gespeichert ✓
+        </span>
+      </h1>
       <div className="sub-tabs">
         {TABS.map((t) => (
           <button
