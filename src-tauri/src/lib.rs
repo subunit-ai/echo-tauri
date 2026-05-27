@@ -23,8 +23,10 @@ use tauri_plugin_updater::UpdaterExt;
 pub fn run() {
     // Crash/error reporting. No-op unless ECHO_SENTRY_DSN is set (DSN lives in
     // env / CI, never in the repo). We never attach audio or transcript text.
+    // DSN baked at compile time (option_env!) so shipped binaries report without
+    // needing the env var on the user's machine. Empty = disabled (no-op).
     let _sentry = sentry::init((
-        std::env::var("ECHO_SENTRY_DSN").unwrap_or_default(),
+        option_env!("ECHO_SENTRY_DSN").unwrap_or(""),
         sentry::ClientOptions {
             release: sentry::release_name!(),
             ..Default::default()
