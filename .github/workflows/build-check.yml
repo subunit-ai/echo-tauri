@@ -1,48 +1,26 @@
-name: release
+name: build-check
 
-# Tag a version (e.g. v0.2.0) to build + publish signed installers for all
-# platforms. tauri-action creates the GitHub Release and the updater manifest
-# (latest.json) when the signing key is present.
+# Compile-only validation for the two hard Windows whisper.cpp targets.
+# No release, no signing, no upload — just prove the whisper-rs-sys cmake build
+# (ggml-vulkan on x64, ggml-cpu+clang on ARM) compiles, with full logs.
+# Dispatch manually: gh workflow run build-check.yml --ref main
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 jobs:
   build:
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
-        # On-device whisper.cpp (LOCAL mode). Linux + Win-x64 build the Vulkan GPU
-        # backend; Win-ARM builds CPU local (ARM Vulkan SDK in CI is a follow-up —
-        # a working CPU build beats a broken one). Every runner needs clang/libclang
-        # (bindgen) + cmake + a C++ compiler — installed per platform below.
         include:
-          - platform: ubuntu-24.04        # Linux x86_64 — Vulkan GPU local whisper
-            args: "--features local-whisper-gpu"
-          - platform: windows-latest      # Windows x86_64 — Vulkan GPU local whisper
-            args: "--features local-whisper-gpu"
-          - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper (ARM64 libclang)
-            args: "--features local-whisper"
-          # macOS = Phase 2 (needs Apple signing/notarization to distribute) — re-add then.
+          - platform: windows-latest     # x86_64 — Vulkan GPU local whisper
+            feature: "local-whisper-gpu"
+          - platform: windows-11-arm      # ARM64 — CPU local whisper (clang-cl)
+            feature: "local-whisper"
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Linux deps
-        if: matrix.platform == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev \
-            libasound2-dev libxdo-dev libssl-dev patchelf \
-            build-essential clang libclang-dev cmake \
-            libvulkan-dev glslc
-          echo "VULKAN_SDK=/usr" >> "$GITHUB_ENV"
 
       - name: LLVM x64 + CMake + Ninja (Windows x64)
         if: matrix.platform == 'windows-latest'
@@ -98,31 +76,14 @@ jobs:
           node-version: 20
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || '' }}
 
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
 
       - run: npm ci
+      - run: npm run build
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Updater signing (minisign). Public key lives in tauri.conf.json.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Crash reporting DSNs (no-op if unset).
-          ECHO_SENTRY_DSN: ${{ secrets.ECHO_SENTRY_DSN }}
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          # Windows Authenticode via Azure Trusted Signing — configure in
-          # tauri.conf.json bundle.windows + add the Azure secrets here.
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Echo ${{ github.ref_name }}"
-          # Publish directly (no draft) so installers are visible on the Releases
-          # page; non-prerelease so the updater's /releases/latest resolves.
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
+      - name: cargo build (compiles whisper-rs-sys = the real toolchain check)
+        shell: pwsh
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml --features ${{ matrix.feature }}
