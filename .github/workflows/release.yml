@@ -16,17 +16,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # NOTE: local-whisper is OFF for now (cloud is the default path) so the
-        # first releases build reliably without the whisper.cpp/clang cross-platform
-        # toolchain. Re-enable per platform (args: "--features local-whisper")
-        # once each runner's clang/cmake setup is verified.
+        # local-whisper ON: ships the on-device whisper.cpp engine so the LOCAL
+        # (DSGVO/offline) mode works. Needs clang/libclang (bindgen) + cmake +
+        # a C++ compiler on every runner — installed per platform below.
         include:
           - platform: ubuntu-22.04        # Linux x86_64 (AppImage + deb)
-            args: ""
+            args: "--features local-whisper"
           - platform: windows-latest      # Windows x86_64
-            args: ""
+            args: "--features local-whisper"
           - platform: windows-11-arm      # Windows ARM64 (Erik's Surface) — native, no emulation
-            args: ""
+            args: "--features local-whisper"
           # macOS = Phase 2 (needs Apple signing/notarization to distribute) — re-add then.
 
     runs-on: ${{ matrix.platform }}
@@ -41,6 +40,15 @@ jobs:
             libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev \
             libasound2-dev libxdo-dev libssl-dev patchelf \
             build-essential clang libclang-dev cmake
+
+      - name: Install LLVM + CMake (Windows, for whisper-rs bindgen + whisper.cpp)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install llvm cmake --no-progress -y --installargs 'ADD_CMAKE_TO_PATH=System'
+          "LIBCLANG_PATH=C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "C:\Program Files\CMake\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - uses: actions/setup-node@v4
         with:
@@ -70,6 +78,8 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Echo ${{ github.ref_name }}"
-          releaseDraft: true
+          # Publish directly (no draft) so installers are visible on the Releases
+          # page; non-prerelease so the updater's /releases/latest resolves.
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
