@@ -110,10 +110,18 @@ pub fn run() {
             }
             tray.build(app)?;
 
-            // Floating orb overlay window (transparent, always-on-top, click-through).
-            if app.state::<AppState>().config.lock().use_orb_overlay {
-                if let Err(e) = overlay::create(app.handle()) {
-                    log::warn!("overlay: {e}");
+            // Floating overlay window (transparent, always-on-top). Shows the orb
+            // when enabled, else the bubble indicator if that's on.
+            {
+                let st = app.state::<AppState>();
+                let want_overlay = {
+                    let c = st.config.lock();
+                    c.use_orb_overlay || c.show_bubble
+                };
+                if want_overlay {
+                    if let Err(e) = overlay::create(app.handle()) {
+                        log::warn!("overlay: {e}");
+                    }
                 }
             }
 

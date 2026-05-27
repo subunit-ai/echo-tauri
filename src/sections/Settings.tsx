@@ -186,7 +186,7 @@ export function Settings() {
             <Row name="Fenster-Fokus merken" hint="Ins zuletzt fokussierte Fenster einfügen">
               <Toggle checked={c.target_lock} onChange={(v) => set("target_lock", v)} />
             </Row>
-            <Row name="Bubble anzeigen">
+            <Row name="Bubble anzeigen" hint="Kompakter Status-Indikator, wenn das Orb-Overlay aus ist">
               <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
             </Row>
             <Row name="Sounds">

@@ -15,10 +15,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     if app.get_webview_window("overlay").is_some() {
         return Ok(());
     }
-    let (size_mult, position) = {
+    let (size_mult, position, orb_mode) = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
-        (c.orb_overlay_size as f64, c.orb_position.clone())
+        (c.orb_overlay_size as f64, c.orb_position.clone(), c.use_orb_overlay)
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
 
@@ -34,10 +34,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .focused(false)
         .build()?;
 
-    // Grab-able: the orb is a `data-tauri-drag-region`, so the cursor must reach
-    // it (no click-through). The window is only orb-sized, so it captures clicks
-    // just within that small area. Drag → window moves → position persists.
-    let _ = win.set_ignore_cursor_events(false);
+    // Orb mode is interactive (drag + satellites → cursor must reach it). Bubble
+    // mode is a pure visual indicator → click-through so it never blocks clicks.
+    let _ = win.set_ignore_cursor_events(!orb_mode);
     position_window(&win, &position, dim);
     Ok(())
 }
@@ -47,11 +46,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// resize + reposition for size/position, and push the visual settings
 /// (style/color/idle/auto-hide) to the canvas. Called from `set_config`.
 pub fn apply_config(app: &AppHandle) {
-    let (enabled, size_mult, position, style, color, idle_pulse, auto_hide) = {
+    let (orb_mode, show_bubble, size_mult, position, style, color, idle_pulse, auto_hide) = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
         (
             c.use_orb_overlay,
+            c.show_bubble,
             c.orb_overlay_size as f64,
             c.orb_position.clone(),
             c.orb_overlay_style.clone(),
@@ -60,6 +60,8 @@ pub fn apply_config(app: &AppHandle) {
             c.orb_overlay_auto_hide,
         )
     };
+    // Orb wins when enabled; otherwise the bubble is the fallback indicator.
+    let enabled = orb_mode || show_bubble;
 
     // Disabled → close the window if it's open and stop.
     if !enabled {
@@ -78,13 +80,16 @@ pub fn apply_config(app: &AppHandle) {
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
     let _ = win.set_size(LogicalSize::new(dim, dim));
+    // Orb = interactive, bubble = click-through.
+    let _ = win.set_ignore_cursor_events(!orb_mode);
     position_window(&win, &position, dim);
 
-    // Push the visual style to the canvas; the Orb listens for this and restyles
-    // without a reload. (On a fresh create the canvas also reads get_config on mount.)
+    // Push the visual config; the overlay root picks Orb vs Bubble from `orbEnabled`
+    // and the Orb restyles from the rest — all without a reload.
     let _ = app.emit(
         "echo://orb-config",
         serde_json::json!({
+            "orbEnabled": orb_mode,
             "style": style,
             "color": color,
             "idlePulse": idle_pulse,
