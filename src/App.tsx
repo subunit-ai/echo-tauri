@@ -8,6 +8,7 @@ import { Meetings } from "./sections/Meetings";
 import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
+import { UpdatePrompt } from "./components/UpdatePrompt";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 
 function Placeholder({ title }: { title: string }) {
@@ -33,6 +34,7 @@ function Shell() {
   return (
     <div className="app">
       <SoundFx />
+      <UpdatePrompt />
       <Header />
       <Sidebar active={section} onSelect={setSection} />
       <main className="content">

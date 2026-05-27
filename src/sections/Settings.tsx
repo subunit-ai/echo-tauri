@@ -4,7 +4,14 @@ import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
 import { Toggle } from "../components/Toggle";
-import { listAudioDevices, patchForUiMode, uiModeOf, type Config } from "../lib/ipc";
+import {
+  checkForUpdates,
+  installUpdate,
+  listAudioDevices,
+  patchForUiMode,
+  uiModeOf,
+  type Config,
+} from "../lib/ipc";
 import { LANGUAGES } from "../lib/languages";
 import { useConfig } from "../state/ConfigContext";
 
@@ -54,6 +61,8 @@ export function Settings() {
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
+  const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
@@ -89,11 +98,27 @@ export function Settings() {
   };
   const doUpdate = async () => {
     setUpdateMsg("Suche…");
+    setFoundUpdate(null);
     try {
-      const v = await invoke<string | null>("check_for_updates");
-      setUpdateMsg(v ? `Update verfügbar: v${v}` : "Aktuell — kein Update");
+      const v = await checkForUpdates();
+      if (v) {
+        setFoundUpdate(v);
+        setUpdateMsg(`Update verfügbar: v${v}`);
+      } else {
+        setUpdateMsg("Aktuell — kein Update");
+      }
     } catch (e) {
       setUpdateMsg(`Fehler: ${String(e)}`);
+    }
+  };
+  const doInstall = async () => {
+    setUpdating(true);
+    setUpdateMsg("Wird installiert… Echo startet gleich automatisch neu.");
+    try {
+      await installUpdate(); // on success the app relaunches; never returns
+    } catch (e) {
+      setUpdateMsg(`Fehler: ${String(e)}`);
+      setUpdating(false);
     }
   };
 
@@ -353,9 +378,15 @@ export function Settings() {
               <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
             </Row>
             <Row name="Updates" hint={updateMsg}>
-              <button className="sub-tab" onClick={doUpdate}>
-                Nach Updates suchen
-              </button>
+              {foundUpdate ? (
+                <button className="sub-tab" onClick={doInstall} disabled={updating}>
+                  {updating ? "Installiere…" : `Jetzt installieren (v${foundUpdate})`}
+                </button>
+              ) : (
+                <button className="sub-tab" onClick={doUpdate}>
+                  Nach Updates suchen
+                </button>
+              )}
             </Row>
           </>
         )}

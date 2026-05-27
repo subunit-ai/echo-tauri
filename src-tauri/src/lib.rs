@@ -58,6 +58,7 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::check_for_updates,
+            commands::install_update,
             commands::start_meeting,
             commands::list_local_models,
             commands::download_model,

@@ -294,3 +294,40 @@ pub async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String>
         Err(e) => Err(e.to_string()),
     }
 }
+
+/// One-click update: re-check, download + install (silent on Windows via the
+/// `installMode: passive` config), reporting progress on `echo://update-progress`,
+/// then relaunch into the new version. No installer wizard, no manual steps.
+/// Diverges via `app.restart()` on success, so it only *returns* `Ok(false)` when
+/// there was nothing to install, or `Err` if download/install failed.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<bool, String> {
+    use tauri::Emitter;
+    use tauri_plugin_updater::UpdaterExt;
+
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = match updater.check().await.map_err(|e| e.to_string())? {
+        Some(u) => u,
+        None => return Ok(false), // already up to date
+    };
+
+    let app_dl = app.clone();
+    let mut downloaded: u64 = 0;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                let pct = match total {
+                    Some(t) if t > 0 => (downloaded as f64 / t as f64) * 100.0,
+                    _ => 0.0,
+                };
+                let _ = app_dl.emit("echo://update-progress", pct);
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Files are in place — relaunch into the new version (never returns).
+    app.restart();
+}

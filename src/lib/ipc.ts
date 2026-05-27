@@ -144,6 +144,19 @@ export const onTranscript = (
 ): Promise<UnlistenFn> =>
   listen<TranscriptPayload>("echo://transcript", (e) => cb(e.payload));
 
+// ---- Auto-update ----
+/** Check for an update; resolves to the new version string, or null if current. */
+export const checkForUpdates = () => invoke<string | null>("check_for_updates");
+/** One-click: download + install + relaunch (silent). Resolves false if nothing
+ *  to install; on success the app restarts and this never resolves. */
+export const installUpdate = () => invoke<boolean>("install_update");
+/** Emitted by the startup auto-check when a newer version is available. */
+export const onUpdateAvailable = (cb: (version: string) => void): Promise<UnlistenFn> =>
+  listen<string>("echo://update-available", (e) => cb(e.payload));
+/** Download progress (0–100) while installing an update. */
+export const onUpdateProgress = (cb: (pct: number) => void): Promise<UnlistenFn> =>
+  listen<number>("echo://update-progress", (e) => cb(e.payload));
+
 // ---- Mode helpers (BigModeSwitch <-> config) ----
 export type UiMode = "local" | "cloud" | "superfast";
 
