@@ -70,6 +70,12 @@ jobs:
           "CXX=clang-cl" | Out-File -FilePath $env:GITHUB_ENV -Append
           # clang-cl defaults to exceptions-disabled; gguf.cpp uses try/catch -> force /EHsc.
           "CXXFLAGS=/EHsc" | Out-File -FilePath $env:GITHUB_ENV -Append
+          # ggml's aarch64 "repack" GEMM kernels (ggml_gemm_*_4x4 …) are GNU-asm only and
+          # don't link with the Windows-ARM toolchain (LNK2019/LNK2005 in repack.cpp).
+          # Disable them -> generic C path. whisper-rs-sys forwards any GGML_* env as -D.
+          # (name differs by ggml version; unknown -D is a harmless cmake warning.)
+          "GGML_CPU_AARCH64=OFF" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "GGML_CPU_REPACK=OFF" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: MSVC env for clang-cl (Windows ARM — INCLUDE/LIB for the ARM64 MSVC CRT)
         if: matrix.platform == 'windows-11-arm'
