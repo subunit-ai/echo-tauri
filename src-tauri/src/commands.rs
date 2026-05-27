@@ -251,6 +251,30 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn list_local_models() -> Vec<crate::models::ModelInfo> {
+    crate::models::list_models()
+}
+
+#[tauri::command]
+pub fn download_model(app: AppHandle, model: String) {
+    // Runs on a thread; progress streams via the echo://model-progress event.
+    std::thread::spawn(move || {
+        if let Err(e) = crate::models::download(&app, &model) {
+            use tauri::Emitter;
+            let _ = app.emit(
+                "echo://model-progress",
+                serde_json::json!({ "model": model, "error": e.to_string() }),
+            );
+        }
+    });
+}
+
+#[tauri::command]
+pub fn delete_local_model(model: String) -> Result<(), String> {
+    crate::models::delete(&model).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn start_meeting(app: AppHandle) -> Result<crate::meet::MeetingInfo, String> {
     let cfg = app.state::<AppState>().config.lock().clone();
     let info = crate::meet::create_meeting(&cfg).map_err(|e| e.to_string())?;

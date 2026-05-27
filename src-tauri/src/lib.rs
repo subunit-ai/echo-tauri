@@ -10,6 +10,7 @@ mod events;
 mod hotkey;
 mod inject;
 mod meet;
+mod models;
 mod overlay;
 mod recorder;
 mod transcribe;
@@ -58,6 +59,9 @@ pub fn run() {
             commands::logout,
             commands::check_for_updates,
             commands::start_meeting,
+            commands::list_local_models,
+            commands::download_model,
+            commands::delete_local_model,
         ])
         .setup(|app| {
             // Global hotkey

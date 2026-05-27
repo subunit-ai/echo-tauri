@@ -1,15 +1,12 @@
 //! On-device transcription via whisper.cpp (whisper-rs). Feature-gated behind
-//! `local-whisper`. Auto-downloads the GGML model from Hugging Face on first
-//! use, resamples capture audio to 16 kHz mono, and caches the loaded context.
+//! `local-whisper` (+ `local-whisper-gpu` for the Vulkan backend). Resamples
+//! capture audio to 16 kHz mono and caches the loaded context. The model is
+//! fetched on-demand via [`crate::models`] (or pre-downloaded from Settings).
 //!
 //! Native on all archs incl. Windows ARM64 — this is what eliminates the
 //! ctranslate2/ONNX split the Python build needed.
 
-use std::fs;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use once_cell::sync::Lazy;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -23,7 +20,7 @@ static CTX: Lazy<Mutex<Option<(String, WhisperContext)>>> = Lazy::new(|| Mutex::
 pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<TranscriptResult> {
     let audio = resample_to_16k(samples, sample_rate);
     let model = cfg.local_model.clone();
-    let path = ensure_model(&model)?;
+    let path = crate::models::ensure_blocking(&model)?;
 
     let mut guard = CTX.lock().unwrap();
     let reload = guard.as_ref().map(|(m, _)| m != &model).unwrap_or(true);
@@ -95,10 +92,9 @@ fn resample_to_16k(input: &[f32], sr: u32) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
 
     /// Downloads the tiny model + runs whisper on a synthetic tone. Run with
-    /// `--nocapture` and watch for the "ggml_vulkan: Found … devices" log to
+    /// `--nocapture` and watch for "ggml_vulkan: … using Vulkan0 backend" to
     /// confirm the GPU is used.
     #[test]
     fn gpu_smoke() {
@@ -113,73 +109,4 @@ mod tests {
         println!("LOCAL_SMOKE ok={} -> {:?}", r.is_ok(), r);
         assert!(r.is_ok(), "local transcribe failed: {:?}", r.err());
     }
-}
-
-fn model_file(model: &str) -> &'static str {
-    match model {
-        "tiny" => "ggml-tiny.bin",
-        "base" => "ggml-base.bin",
-        "small" => "ggml-small.bin",
-        "medium" => "ggml-medium.bin",
-        "large-v3" => "ggml-large-v3.bin",
-        "large-v3-turbo" => "ggml-large-v3-turbo.bin",
-        _ => "ggml-base.bin",
-    }
-}
-
-/// Locate (or download) the GGML model. Cached under the OS cache dir.
-fn ensure_model(model: &str) -> anyhow::Result<PathBuf> {
-    let file = model_file(model);
-    let dir = dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("echo")
-        .join("models");
-    fs::create_dir_all(&dir)?;
-    let path = dir.join(file);
-    if path.exists() && fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
-        return Ok(path);
-    }
-    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file}");
-    log::info!("downloading whisper model {file} …");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(1800))
-        .build()?;
-    let tmp = path.with_extension("part");
-    let _ = fs::remove_file(&tmp); // clean any stale partial first
-    let mut resp = client.get(&url).header("User-Agent", "Echo/0.1").send()?;
-    if !resp.status().is_success() {
-        anyhow::bail!("model download {}", resp.status());
-    }
-    {
-        let mut f = fs::File::create(&tmp)?;
-        resp.copy_to(&mut f)?;
-        f.flush()?;
-    }
-    // Integrity gate before activating: a redirect/HTML error page or truncated
-    // download must not be renamed into place. (Per-model SHA-256 pinning is the
-    // follow-up — needs the authoritative hashes.)
-    if let Err(e) = verify_ggml(&tmp) {
-        let _ = fs::remove_file(&tmp);
-        return Err(e);
-    }
-    fs::rename(&tmp, &path)?;
-    Ok(path)
-}
-
-/// Sanity-check a downloaded model: plausible size + GGML/GGUF magic bytes.
-fn verify_ggml(path: &Path) -> anyhow::Result<()> {
-    let len = fs::metadata(path)?.len();
-    if len < 1_000_000 {
-        anyhow::bail!("model too small ({len} bytes) — download likely failed");
-    }
-    // Catch error pages / git-LFS pointers; a real model is binary. whisper.cpp
-    // does the authoritative format validation on load. (The GGML magic is a
-    // little-endian u32, so a naive b"ggml" byte compare gives false negatives.)
-    let mut head = [0u8; 24];
-    let n = fs::File::open(path)?.read(&mut head)?;
-    let head = &head[..n];
-    if head.first() == Some(&b'<') || head.starts_with(b"version https://") {
-        anyhow::bail!("model download returned text/HTML, not a model file");
-    }
-    Ok(())
 }

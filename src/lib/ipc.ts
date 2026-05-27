@@ -95,6 +95,26 @@ export const setConfig = (config: Config) => invoke<void>("set_config", { config
 export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 
+// ---- Local whisper models ----
+export interface ModelInfo {
+  key: string;
+  label: string;
+  downloaded: boolean;
+  size_mb: number;
+}
+export interface ModelProgress {
+  model: string;
+  received?: number;
+  total?: number;
+  done?: boolean;
+  error?: string;
+}
+export const listLocalModels = () => invoke<ModelInfo[]>("list_local_models");
+export const downloadModel = (model: string) => invoke<void>("download_model", { model });
+export const deleteLocalModel = (model: string) => invoke<void>("delete_local_model", { model });
+export const onModelProgress = (cb: (p: ModelProgress) => void): Promise<UnlistenFn> =>
+  listen<ModelProgress>("echo://model-progress", (e) => cb(e.payload));
+
 // ---- Engine events (emitted from Rust) ----
 export type EngineState =
   | "idle"

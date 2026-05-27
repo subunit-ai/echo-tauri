@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, type ReactNode } from "react";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
+import { ModelManager } from "../components/ModelManager";
 import { Toggle } from "../components/Toggle";
 import { listAudioDevices, patchForUiMode, uiModeOf, type Config } from "../lib/ipc";
 import { LANGUAGES } from "../lib/languages";
@@ -177,19 +178,15 @@ export function Settings() {
                 <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
               </div>
             </Row>
-            <Row name="Lokales Modell" hint="Whisper-Modellgröße (lokaler Modus)">
-              <Sel
-                value={c.local_model}
-                onChange={(v) => set("local_model", v)}
-                options={[
-                  ["base", "base"],
-                  ["small", "small"],
-                  ["medium", "medium"],
-                  ["large-v3", "large-v3"],
-                  ["large-v3-turbo", "large-v3-turbo"],
-                ]}
-              />
-            </Row>
+            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+              <div className="meta">
+                <div className="name">Lokales Modell</div>
+                <div className="hint">
+                  Klick wählt + lädt das Modell (mit GPU ruhig groß — large-v3-turbo).
+                </div>
+              </div>
+              <ModelManager />
+            </div>
             <Row name="Transkriptions-Sprache" hint='"Automatisch erkennen" für gemischte Sprachen'>
               <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
             </Row>

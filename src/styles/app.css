@@ -519,3 +519,66 @@ input:focus {
   color: var(--bg);
   background: var(--accent);
 }
+
+/* ---------- Local model manager ---------- */
+.models {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.model-row:hover {
+  border-color: var(--border-strong);
+}
+.model-row.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.model-meta {
+  flex: 1;
+  min-width: 0;
+}
+.model-label {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.model-active {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bg);
+  background: var(--accent);
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.model-status {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.model-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bg-deep);
+  overflow: hidden;
+  margin-top: 7px;
+}
+.model-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+  transition: width 0.2s linear;
+}
