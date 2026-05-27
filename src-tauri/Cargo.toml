@@ -60,7 +60,9 @@ optional = true
 
 [features]
 default = []
-# Build the on-device whisper.cpp engine with the Vulkan GPU backend (long C++
-# build). Vulkan = GPU accel on NVIDIA/AMD/Intel/ARM-Adreno with CPU fallback,
-# and the binary still loads on machines without a GPU (unlike CUDA).
-local-whisper = ["dep:whisper-rs", "whisper-rs/vulkan"]
+# On-device whisper.cpp engine (CPU). Makes the LOCAL mode work everywhere.
+local-whisper = ["dep:whisper-rs"]
+# Adds the Vulkan GPU backend on top (GPU accel on NVIDIA/AMD/Intel/ARM-Adreno,
+# CPU fallback, binary still loads without a GPU — unlike CUDA). Needs the
+# Vulkan SDK + glslc at build time.
+local-whisper-gpu = ["local-whisper", "whisper-rs/vulkan"]
