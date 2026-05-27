@@ -49,7 +49,7 @@ function Sel({
 }
 
 export function Settings() {
-  const { config, patch, reload, savedTick } = useConfig();
+  const { config, patch, reload, save, savedTick } = useConfig();
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -359,6 +359,39 @@ export function Settings() {
             </Row>
           </>
         )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 14,
+          marginTop: 18,
+        }}
+      >
+        <span style={{ fontSize: "0.78rem", color: "var(--muted, #93a4bd)" }}>
+          Änderungen werden automatisch gespeichert
+        </span>
+        <button
+          onClick={() => save()}
+          style={{
+            border: "1px solid rgba(34,211,238,0.5)",
+            background: showSaved ? "rgba(34,211,238,0.18)" : "rgba(34,211,238,0.1)",
+            color: "#22d3ee",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            padding: "9px 22px",
+            borderRadius: 10,
+            cursor: "pointer",
+            transition: "background 0.15s ease, transform 0.08s ease",
+          }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.96)")}
+          onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+        >
+          {showSaved ? "Gespeichert ✓" : "Speichern"}
+        </button>
       </div>
     </div>
   );
