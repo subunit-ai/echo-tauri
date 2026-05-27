@@ -49,6 +49,10 @@ jobs:
         shell: pwsh
         run: '"$env:VULKAN_SDK\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append'
 
+      - name: MSVC env (Windows x64 — Ninja needs cl + INCLUDE/LIB in the job env)
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: ARM64 LLVM + CMake + Ninja (Windows ARM — choco LLVM is x64)
         if: matrix.platform == 'windows-11-arm'
         shell: pwsh
@@ -64,6 +68,8 @@ jobs:
           "CMAKE_GENERATOR=Ninja" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CC=clang-cl" | Out-File -FilePath $env:GITHUB_ENV -Append
           "CXX=clang-cl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          # clang-cl defaults to exceptions-disabled; gguf.cpp uses try/catch -> force /EHsc.
+          "CXXFLAGS=/EHsc" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: MSVC env for clang-cl (Windows ARM — INCLUDE/LIB for the ARM64 MSVC CRT)
         if: matrix.platform == 'windows-11-arm'
