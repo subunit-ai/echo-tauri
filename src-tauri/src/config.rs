@@ -50,6 +50,12 @@ fn default_category() -> String {
     "Other".to_string()
 }
 
+/// Bump when adding new default vocab terms/aliases that EXISTING (already-seeded)
+/// users should receive. `merge_default_vocab_updates` runs once per bump and adds
+/// only what's missing — see there. v1 = 2026-05-28 batch (Syncore/Citron/Claude
+/// Code/OpenClaw/Ollama/Cursor/Ubuntu/Gründungszuschuss + Subunit/Erik aliases).
+const VOCAB_SEED_VERSION: u32 = 1;
+
 /// Baseline DACH vocabulary (ported verbatim from `DEFAULT_VOCABULARY` in
 /// config.py). Seeded once, gated by `vocabulary_default_seeded`, so user
 /// deletions stick.
@@ -63,7 +69,7 @@ fn default_vocabulary() -> Vec<VocabEntry> {
     vec![
         // Brand / product names
         v("Echo", "Echo", &["Eko", "Ecko", "Echo."], "Company"),
-        v("Sub-Unit", "Subunit", &["Subunit.", "Sub unit", "Subnit", "Subunit AI"], "Company"),
+        v("Sub-Unit", "Subunit", &["Subunit.", "Sub unit", "Subnit", "Subunit AI", "Sabjunit", "Sub Unit", "Zunder"], "Company"),
         v("Synaps", "Synapse", &["Synaps."], "Company"),
         v("Es-Enn-I", "SNI", &["S N I"], "Tech"),
         v("Higgs Field", "Higgsfield", &["Higs Field", "Higsfield"], "Company"),
@@ -78,8 +84,17 @@ fn default_vocabulary() -> Vec<VocabEntry> {
         v("Em-Ce-Pe", "MCP", &["M C P", "M.C.P."], "Tech"),
         v("DSGVO", "DSGVO", &["D S G V O", "D.S.G.V.O."], "Tech"),
         // People recurring in workflow
-        v("Erik", "Erik", &["Eric"], "Person"),
+        v("Erik", "Erik", &["Eric", "Erich"], "Person"),
         v("Te-Je", "TJ", &["T J", "T.J.", "Tee Jay"], "Person"),
+        // subunit stack, tools + recurring terms (TJ-curated 2026-05-28)
+        v("Synkor", "Syncore", &["Cincore", "Syncor"], "Company"),
+        v("Zitron", "Citron", &["Sitron"], "Company"),
+        v("Klod Koud", "Claude Code", &["Cloud Code", "Glode Code"], "Tech"),
+        v("Open Claw", "OpenClaw", &["Open Klo", "Openclor"], "Tech"),
+        v("Olama", "Ollama", &["Oh Lama"], "Tech"),
+        v("Körser", "Cursor", &["Curser"], "Tech"),
+        v("Ju-Buntu", "Ubuntu", &["Ubunu"], "Tech"),
+        v("Gründungsschuss", "Gründungszuschuss", &[], "Other"),
     ]
 }
 
@@ -173,6 +188,11 @@ pub struct Config {
 
     pub vocabulary: Vec<VocabEntry>,
     pub vocabulary_default_seeded: bool,
+    /// Which `VOCAB_SEED_VERSION` batch this config has merged. Lets us push new
+    /// default terms/aliases to already-seeded users without resurrecting their
+    /// deletions every launch (only on a version bump). Old configs default to 0.
+    #[serde(default)]
+    pub vocab_seed_version: u32,
 
     pub dach_format_enabled: bool,
 
@@ -266,6 +286,7 @@ impl Default for Config {
 
             vocabulary: Vec::new(),
             vocabulary_default_seeded: false,
+            vocab_seed_version: 0,
 
             dach_format_enabled: false,
 
@@ -290,6 +311,7 @@ impl Config {
                 Ok(mut c) => {
                     c.migrate();
                     c.seed_default_vocabulary();
+                    c.merge_default_vocab_updates();
                     let _ = c.save();
                     c
                 }
@@ -306,6 +328,7 @@ impl Config {
                     log::info!("config: migrating legacy synapse-voice config → echo");
                     c.migrate();
                     c.seed_default_vocabulary();
+                    c.merge_default_vocab_updates();
                     let _ = c.save();
                     c
                 }
@@ -327,6 +350,7 @@ impl Config {
         c.gpu_aware_migrated = true;
         c.route_default_engine();
         c.seed_default_vocabulary();
+        c.merge_default_vocab_updates();
         let _ = c.save();
         c
     }
@@ -374,6 +398,49 @@ impl Config {
             }
         }
         self.vocabulary_default_seeded = true;
+    }
+
+    /// Additively push NEW default vocab to already-seeded users, once per
+    /// `VOCAB_SEED_VERSION` bump. For a default whose `write_as` the user already
+    /// has, merge any missing aliases (and its `sounds_like`) into that entry;
+    /// otherwise append the whole entry. Case-insensitive dedupe; user entries
+    /// are never removed or reworded, so custom edits survive.
+    fn merge_default_vocab_updates(&mut self) {
+        if self.vocab_seed_version >= VOCAB_SEED_VERSION {
+            return;
+        }
+        for def in default_vocabulary() {
+            let canon = def.write_as.trim().to_lowercase();
+            if canon.is_empty() {
+                continue;
+            }
+            match self
+                .vocabulary
+                .iter_mut()
+                .find(|e| e.write_as.trim().to_lowercase() == canon)
+            {
+                Some(existing) => {
+                    // Already have this term — fold in any missing patterns.
+                    let mut have: std::collections::HashSet<String> = existing
+                        .aliases
+                        .iter()
+                        .map(|a| a.trim().to_lowercase())
+                        .collect();
+                    have.insert(existing.sounds_like.trim().to_lowercase());
+                    have.insert(existing.write_as.trim().to_lowercase());
+                    let mut candidates = vec![def.sounds_like.clone()];
+                    candidates.extend(def.aliases.iter().cloned());
+                    for cand in candidates {
+                        let key = cand.trim().to_lowercase();
+                        if !key.is_empty() && have.insert(key) {
+                            existing.aliases.push(cand);
+                        }
+                    }
+                }
+                None => self.vocabulary.push(def),
+            }
+        }
+        self.vocab_seed_version = VOCAB_SEED_VERSION;
     }
 
     fn backup_broken(path: &Path) {
