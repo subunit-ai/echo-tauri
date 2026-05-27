@@ -9,6 +9,7 @@ mod dach;
 mod events;
 mod hotkey;
 mod inject;
+mod meet;
 mod overlay;
 mod recorder;
 mod transcribe;
@@ -56,6 +57,7 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::check_for_updates,
+            commands::start_meeting,
         ])
         .setup(|app| {
             // Global hotkey

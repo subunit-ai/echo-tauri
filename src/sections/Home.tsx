@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { RecordPanel } from "../components/RecordPanel";
 import { patchForUiMode, uiModeOf } from "../lib/ipc";
@@ -5,8 +7,19 @@ import { useConfig } from "../state/ConfigContext";
 
 export function Home() {
   const { config, patch } = useConfig();
+  const [meet, setMeet] = useState("");
   if (!config) return null;
   const recent = config.history.slice(0, 5);
+
+  const startMeeting = async () => {
+    setMeet("Erstelle Meeting…");
+    try {
+      const m = await invoke<{ code: string; share_url: string }>("start_meeting");
+      setMeet(`Meeting ${m.code} geöffnet`);
+    } catch (e) {
+      setMeet(`Fehler: ${String(e)}`);
+    }
+  };
 
   return (
     <div>
@@ -19,6 +32,13 @@ export function Home() {
       <RecordPanel />
 
       <BigModeSwitch value={uiModeOf(config)} onChange={(m) => patch(patchForUiMode(m))} />
+
+      <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
+        <button className="sub-tab" onClick={startMeeting}>
+          🎙 Meeting starten
+        </button>
+        {meet && <span style={{ color: "var(--muted)", fontSize: 12 }}>{meet}</span>}
+      </div>
 
       <div className="stat-grid" style={{ marginTop: 24 }}>
         <div className="card stat-card">

@@ -251,6 +251,14 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn start_meeting(app: AppHandle) -> Result<crate::meet::MeetingInfo, String> {
+    let cfg = app.state::<AppState>().config.lock().clone();
+    let info = crate::meet::create_meeting(&cfg).map_err(|e| e.to_string())?;
+    crate::meet::open_url(&info.share_url);
+    Ok(info)
+}
+
+#[tauri::command]
 pub async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_updater::UpdaterExt;
     let updater = app.updater().map_err(|e| e.to_string())?;
