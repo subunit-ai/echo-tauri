@@ -28,6 +28,8 @@ pub struct Capture {
 enum Cmd {
     Start { device: Option<String> },
     Stop(Sender<Capture>),
+    /// Non-draining clone of the buffer so far (for live streaming).
+    Snapshot(Sender<Capture>),
 }
 
 pub struct Recorder {
@@ -63,6 +65,17 @@ impl Recorder {
     pub fn stop(&self) -> Option<Capture> {
         let (rtx, rrx) = channel();
         if self.tx.lock().send(Cmd::Stop(rtx)).is_ok() {
+            rrx.recv().ok()
+        } else {
+            None
+        }
+    }
+
+    /// Clone the buffer captured so far WITHOUT stopping (live streaming reads
+    /// this repeatedly and segments on speech pauses).
+    pub fn snapshot(&self) -> Option<Capture> {
+        let (rtx, rrx) = channel();
+        if self.tx.lock().send(Cmd::Snapshot(rtx)).is_ok() {
             rrx.recv().ok()
         } else {
             None
@@ -105,6 +118,19 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                     },
                     Err(e) => log::error!("recorder: start failed: {e}"),
                 }
+            }
+            Cmd::Snapshot(reply) => {
+                let cap = match active.as_ref() {
+                    Some((_, buf, sr)) => Capture {
+                        samples: buf.lock().clone(),
+                        sample_rate: *sr,
+                    },
+                    None => Capture {
+                        samples: Vec::new(),
+                        sample_rate: 16_000,
+                    },
+                };
+                let _ = reply.send(cap);
             }
             Cmd::Stop(reply) => {
                 recording.store(false, Ordering::Relaxed);

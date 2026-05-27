@@ -9,6 +9,8 @@ use crate::inject::Target;
 use crate::recorder::Recorder;
 use crate::transcribe::{self, EngineError, TranscriptResult};
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 
 /// App-wide managed state.
@@ -17,6 +19,9 @@ pub struct AppState {
     pub recorder: Recorder,
     /// Window captured at record-start, focused again before paste-back.
     pub target: Mutex<Option<Target>>,
+    /// Live-dictation control signal while streaming (None = not streaming).
+    /// See [`crate::streaming`]: RUN / FINISH / CANCEL.
+    pub streaming: Mutex<Option<Arc<AtomicU8>>>,
 }
 
 impl AppState {
@@ -25,6 +30,7 @@ impl AppState {
             config: Mutex::new(config),
             recorder: Recorder::new(),
             target: Mutex::new(None),
+            streaming: Mutex::new(None),
         }
     }
 }
@@ -46,21 +52,34 @@ fn sanitized(mut c: Config) -> Config {
 
 pub fn do_start(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let (dev, lock) = {
+    let (dev, lock, live) = {
         let c = state.config.lock();
-        (c.mic_device_name.clone(), c.target_lock)
+        (c.mic_device_name.clone(), c.target_lock, c.live_type)
     };
-    if lock {
+    // Live dictation always needs the target so segments type into the right
+    // window, even if target_lock is off.
+    if lock || live {
         *state.target.lock() = Some(crate::inject::capture_active_window());
     }
     state
         .recorder
         .start(if dev.is_empty() { None } else { Some(dev) });
     emit_state(app, EngineState::Recording, None);
+
+    if live {
+        let sig = Arc::new(AtomicU8::new(crate::streaming::RUN));
+        *state.streaming.lock() = Some(sig.clone());
+        crate::streaming::spawn(app.clone(), sig);
+    }
 }
 
 pub fn do_cancel(app: &AppHandle) {
     let state = app.state::<AppState>();
+    // Live: tell the controller to discard + stop (it clears target + emits Idle).
+    if let Some(sig) = state.streaming.lock().take() {
+        sig.store(crate::streaming::CANCEL, Ordering::Relaxed);
+        return;
+    }
     let _ = state.recorder.stop();
     *state.target.lock() = None;
     emit_state(app, EngineState::Idle, None);
@@ -70,6 +89,16 @@ pub fn do_cancel(app: &AppHandle) {
 /// calls this on a spawned thread; the IPC command calls it directly.
 pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let state = app.state::<AppState>();
+    // Live dictation: segments were already typed as you spoke. Just tell the
+    // controller to flush the final segment + stop (it emits Done) — don't
+    // stop()/transcribe() here or we'd race its non-draining snapshots.
+    if let Some(sig) = state.streaming.lock().take() {
+        sig.store(crate::streaming::FINISH, Ordering::Relaxed);
+        return Ok(TranscriptResult {
+            text: String::new(),
+            quality_mode: "live".to_string(),
+        });
+    }
     let cap = match state.recorder.stop() {
         Some(c) => c,
         None => return Err(EngineError::new("no_recording", "keine aktive Aufnahme")),

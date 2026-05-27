@@ -10,6 +10,7 @@ mod events;
 mod hotkey;
 mod inject;
 mod meet;
+mod streaming;
 mod models;
 mod overlay;
 mod recorder;

@@ -112,8 +112,22 @@ fn paste() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Focus the captured target (when target_lock is on) and type a live-dictation
+/// segment with modifier-free Unicode typing — appends without touching the
+/// clipboard, so it can fire repeatedly while the user keeps speaking.
+pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    if cfg.target_lock {
+        if let Some(t) = target {
+            focus(t);
+        }
+    }
+    type_text(text)
+}
+
 /// Modifier-free Unicode typing (streaming + Win-ARM-safe path).
-#[allow(dead_code)] // wired by streaming dictation (M2)
 pub fn type_text(text: &str) -> anyhow::Result<()> {
     use enigo::{Enigo, Keyboard, Settings};
     let mut enigo =
