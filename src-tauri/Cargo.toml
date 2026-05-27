@@ -55,11 +55,12 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 # Local Whisper (whisper.cpp via whisper-rs) is feature-gated: enabling it
 # triggers the whisper.cpp C++ build. Wired in transcribe/local.rs.
 [dependencies.whisper-rs]
-version = "0.12"
+version = "0.16"
 optional = true
 
 [features]
 default = []
-# Build the on-device whisper.cpp engine (long C++ build). Release builds
-# enable this; default-off keeps fast iteration on the cloud path.
-local-whisper = ["dep:whisper-rs"]
+# Build the on-device whisper.cpp engine with the Vulkan GPU backend (long C++
+# build). Vulkan = GPU accel on NVIDIA/AMD/Intel/ARM-Adreno with CPU fallback,
+# and the binary still loads on machines without a GPU (unlike CUDA).
+local-whisper = ["dep:whisper-rs", "whisper-rs/vulkan"]

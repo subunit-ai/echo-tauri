@@ -28,11 +28,8 @@ pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<Tr
     let mut guard = CTX.lock().unwrap();
     let reload = guard.as_ref().map(|(m, _)| m != &model).unwrap_or(true);
     if reload {
-        let ctx = WhisperContext::new_with_params(
-            path.to_string_lossy().as_ref(),
-            WhisperContextParameters::default(),
-        )
-        .map_err(|e| anyhow::anyhow!("whisper load: {e}"))?;
+        let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())
+            .map_err(|e| anyhow::anyhow!("whisper load: {e}"))?;
         *guard = Some((model.clone(), ctx));
     }
     let ctx = &guard.as_ref().unwrap().1;
@@ -60,13 +57,13 @@ pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<Tr
         .full(params, &audio)
         .map_err(|e| anyhow::anyhow!("whisper full: {e}"))?;
 
-    let n = state
-        .full_n_segments()
-        .map_err(|e| anyhow::anyhow!("segments: {e}"))?;
+    let n = state.full_n_segments();
     let mut text = String::new();
     for i in 0..n {
-        if let Ok(seg) = state.full_get_segment_text(i) {
-            text.push_str(&seg);
+        if let Some(seg) = state.get_segment(i) {
+            if let Ok(s) = seg.to_str_lossy() {
+                text.push_str(&s);
+            }
         }
     }
 
@@ -93,6 +90,29 @@ fn resample_to_16k(input: &[f32], sr: u32) -> Vec<f32> {
         out.push(a + (b - a) * frac);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    /// Downloads the tiny model + runs whisper on a synthetic tone. Run with
+    /// `--nocapture` and watch for the "ggml_vulkan: Found … devices" log to
+    /// confirm the GPU is used.
+    #[test]
+    fn gpu_smoke() {
+        let mut cfg = Config::default();
+        cfg.local_model = "tiny".to_string();
+        cfg.language = "en".to_string();
+        let sr = 16_000u32;
+        let samples: Vec<f32> = (0..sr * 2)
+            .map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / sr as f32).sin() * 0.1)
+            .collect();
+        let r = run(&cfg, &samples, sr);
+        println!("LOCAL_SMOKE ok={} -> {:?}", r.is_ok(), r);
+        assert!(r.is_ok(), "local transcribe failed: {:?}", r.err());
+    }
 }
 
 fn model_file(model: &str) -> &'static str {
@@ -152,10 +172,14 @@ fn verify_ggml(path: &Path) -> anyhow::Result<()> {
     if len < 1_000_000 {
         anyhow::bail!("model too small ({len} bytes) — download likely failed");
     }
-    let mut magic = [0u8; 4];
-    fs::File::open(path)?.read_exact(&mut magic)?;
-    if &magic != b"ggml" && &magic != b"GGUF" {
-        anyhow::bail!("model magic mismatch — not a GGML/GGUF file");
+    // Catch error pages / git-LFS pointers; a real model is binary. whisper.cpp
+    // does the authoritative format validation on load. (The GGML magic is a
+    // little-endian u32, so a naive b"ggml" byte compare gives false negatives.)
+    let mut head = [0u8; 24];
+    let n = fs::File::open(path)?.read(&mut head)?;
+    let head = &head[..n];
+    if head.first() == Some(&b'<') || head.starts_with(b"version https://") {
+        anyhow::bail!("model download returned text/HTML, not a model file");
     }
     Ok(())
 }
