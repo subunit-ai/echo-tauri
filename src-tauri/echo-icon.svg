@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark navy panel (matches the app), visible on dark taskbars. Opacity values
+       are baked into the stroke colours because some rasterisers drop attrs. -->
+  <rect width="1024" height="1024" rx="232" fill="#0b1626"/>
+  <!-- Echo mark: 2 concentric echo rings + 5 voice-meter bars, cyan #22d3ee -->
+  <g transform="translate(512 512) scale(21) translate(-16 -16)" fill="none">
+    <circle cx="16" cy="16" r="14" stroke="#1a7d92" stroke-width="1.0"/>
+    <circle cx="16" cy="16" r="9.5" stroke="#2bb6d4" stroke-width="1.1"/>
+    <g fill="#22d3ee" stroke="none">
+      <rect x="8" y="13" width="2" height="6" rx="1"/>
+      <rect x="11.5" y="10" width="2" height="12" rx="1"/>
+      <rect x="15" y="7.5" width="2" height="17" rx="1"/>
+      <rect x="18.5" y="10" width="2" height="12" rx="1"/>
+      <rect x="22" y="13" width="2" height="6" rx="1"/>
+    </g>
+  </g>
+</svg>
