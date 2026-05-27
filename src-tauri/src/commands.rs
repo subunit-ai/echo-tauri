@@ -222,6 +222,87 @@ pub fn set_orb_position(state: State<'_, AppState>, x: f64, y: f64) -> Result<()
     cfg.save().map_err(|e| e.to_string())
 }
 
+/// Current orb-satellite display state (UI mode / language / cleanup).
+fn orb_quick_json(c: &Config) -> serde_json::Value {
+    let mode = if c.mode == "local" {
+        "local"
+    } else if c.cloud_superfast {
+        "superfast"
+    } else {
+        "cloud"
+    };
+    serde_json::json!({
+        "mode": mode,
+        "language": c.language,
+        "cleanup": if c.cleanup_enabled { c.cleanup_style.clone() } else { "off".to_string() },
+    })
+}
+
+/// Read the orb-satellite quick state without changing anything.
+#[tauri::command]
+pub fn orb_quick(state: State<'_, AppState>) -> serde_json::Value {
+    orb_quick_json(&state.config.lock())
+}
+
+/// Cycle one orb satellite (`which` = "mode" | "language" | "cleanup"), persist,
+/// and return the new quick state. The satellites are the orb's inline controls.
+#[tauri::command]
+pub fn orb_cycle(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    which: String,
+) -> Result<serde_json::Value, String> {
+    let cfg = {
+        let mut c = state.config.lock();
+        match which.as_str() {
+            // local → cloud → superfast → local
+            "mode" => {
+                if c.mode == "local" {
+                    c.mode = "subunit".to_string();
+                    c.cloud_superfast = false;
+                    c.last_cloud_mode = "subunit".to_string();
+                } else if !c.cloud_superfast {
+                    c.cloud_superfast = true;
+                } else {
+                    c.mode = "local".to_string();
+                    c.cloud_superfast = false;
+                }
+            }
+            // de → en → auto → de
+            "language" => {
+                let order = ["de", "en", "auto"];
+                let next = order
+                    .iter()
+                    .position(|x| *x == c.language)
+                    .map(|i| (i + 1) % order.len())
+                    .unwrap_or(0);
+                c.language = order[next].to_string();
+            }
+            // off → prompt → email → slack → formal → off
+            "cleanup" => {
+                if !c.cleanup_enabled {
+                    c.cleanup_enabled = true;
+                    c.cleanup_style = "prompt".to_string();
+                } else {
+                    let order = ["prompt", "email", "slack", "formal"];
+                    let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
+                    if idx + 1 >= order.len() {
+                        c.cleanup_enabled = false;
+                    } else {
+                        c.cleanup_style = order[idx + 1].to_string();
+                    }
+                }
+            }
+            _ => {}
+        }
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())?;
+    // Mode change can flip the overlay's state colour mapping; keep it in sync.
+    crate::overlay::apply_config(&app);
+    Ok(orb_quick_json(&cfg))
+}
+
 #[tauri::command]
 pub fn list_audio_devices() -> Vec<String> {
     crate::recorder::list_input_devices()

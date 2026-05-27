@@ -51,6 +51,8 @@ pub fn run() {
             commands::set_config,
             commands::app_version,
             commands::set_orb_position,
+            commands::orb_quick,
+            commands::orb_cycle,
             commands::list_audio_devices,
             commands::mic_level,
             commands::start_recording,

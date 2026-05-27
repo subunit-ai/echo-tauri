@@ -1,8 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef } from "react";
-import { onState, setOrbPosition, type EngineState } from "../lib/ipc";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  onState,
+  orbCycle,
+  orbQuick,
+  setOrbPosition,
+  type EngineState,
+  type OrbQuick,
+} from "../lib/ipc";
 
 const THEME: Record<string, string> = {
   cyan: "#22d3ee",
@@ -29,6 +36,21 @@ function hexA(hex: string, a: number): string {
  * It reflects the engine state (idle/recording/transcribing/done/error) and
  * reacts to the mic level, in one of six styles.
  */
+const MODE_LABEL: Record<string, string> = { local: "LOK", cloud: "CLD", superfast: "FAST" };
+const MODE_COLOR: Record<string, string> = {
+  local: "#22d3ee",
+  cloud: "#5b9dff",
+  superfast: "#ff9f43",
+};
+const CLEANUP_LABEL: Record<string, string> = {
+  off: "—",
+  prompt: "PR",
+  email: "@",
+  slack: "#",
+  formal: "FM",
+};
+const langLabel = (l: string) => (l === "auto" ? "AUTO" : l.toUpperCase());
+
 export function Orb() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const state = useRef<EngineState>("idle");
@@ -37,6 +59,8 @@ export function Orb() {
   const color = useRef(THEME.cyan);
   const idlePulse = useRef(true);
   const autoHide = useRef(false);
+  const [quick, setQuick] = useState<OrbQuick | null>(null);
+  const [hover, setHover] = useState(false);
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
@@ -47,6 +71,7 @@ export function Orb() {
         autoHide.current = c.orb_overlay_auto_hide === true;
       })
       .catch(() => {});
+    orbQuick().then(setQuick).catch(() => {});
     const un = onState((p) => {
       state.current = p.state;
     });
@@ -268,5 +293,80 @@ export function Orb() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} data-tauri-drag-region />;
+  const cycle = (which: "mode" | "language" | "cleanup") => (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    orbCycle(which).then(setQuick).catch(() => {});
+  };
+
+  const satBase: CSSProperties = {
+    position: "absolute",
+    minWidth: 26,
+    height: 22,
+    padding: "0 6px",
+    border: "1px solid rgba(34,211,238,0.45)",
+    borderRadius: 999,
+    background: "rgba(8,16,30,0.92)",
+    color: "#cfeefb",
+    fontSize: 10,
+    fontWeight: 800,
+    letterSpacing: "0.02em",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    userSelect: "none",
+    opacity: hover ? 1 : 0,
+    transition: "opacity 0.18s ease",
+    pointerEvents: hover ? "auto" : "none",
+    boxShadow: "0 4px 12px -4px rgba(0,0,0,0.5)",
+  };
+
+  return (
+    <div
+      style={{ position: "relative", width: "100%", height: "100%" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <canvas
+        ref={canvasRef}
+        data-tauri-drag-region
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+      />
+      {quick && (
+        <>
+          {/* W — transcription mode */}
+          <button
+            title={`Modus: ${quick.mode}`}
+            onClick={cycle("mode")}
+            style={{
+              ...satBase,
+              left: 0,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: MODE_COLOR[quick.mode] ?? "#cfeefb",
+              borderColor: `${MODE_COLOR[quick.mode] ?? "#22d3ee"}88`,
+            }}
+          >
+            {MODE_LABEL[quick.mode] ?? quick.mode}
+          </button>
+          {/* N — language */}
+          <button
+            title={`Sprache: ${quick.language}`}
+            onClick={cycle("language")}
+            style={{ ...satBase, top: 0, left: "50%", transform: "translateX(-50%)" }}
+          >
+            {langLabel(quick.language)}
+          </button>
+          {/* E — cleanup style */}
+          <button
+            title={`Cleanup: ${quick.cleanup}`}
+            onClick={cycle("cleanup")}
+            style={{ ...satBase, right: 0, top: "50%", transform: "translateY(-50%)" }}
+          >
+            {CLEANUP_LABEL[quick.cleanup] ?? quick.cleanup.slice(0, 2).toUpperCase()}
+          </button>
+        </>
+      )}
+    </div>
+  );
 }

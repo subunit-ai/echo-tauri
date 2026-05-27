@@ -95,6 +95,19 @@ export const setConfig = (config: Config) => invoke<void>("set_config", { config
 /** Persist a drag-set orb position (logical screen px) as orb_position custom-x-y. */
 export const setOrbPosition = (x: number, y: number) =>
   invoke<void>("set_orb_position", { x, y });
+
+// ---- Orb satellites (inline quick controls around the overlay) ----
+export interface OrbQuick {
+  /** "local" | "cloud" | "superfast" */
+  mode: string;
+  /** language code or "auto" */
+  language: string;
+  /** cleanup style, or "off" */
+  cleanup: string;
+}
+export const orbQuick = () => invoke<OrbQuick>("orb_quick");
+export const orbCycle = (which: "mode" | "language" | "cleanup") =>
+  invoke<OrbQuick>("orb_cycle", { which });
 export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 
