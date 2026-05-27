@@ -34,8 +34,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .focused(false)
         .build()?;
 
-    // Pure visual indicator for now — let clicks pass through to the app behind.
-    let _ = win.set_ignore_cursor_events(true);
+    // Grab-able: the orb is a `data-tauri-drag-region`, so the cursor must reach
+    // it (no click-through). The window is only orb-sized, so it captures clicks
+    // just within that small area. Drag → window moves → position persists.
+    let _ = win.set_ignore_cursor_events(false);
     position_window(&win, &position, dim);
     Ok(())
 }

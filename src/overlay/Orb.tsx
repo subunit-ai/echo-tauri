@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef } from "react";
-import { onState, type EngineState } from "../lib/ipc";
+import { onState, setOrbPosition, type EngineState } from "../lib/ipc";
 
 const THEME: Record<string, string> = {
   cyan: "#22d3ee",
@@ -243,5 +244,29 @@ export function Orb() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} />;
+  // Persist the position after the user drags the orb (the canvas is a
+  // data-tauri-drag-region, so dragging it moves this window). Debounced so we
+  // save once the drag settles, not on every intermediate move event.
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let timer: number | undefined;
+    const un = win.onMoved(() => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        try {
+          const pos = await win.outerPosition();
+          const sf = await win.scaleFactor();
+          await setOrbPosition(pos.x / sf, pos.y / sf);
+        } catch {
+          /* ignore */
+        }
+      }, 450);
+    });
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      un.then((f) => f());
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} data-tauri-drag-region />;
 }

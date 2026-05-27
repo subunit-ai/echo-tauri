@@ -210,6 +210,18 @@ pub fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
+/// the orb reopens where the user dropped it. Called from the overlay on drag.
+#[tauri::command]
+pub fn set_orb_position(state: State<'_, AppState>, x: f64, y: f64) -> Result<(), String> {
+    let cfg = {
+        let mut c = state.config.lock();
+        c.orb_position = format!("custom-{}-{}", x.round() as i64, y.round() as i64);
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn list_audio_devices() -> Vec<String> {
     crate::recorder::list_input_devices()
