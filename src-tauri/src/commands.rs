@@ -200,6 +200,8 @@ pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config
     if hotkey_changed {
         crate::hotkey::reregister_from_config(&app);
     }
+    // Live-apply overlay settings (show/hide, size, position, style/color/idle).
+    crate::overlay::apply_config(&app);
     Ok(())
 }
 

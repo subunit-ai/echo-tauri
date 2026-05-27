@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { onState, type EngineState } from "../lib/ipc";
 
@@ -48,8 +49,20 @@ export function Orb() {
     const un = onState((p) => {
       state.current = p.state;
     });
+    // Live config updates from Settings (set_config emits this) — restyle without reload.
+    const unCfg = listen<{ style?: string; color?: string; idlePulse?: boolean; autoHide?: boolean }>(
+      "echo://orb-config",
+      (e) => {
+        const p = e.payload;
+        if (typeof p.style === "string") style.current = p.style;
+        if (p.color && THEME[p.color]) color.current = THEME[p.color];
+        idlePulse.current = p.idlePulse !== false;
+        autoHide.current = p.autoHide === true;
+      },
+    );
     return () => {
       un.then((f) => f());
+      unCfg.then((f) => f());
     };
   }, []);
 

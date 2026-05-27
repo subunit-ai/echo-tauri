@@ -4,7 +4,10 @@
 //! + drag-to-reposition are a follow-up (they need cursor-position toggling of
 //! `set_ignore_cursor_events`).
 
-use tauri::{AppHandle, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 
 use crate::commands::AppState;
 
@@ -35,6 +38,57 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let _ = win.set_ignore_cursor_events(true);
     position_window(&win, &position, dim);
     Ok(())
+}
+
+/// Apply the current config to the live overlay so changes in Settings take effect
+/// immediately (no restart): create/close the window when `use_orb_overlay` toggles,
+/// resize + reposition for size/position, and push the visual settings
+/// (style/color/idle/auto-hide) to the canvas. Called from `set_config`.
+pub fn apply_config(app: &AppHandle) {
+    let (enabled, size_mult, position, style, color, idle_pulse, auto_hide) = {
+        let st = app.state::<AppState>();
+        let c = st.config.lock();
+        (
+            c.use_orb_overlay,
+            c.orb_overlay_size as f64,
+            c.orb_position.clone(),
+            c.orb_overlay_style.clone(),
+            c.orb_color_theme.clone(),
+            c.orb_idle_pulse,
+            c.orb_overlay_auto_hide,
+        )
+    };
+
+    // Disabled → close the window if it's open and stop.
+    if !enabled {
+        if let Some(w) = app.get_webview_window("overlay") {
+            let _ = w.close();
+        }
+        return;
+    }
+
+    // Enabled → ensure the window exists, then resize/reposition to match.
+    if app.get_webview_window("overlay").is_none() {
+        let _ = create(app);
+    }
+    let Some(win) = app.get_webview_window("overlay") else {
+        return;
+    };
+    let dim = (150.0 * size_mult).clamp(80.0, 480.0);
+    let _ = win.set_size(LogicalSize::new(dim, dim));
+    position_window(&win, &position, dim);
+
+    // Push the visual style to the canvas; the Orb listens for this and restyles
+    // without a reload. (On a fresh create the canvas also reads get_config on mount.)
+    let _ = app.emit(
+        "echo://orb-config",
+        serde_json::json!({
+            "style": style,
+            "color": color,
+            "idlePulse": idle_pulse,
+            "autoHide": auto_hide,
+        }),
+    );
 }
 
 fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
