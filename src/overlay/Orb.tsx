@@ -82,7 +82,7 @@ export function Orb() {
 
     let t = 0;
     let raf = 0;
-    const rings: { r: number; a: number }[] = [];
+    const rings: { r: number; a0: number }[] = [];
 
     const loop = () => {
       t += 1;
@@ -187,21 +187,27 @@ export function Orb() {
           break;
         }
         default: {
-          // "ping" — expanding echo rings + center dot
-          const spawnEvery = st === "recording" ? Math.max(6, 22 - lvl * 16) : 40;
+          // "ping" — slow echo rings that expand WIDE and fade out softly, + center dot.
+          // Emit far less often than before (TJ: old frequency was way too high) and let
+          // each ring travel almost to the edge while easing its alpha down to nothing.
+          const maxR = size * 0.47;
+          const grow = size * 0.0026 * (1 + energy * 0.6);
+          const spawnEvery = st === "recording" ? Math.max(30, 64 - lvl * 34) : 96;
           if (t % Math.round(spawnEvery) === 0) {
-            rings.push({ r: dotR, a: 0.55 + energy * 0.4 });
+            rings.push({ r: dotR, a0: 0.5 + energy * 0.35 });
           }
           for (let i = rings.length - 1; i >= 0; i--) {
             const ring = rings[i];
-            ring.r += size * 0.006 * (1 + energy);
-            ring.a -= 0.008;
-            if (ring.a <= 0 || ring.r > size * 0.5) {
+            ring.r += grow;
+            const p = (ring.r - dotR) / (maxR - dotR); // 0 at birth → 1 at the edge
+            if (p >= 1) {
               rings.splice(i, 1);
               continue;
             }
-            ctx.strokeStyle = hexA(base, ring.a);
-            ctx.lineWidth = Math.max(1.5, size * 0.012);
+            // ease-out fade: bright near the dot, gone by the time it's big + thinning line
+            const a = ring.a0 * (1 - p) * (1 - p);
+            ctx.strokeStyle = hexA(base, a);
+            ctx.lineWidth = Math.max(1.2, size * 0.012 * (1 - p * 0.5));
             ctx.beginPath();
             ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
             ctx.stroke();
