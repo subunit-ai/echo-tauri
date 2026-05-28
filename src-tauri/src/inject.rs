@@ -45,9 +45,29 @@ pub fn capture_active_window() -> Target {
             }
         }
     }
-    // Windows/macOS target capture is a follow-up (needs windows / core-graphics
-    // crates + a build on those platforms). The hotkey flow doesn't steal focus,
-    // so paste lands correctly there without it.
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if !hwnd.0.is_null() {
+                let mut buf = [0u16; 512];
+                let len = GetWindowTextW(hwnd, &mut buf);
+                let title = if len > 0 {
+                    String::from_utf16_lossy(&buf[..len as usize])
+                } else {
+                    String::new()
+                };
+                // Encode the HWND pointer as a decimal string so Target stays Send.
+                return Target {
+                    id: (hwnd.0 as isize).to_string(),
+                    title,
+                };
+            }
+        }
+    }
+    // macOS target capture is a follow-up (needs core-graphics / AX). The hotkey
+    // flow doesn't steal focus, so paste lands correctly there without it.
     Target::default()
 }
 
@@ -61,6 +81,18 @@ fn focus(target: &Target) {
             .args(["windowactivate", "--sync", &target.id])
             .status();
         std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        if let Ok(raw) = target.id.parse::<isize>() {
+            let hwnd = HWND(raw as *mut core::ffi::c_void);
+            unsafe {
+                let _ = SetForegroundWindow(hwnd);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
     }
 }
 
