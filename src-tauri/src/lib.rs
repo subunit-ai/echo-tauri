@@ -12,6 +12,7 @@ mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
 mod meet;
 mod models;
+mod synapse;
 mod overlay;
 mod recorder;
 mod transcribe;

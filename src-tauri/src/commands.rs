@@ -158,6 +158,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         log::warn!("inject failed: {e}");
     }
 
+    // Best-effort push to the Synapse knowledge base (detached so the up-to-5s
+    // round-trip never delays the user). No-op unless synapse_save_enabled.
+    if cfg.synapse_save_enabled && !result.text.trim().is_empty() {
+        let (c, t, wt) = (cfg.clone(), result.text.clone(), title.clone());
+        std::thread::spawn(move || crate::synapse::maybe_save(&c, &t, &wt));
+    }
+
     // Stats + history.
     {
         let mut c = state.config.lock();
