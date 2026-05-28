@@ -11,21 +11,13 @@ export interface VocabEntry {
 
 export interface Config {
   hotkey: string;
-  mode: string; // local | subunit | openai | groq | custom
+  mode: string; // local | subunit  (superfast = subunit + cloud_superfast)
   local_model: string;
   local_device: string;
   language: string;
 
   subunit_endpoint: string;
   subunit_api_key: string;
-  openai_api_key: string;
-  openai_model: string;
-  groq_api_key: string;
-  groq_model: string;
-  custom_endpoint: string;
-  custom_api_key: string;
-  custom_model: string;
-  openrouter_api_key: string;
 
   autopaste: boolean;
   target_lock: boolean;

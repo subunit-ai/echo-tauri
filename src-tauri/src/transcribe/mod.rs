@@ -1,9 +1,9 @@
 //! Transcription dispatcher.
 //!
-//! Cloud (subunit, incl. the Groq-proxied "superfast") is the M1 path and speaks
-//! the exact `transcribe.subunit.ai/v1/transcribe` contract. Local (whisper.cpp
-//! via whisper-rs) is feature-gated behind `local-whisper`. openai/groq/custom
-//! land in a later pass.
+//! Cloud (subunit, incl. the Groq-proxied "superfast") speaks the exact
+//! `transcribe.subunit.ai/v1/transcribe` contract. Local (whisper.cpp via
+//! whisper-rs) is feature-gated behind `local-whisper`. These two are the only
+//! supported engines — config coerces any other mode to subunit on load.
 
 mod cloud;
 #[cfg(feature = "local-whisper")]

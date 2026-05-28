@@ -41,10 +41,6 @@ fn sanitized(mut c: Config) -> Config {
     c.subunit_access_token.clear();
     c.subunit_refresh_token.clear();
     c.subunit_api_key.clear();
-    c.openai_api_key.clear();
-    c.groq_api_key.clear();
-    c.custom_api_key.clear();
-    c.openrouter_api_key.clear();
     c
 }
 
@@ -225,10 +221,6 @@ pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config
         config.subunit_token_expires_in = cur.subunit_token_expires_in;
         config.subunit_workspace_id = cur.subunit_workspace_id.clone();
         config.subunit_api_key = cur.subunit_api_key.clone();
-        config.openai_api_key = cur.openai_api_key.clone();
-        config.groq_api_key = cur.groq_api_key.clone();
-        config.custom_api_key = cur.custom_api_key.clone();
-        config.openrouter_api_key = cur.openrouter_api_key.clone();
         cur.hotkey != config.hotkey
     };
     config.save().map_err(|e| e.to_string())?;

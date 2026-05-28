@@ -106,7 +106,9 @@ fn default_vocabulary() -> Vec<VocabEntry> {
 #[serde(default)]
 pub struct Config {
     pub hotkey: String,
-    /// "local" | "subunit" | "openai" | "groq" | "custom"
+    /// "local" | "subunit" (incl. the Groq-proxied "superfast" via cloud_superfast).
+    /// Direct OpenAI/Groq/Custom providers were dropped — superfast covers Groq
+    /// server-side, and Subunit + Local are the supported engines.
     pub mode: String,
     pub local_model: String,
     pub local_device: String,
@@ -114,19 +116,6 @@ pub struct Config {
 
     pub subunit_endpoint: String,
     pub subunit_api_key: String,
-
-    pub openai_api_key: String,
-    pub openai_model: String,
-
-    pub groq_api_key: String,
-    pub groq_model: String,
-
-    pub custom_endpoint: String,
-    pub custom_api_key: String,
-    pub custom_model: String,
-
-    /// Legacy pre-v0.2.5 OpenRouter key — kept so old configs migrate quietly.
-    pub openrouter_api_key: String,
 
     pub autopaste: bool,
     pub target_lock: bool,
@@ -220,18 +209,6 @@ impl Default for Config {
 
             subunit_endpoint: "https://transcribe.subunit.ai/v1/transcribe".to_string(),
             subunit_api_key: String::new(),
-
-            openai_api_key: String::new(),
-            openai_model: "whisper-1".to_string(),
-
-            groq_api_key: String::new(),
-            groq_model: "whisper-large-v3-turbo".to_string(),
-
-            custom_endpoint: String::new(),
-            custom_api_key: String::new(),
-            custom_model: "whisper-1".to_string(),
-
-            openrouter_api_key: String::new(),
 
             autopaste: true,
             target_lock: true,
@@ -360,9 +337,6 @@ impl Config {
 
     /// Migration ladder (mirrors Config.load in config.py).
     fn migrate(&mut self) {
-        if self.mode == "openrouter" {
-            self.mode = "openai".to_string();
-        }
         if self.cleanup_style == "tidy" {
             self.cleanup_style = "prompt".to_string();
         }
@@ -373,12 +347,17 @@ impl Config {
         self.route_default_engine();
     }
 
-    /// If this build has no on-device engine (`local-whisper` off), a blind
-    /// "local" default can't transcribe — route it to the cloud (Subunit). This
-    /// is the GPU-aware-default equivalent: an explicit choice on a build that
-    /// *can* run local is left untouched.
+    /// Coerce the mode to a supported engine. Old configs (or migrated ones) may
+    /// carry the dropped openai/groq/custom/openrouter modes → route them to the
+    /// cloud (Subunit). And a blind "local" on a build without the on-device
+    /// engine can't transcribe → also Subunit. An explicit "local" on a
+    /// local-capable build is left untouched.
     fn route_default_engine(&mut self) {
-        if self.mode == "local" && !cfg!(feature = "local-whisper") {
+        if self.mode == "local" {
+            if !cfg!(feature = "local-whisper") {
+                self.mode = "subunit".to_string();
+            }
+        } else if self.mode != "subunit" {
             self.mode = "subunit".to_string();
         }
     }
