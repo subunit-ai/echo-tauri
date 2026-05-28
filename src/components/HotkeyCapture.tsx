@@ -20,6 +20,23 @@ function keyName(e: KeyboardEvent): string | null {
   return k.toLowerCase(); // letters, digits, F-keys (f1…)
 }
 
+// Flag obviously-problematic hotkeys before the user commits one.
+function conflictWarning(combo: string): string | null {
+  if (!combo) return null;
+  const c = combo.toLowerCase();
+  const hasModifier = /<ctrl>|<shift>|<alt>|<cmd>/.test(c);
+  if (!hasModifier) return "Ohne Modifier (Strg/Alt/…) löst der Hotkey bei jedem Tastendruck aus.";
+  // Well-known OS/app shortcuts that would clash badly.
+  const clashes: [RegExp, string][] = [
+    [/<ctrl>\+<c>$|<ctrl>\+<v>$|<ctrl>\+<x>$|<ctrl>\+<z>$/, "kollidiert mit Kopieren/Einfügen/Rückgängig"],
+    [/<alt>\+<tab>$/, "kollidiert mit dem Fensterwechsel"],
+    [/<cmd>\+<space>$/, "kollidiert mit Spotlight/Suche"],
+    [/<ctrl>\+<shift>\+<esc>$/, "kollidiert mit dem Task-Manager"],
+  ];
+  for (const [re, msg] of clashes) if (re.test(c)) return `Achtung: ${msg}.`;
+  return null;
+}
+
 /** Click → press a combo → emits `<ctrl>+<space>`-style string. */
 export function HotkeyCapture({
   value,
@@ -29,6 +46,7 @@ export function HotkeyCapture({
   onChange: (v: string) => void;
 }) {
   const [capturing, setCapturing] = useState(false);
+  const warning = conflictWarning(value);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!capturing) return;
@@ -46,15 +64,22 @@ export function HotkeyCapture({
   };
 
   return (
-    <button
-      type="button"
-      className={`sub-tab ${capturing ? "onb-primary" : ""}`}
-      style={{ minWidth: 160 }}
-      onClick={() => setCapturing(true)}
-      onBlur={() => setCapturing(false)}
-      onKeyDown={onKeyDown}
-    >
-      {capturing ? "Taste drücken…" : value || "Hotkey setzen"}
-    </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+      <button
+        type="button"
+        className={`sub-tab ${capturing ? "onb-primary" : ""}`}
+        style={{ minWidth: 160 }}
+        onClick={() => setCapturing(true)}
+        onBlur={() => setCapturing(false)}
+        onKeyDown={onKeyDown}
+      >
+        {capturing ? "Taste drücken…" : value || "Hotkey setzen"}
+      </button>
+      {warning && !capturing && (
+        <span style={{ fontSize: 11, color: "#ffc450", maxWidth: 220, textAlign: "right" }}>
+          {warning}
+        </span>
+      )}
+    </div>
   );
 }

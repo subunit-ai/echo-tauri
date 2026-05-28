@@ -54,9 +54,10 @@ export function Home() {
           <div className="value">{Math.round(config.total_audio_seconds / 60)}</div>
         </div>
         <div className="card stat-card">
-          <div className="label">Sprache</div>
-          <div className="value" style={{ fontSize: 20, textTransform: "uppercase" }}>
-            {config.language}
+          <div className="label">Zeit gespart</div>
+          <div className="value">
+            {Math.round((config.total_audio_seconds * 3) / 60)}
+            <span style={{ fontSize: 13, opacity: 0.6 }}> min</span>
           </div>
         </div>
       </div>
@@ -68,6 +69,14 @@ export function Home() {
         recent.map((e, i) => (
           <div key={i} className="history-item">
             <div className="text">{String(e.text ?? "")}</div>
+            <div className="meta" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="tier-badge">{String(e.quality_mode ?? "") || "local"}</span>
+              {e.ts != null && (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                  {new Date(Number(e.ts) * 1000).toLocaleString("de-DE")}
+                </span>
+              )}
+            </div>
           </div>
         ))
       )}
