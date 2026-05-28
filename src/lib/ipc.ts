@@ -104,6 +104,10 @@ export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 /** Copy text to the clipboard (History action). */
 export const copyText = (text: string) => invoke<void>("copy_text", { text });
+/** Open ~/.config/echo in the OS file manager. */
+export const openConfigDir = () => invoke<void>("open_config_dir");
+/** Open an external URL in the default browser. */
+export const openExternal = (url: string) => invoke<void>("open_external", { url });
 /** Delete one history entry by index (newest = 0). */
 export const deleteHistoryEntry = (index: number) =>
   invoke<void>("delete_history_entry", { index });

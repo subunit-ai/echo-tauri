@@ -5,9 +5,12 @@ import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
 import { Toggle } from "../components/Toggle";
 import {
+  appVersion,
   checkForUpdates,
   installUpdate,
   listAudioDevices,
+  openConfigDir,
+  openExternal,
   patchForUiMode,
   uiModeOf,
   type Config,
@@ -64,11 +67,13 @@ export function Settings() {
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+  const [ver, setVer] = useState("");
   // Auto-Mode overrides edited as an ordered [substring, style] list (null = not loaded yet).
   const [ovr, setOvr] = useState<[string, string][] | null>(null);
 
   useEffect(() => {
     listAudioDevices().then(setDevices).catch(() => {});
+    appVersion().then(setVer).catch(() => {});
   }, []);
 
   // Seed the overrides editor once from config (one-way; edits write back below).
@@ -224,16 +229,6 @@ export function Settings() {
                 options={[
                   ["dark", "Dunkel"],
                   ["light", "Hell"],
-                ]}
-              />
-            </Row>
-            <Row name="Oberflächen-Sprache">
-              <Sel
-                value={c.ui_language}
-                onChange={(v) => set("ui_language", v)}
-                options={[
-                  ["de", "Deutsch"],
-                  ["en", "English"],
                 ]}
               />
             </Row>
@@ -437,8 +432,21 @@ export function Settings() {
                 </button>
               )}
             </Row>
-            <Row name="Plan">
-              <span style={{ textTransform: "uppercase", fontWeight: 700 }}>{c.plan}</span>
+            <Row name="Plan" hint={c.account_email ? "Cloud-Transkription aktiv" : "Nicht angemeldet"}>
+              <span
+                style={{
+                  textTransform: "uppercase",
+                  fontWeight: 800,
+                  fontSize: "0.72rem",
+                  color: "#22d3ee",
+                  background: "rgba(34,211,238,0.12)",
+                  border: "1px solid rgba(34,211,238,0.35)",
+                  borderRadius: 999,
+                  padding: "3px 12px",
+                }}
+              >
+                {c.plan || "free"}
+              </span>
             </Row>
             <Row name="Speaker-Diarization" hint="Wer-spricht-wann bei langen Aufnahmen (Server)">
               <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
@@ -463,6 +471,26 @@ export function Settings() {
                 </button>
               )}
             </Row>
+
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
+              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>Über Echo</div>
+              <Row name="Version" hint={ver ? `Echo v${ver}` : ""}>
+                <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
+              </Row>
+              <Row name="Datenordner" hint="Konfiguration + Modelle (~/.config/echo)">
+                <button className="sub-tab" onClick={() => openConfigDir()}>
+                  Ordner öffnen
+                </button>
+              </Row>
+              <Row name="Quellcode / Releases">
+                <button
+                  className="sub-tab"
+                  onClick={() => openExternal("https://github.com/subunit-ai/echo-tauri")}
+                >
+                  GitHub →
+                </button>
+              </Row>
+            </div>
           </>
         )}
       </div>

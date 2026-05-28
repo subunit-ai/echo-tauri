@@ -54,6 +54,8 @@ pub fn run() {
             commands::set_config,
             commands::app_version,
             commands::copy_text,
+            commands::open_config_dir,
+            commands::open_external,
             commands::delete_history_entry,
             commands::clear_history,
             commands::set_orb_position,

@@ -244,6 +244,19 @@ pub fn copy_text(text: String) -> Result<(), String> {
     crate::inject::set_clipboard(&text).map_err(|e| e.to_string())
 }
 
+/// Open the config/data folder (~/.config/echo) in the OS file manager.
+#[tauri::command]
+pub fn open_config_dir() {
+    let dir = crate::config::config_dir();
+    crate::meet::open_url(&dir.to_string_lossy());
+}
+
+/// Open an external URL in the default browser (About → GitHub link).
+#[tauri::command]
+pub fn open_external(url: String) {
+    crate::meet::open_url(&url);
+}
+
 /// Delete one history entry by index (newest = 0), then persist.
 #[tauri::command]
 pub fn delete_history_entry(state: State<'_, AppState>, index: usize) -> Result<(), String> {
