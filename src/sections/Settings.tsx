@@ -256,7 +256,7 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Live-Text" hint="Phrasen schon beim Sprechen tippen (experimentell)">
+            <Row name="Live-Modus" hint="An: Text wird beim Sprechen live reingetippt (WhisperLive-Stream). Aus: Instant — ganzer Text am Ende reingetippt.">
               <Toggle checked={c.live_type} onChange={(v) => set("live_type", v)} />
             </Row>
             <Row name="DACH-Formatierung" hint="Abkürzungen, Währung, „deutsche“ Anführungszeichen">
