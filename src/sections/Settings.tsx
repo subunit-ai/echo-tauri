@@ -64,10 +64,17 @@ export function Settings() {
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+  // Auto-Mode overrides edited as an ordered [substring, style] list (null = not loaded yet).
+  const [ovr, setOvr] = useState<[string, string][] | null>(null);
 
   useEffect(() => {
     listAudioDevices().then(setDevices).catch(() => {});
   }, []);
+
+  // Seed the overrides editor once from config (one-way; edits write back below).
+  useEffect(() => {
+    if (config && ovr === null) setOvr(Object.entries(config.auto_mode_overrides || {}));
+  }, [config, ovr]);
 
   // Flash a brief "Gespeichert ✓" after each auto-save (no manual save button).
   useEffect(() => {
@@ -80,6 +87,14 @@ export function Settings() {
   if (!config) return null;
   const c = config;
   const set = <K extends keyof Config>(k: K, v: Config[K]) => patch({ [k]: v } as Partial<Config>);
+
+  // Rebuild the overrides map from the editable list and persist (auto-saves).
+  const writeOvr = (next: [string, string][]) => {
+    setOvr(next);
+    const obj: Record<string, string> = {};
+    for (const [k, v] of next) if (k.trim()) obj[k.trim()] = v;
+    set("auto_mode_overrides", obj);
+  };
 
   const doLogin = async () => {
     setBusy(true);
@@ -277,6 +292,66 @@ export function Settings() {
                 ]}
               />
             </Row>
+            <Row
+              name="Auto-Modus"
+              hint="Stil automatisch nach aktivem Fenster (ChatGPT/Cursor→Prompt, Gmail→E-Mail, Slack→Slack, Word/Notion→Formal)"
+            >
+              <Toggle checked={c.cleanup_auto_mode} onChange={(v) => set("cleanup_auto_mode", v)} />
+            </Row>
+            {c.cleanup_auto_mode && (
+              <div
+                className="setting-row"
+                style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}
+              >
+                <div className="meta">
+                  <div className="name">Eigene Regeln</div>
+                  <div className="hint">
+                    Fenstertitel enthält „Text" → Stil. Überschreibt die eingebauten Regeln.
+                  </div>
+                </div>
+                {(ovr ?? []).map(([key, style], i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      style={{ flex: 1 }}
+                      placeholder="Fenstertitel enthält…"
+                      value={key}
+                      onChange={(e) => {
+                        const next = [...(ovr ?? [])];
+                        next[i] = [e.target.value, style];
+                        writeOvr(next);
+                      }}
+                    />
+                    <Sel
+                      value={style}
+                      onChange={(v) => {
+                        const next = [...(ovr ?? [])];
+                        next[i] = [key, v];
+                        writeOvr(next);
+                      }}
+                      options={[
+                        ["prompt", "Prompt"],
+                        ["email", "E-Mail"],
+                        ["slack", "Slack"],
+                        ["formal", "Formal"],
+                      ]}
+                    />
+                    <button
+                      className="sub-tab"
+                      onClick={() => writeOvr((ovr ?? []).filter((_, j) => j !== i))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="sub-tab"
+                  style={{ alignSelf: "flex-start" }}
+                  onClick={() => writeOvr([...(ovr ?? []), ["", "prompt"]])}
+                >
+                  + Regel
+                </button>
+              </div>
+            )}
           </>
         )}
 
