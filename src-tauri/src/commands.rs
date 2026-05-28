@@ -239,6 +239,36 @@ pub fn app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+/// Copy arbitrary text to the clipboard (History "Kopieren" action).
+#[tauri::command]
+pub fn copy_text(text: String) -> Result<(), String> {
+    crate::inject::set_clipboard(&text).map_err(|e| e.to_string())
+}
+
+/// Delete one history entry by index (newest = 0), then persist.
+#[tauri::command]
+pub fn delete_history_entry(state: State<'_, AppState>, index: usize) -> Result<(), String> {
+    let cfg = {
+        let mut c = state.config.lock();
+        if index < c.history.len() {
+            c.history.remove(index);
+        }
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())
+}
+
+/// Clear the whole transcription history, then persist.
+#[tauri::command]
+pub fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
+    let cfg = {
+        let mut c = state.config.lock();
+        c.history.clear();
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())
+}
+
 /// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
 /// the orb reopens where the user dropped it. Called from the overlay on drag.
 #[tauri::command]

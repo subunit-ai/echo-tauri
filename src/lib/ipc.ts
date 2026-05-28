@@ -110,6 +110,13 @@ export const orbCycle = (which: "mode" | "language" | "cleanup") =>
   invoke<OrbQuick>("orb_cycle", { which });
 export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
+/** Copy text to the clipboard (History action). */
+export const copyText = (text: string) => invoke<void>("copy_text", { text });
+/** Delete one history entry by index (newest = 0). */
+export const deleteHistoryEntry = (index: number) =>
+  invoke<void>("delete_history_entry", { index });
+/** Clear the whole transcription history. */
+export const clearHistory = () => invoke<void>("clear_history");
 
 // ---- Local whisper models ----
 export interface ModelInfo {
