@@ -55,6 +55,8 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync"] }
 tokio-tungstenite = { version = "0.23", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 futures-util = "0.3"
+# Hardware probe (RAM/cores) for the recommended local-model hint.
+sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 
 # Local Whisper (whisper.cpp via whisper-rs) is feature-gated: enabling it
 # triggers the whisper.cpp C++ build. Wired in transcribe/local.rs.

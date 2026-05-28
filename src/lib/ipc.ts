@@ -124,6 +124,14 @@ export interface ModelProgress {
   done?: boolean;
   error?: string;
 }
+export interface HardwareInfo {
+  summary: string;
+  recommended_model: string;
+  ram_gb: number;
+  cpu_cores: number;
+  gpu_build: boolean;
+}
+export const hardwareInfo = () => invoke<HardwareInfo>("hardware_info");
 export const listLocalModels = () => invoke<ModelInfo[]>("list_local_models");
 export const downloadModel = (model: string) => invoke<void>("download_model", { model });
 export const deleteLocalModel = (model: string) => invoke<void>("delete_local_model", { model });

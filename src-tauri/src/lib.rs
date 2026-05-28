@@ -7,6 +7,7 @@ mod commands;
 mod config;
 mod dach;
 mod events;
+mod hardware;
 mod hotkey;
 mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
@@ -59,6 +60,7 @@ pub fn run() {
             commands::orb_quick,
             commands::orb_cycle,
             commands::list_audio_devices,
+            commands::hardware_info,
             commands::mic_level,
             commands::start_recording,
             commands::cancel_recording,

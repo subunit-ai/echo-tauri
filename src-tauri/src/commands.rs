@@ -366,6 +366,12 @@ pub fn list_audio_devices() -> Vec<String> {
     crate::recorder::list_input_devices()
 }
 
+/// Hardware summary + recommended local model (shown in the model manager).
+#[tauri::command]
+pub fn hardware_info() -> crate::hardware::HardwareInfo {
+    crate::hardware::detect()
+}
+
 #[tauri::command]
 pub fn mic_level(state: State<'_, AppState>) -> f32 {
     state.recorder.level()

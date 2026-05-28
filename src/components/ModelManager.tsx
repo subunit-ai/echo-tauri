@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import {
   deleteLocalModel,
   downloadModel,
+  hardwareInfo,
   listLocalModels,
   onModelProgress,
+  type HardwareInfo,
   type ModelInfo,
 } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
@@ -12,11 +14,13 @@ export function ModelManager() {
   const { config, patch } = useConfig();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [hw, setHw] = useState<HardwareInfo | null>(null);
 
   const refresh = () => listLocalModels().then(setModels).catch(() => {});
 
   useEffect(() => {
     refresh();
+    hardwareInfo().then(setHw).catch(() => {});
     const un = onModelProgress((p) => {
       if (p.error) {
         setProgress((x) => ({ ...x, [p.model]: -1 }));
@@ -59,10 +63,23 @@ export function ModelManager() {
 
   return (
     <div className="models">
+      {hw && (
+        <div
+          className="model-status"
+          style={{ marginBottom: 8, opacity: 0.85, display: "flex", gap: 6, flexWrap: "wrap" }}
+        >
+          <span>{hw.summary}</span>
+          <span>·</span>
+          <span>
+            Empfohlen: <b style={{ color: "#22d3ee" }}>{hw.recommended_model}</b>
+          </span>
+        </div>
+      )}
       {models.map((m) => {
         const p = progress[m.key];
         const loading = p !== undefined && p >= 0;
         const isActive = m.key === active;
+        const recommended = hw?.recommended_model === m.key;
         return (
           <div
             key={m.key}
@@ -73,6 +90,14 @@ export function ModelManager() {
               <div className="model-label">
                 {m.label}
                 {isActive && <span className="model-active">aktiv</span>}
+                {recommended && !isActive && (
+                  <span
+                    className="model-active"
+                    style={{ background: "rgba(34,211,238,0.15)", color: "#22d3ee" }}
+                  >
+                    empfohlen
+                  </span>
+                )}
               </div>
               <div className="model-status">
                 {p === -1
