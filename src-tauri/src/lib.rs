@@ -9,6 +9,7 @@ mod dach;
 mod events;
 mod hotkey;
 mod inject;
+mod live_ws;
 mod meet;
 mod streaming;
 mod models;

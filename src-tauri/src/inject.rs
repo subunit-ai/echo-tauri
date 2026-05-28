@@ -64,8 +64,10 @@ fn focus(target: &Target) {
     }
 }
 
-/// Deliver the transcript: always copy to clipboard; paste if `autopaste`
-/// (focusing the captured target first when `target_lock` is on).
+/// Deliver the transcript: always copy to clipboard (so a manual paste still
+/// works); when `autopaste` is on, TYPE it in via modifier-free Unicode keystrokes
+/// (focusing the captured target first when `target_lock` is on). TJ 2026-05-28:
+/// real typing, not Ctrl+V — robust across apps that swallow paste + on Win-ARM.
 pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         return Ok(());
@@ -77,7 +79,7 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
                 focus(t);
             }
         }
-        paste()?;
+        type_text(text)?;
     }
     Ok(())
 }
@@ -89,6 +91,7 @@ pub fn set_clipboard(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)] // kept for a possible paste-mode option; deliver() now types
 fn paste() -> anyhow::Result<()> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 

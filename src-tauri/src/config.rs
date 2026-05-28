@@ -182,6 +182,8 @@ pub struct Config {
     pub gpu_aware_migrated: bool,
     pub live_type: bool,
     pub cloud_superfast: bool,
+    /// LIVE mode WS endpoint (WhisperLive proxy). Empty → wss://live-transcribe.subunit.ai
+    pub live_ws_endpoint: String,
 
     pub sound_enabled: bool,
     pub sound_volume: f32,
@@ -280,6 +282,7 @@ impl Default for Config {
             gpu_aware_migrated: false,
             live_type: false,
             cloud_superfast: false,
+            live_ws_endpoint: "wss://live-transcribe.subunit.ai".to_string(),
 
             sound_enabled: true,
             sound_volume: 0.6,

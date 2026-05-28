@@ -6,6 +6,12 @@
 //! Coordination: a shared signal (0 = run, 1 = finish/flush, 2 = cancel/discard)
 //! lets the hotkey release (`do_transcribe`) and Escape (`do_cancel`) drive the
 //! controller without racing the recorder's drain-on-stop.
+//!
+//! NOTE (2026-05-28): superseded by `live_ws.rs` for LIVE mode — `do_start` now
+//! spawns the WS-streaming controller (continuous stream to WhisperLive, ~2s),
+//! instead of this per-segment batch path. Kept for reference / a possible
+//! offline-live fallback; `allow(dead_code)` silences the now-unused path.
+#![allow(dead_code)]
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;

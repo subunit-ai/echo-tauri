@@ -69,7 +69,7 @@ pub fn do_start(app: &AppHandle) {
     if live {
         let sig = Arc::new(AtomicU8::new(crate::streaming::RUN));
         *state.streaming.lock() = Some(sig.clone());
-        crate::streaming::spawn(app.clone(), sig);
+        crate::live_ws::spawn(app.clone(), sig);
     }
 }
 
