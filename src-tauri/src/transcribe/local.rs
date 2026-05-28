@@ -11,13 +11,18 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use super::{vocab, TranscriptResult};
+use super::{vocab, Segment, TranscriptResult};
 use crate::config::Config;
 
 // Loading a model costs GBs of RAM/VRAM — keep one context, keyed by model name.
 static CTX: Lazy<Mutex<Option<(String, WhisperContext)>>> = Lazy::new(|| Mutex::new(None));
 
-pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<TranscriptResult> {
+pub fn run(
+    cfg: &Config,
+    samples: &[f32],
+    sample_rate: u32,
+    want_segments: bool,
+) -> anyhow::Result<TranscriptResult> {
     let audio = resample_to_16k(samples, sample_rate);
     let model = cfg.local_model.clone();
     let path = crate::models::ensure_blocking(&model)?;
@@ -56,10 +61,19 @@ pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<Tr
 
     let n = state.full_n_segments();
     let mut text = String::new();
+    let mut segments = Vec::new();
     for i in 0..n {
         if let Some(seg) = state.get_segment(i) {
             if let Ok(s) = seg.to_str_lossy() {
                 text.push_str(&s);
+                if want_segments {
+                    // whisper-rs timestamps are in centiseconds.
+                    segments.push(Segment {
+                        start_s: seg.start_timestamp() as f64 / 100.0,
+                        end_s: seg.end_timestamp() as f64 / 100.0,
+                        text: vocab::apply_vocab_replace(s.trim(), cfg),
+                    });
+                }
             }
         }
     }
@@ -67,6 +81,7 @@ pub fn run(cfg: &Config, samples: &[f32], sample_rate: u32) -> anyhow::Result<Tr
     Ok(TranscriptResult {
         text: vocab::apply_vocab_replace(text.trim(), cfg),
         quality_mode: "local".to_string(),
+        segments,
     })
 }
 
@@ -105,7 +120,7 @@ mod tests {
         let samples: Vec<f32> = (0..sr * 2)
             .map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / sr as f32).sin() * 0.1)
             .collect();
-        let r = run(&cfg, &samples, sr);
+        let r = run(&cfg, &samples, sr, true);
         println!("LOCAL_SMOKE ok={} -> {:?}", r.is_ok(), r);
         assert!(r.is_ok(), "local transcribe failed: {:?}", r.err());
     }

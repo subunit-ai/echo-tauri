@@ -93,6 +93,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         return Ok(TranscriptResult {
             text: String::new(),
             quality_mode: "live".to_string(),
+            segments: Vec::new(),
         });
     }
     let cap = match state.recorder.stop() {
@@ -112,18 +113,20 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     }
     let cfg = state.config.lock().clone();
 
-    let result = match transcribe::run(&cfg, &cap.samples, cap.sample_rate) {
+    // Duration → long-form detection (Python parity: switch style + store separately).
+    let duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
+    let is_long =
+        cfg.long_form_threshold_seconds > 0 && duration_s >= cfg.long_form_threshold_seconds as f64;
+    // Request timed segments only when we'll diarize this long-form recording.
+    let want_segments = is_long && cfg.diarization_enabled;
+
+    let result = match transcribe::run_opts(&cfg, &cap.samples, cap.sample_rate, want_segments) {
         Ok(r) => r,
         Err(e) => {
             emit_state(app, EngineState::Error, Some(e.message.clone()));
             return Err(e);
         }
     };
-
-    // Duration → long-form detection (Python parity: switch style + store separately).
-    let duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
-    let is_long =
-        cfg.long_form_threshold_seconds > 0 && duration_s >= cfg.long_form_threshold_seconds as f64;
 
     // Target window (captured at record-start) + style (long-form > auto-mode > config).
     let target = state.target.lock().take();
@@ -136,6 +139,10 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         cfg.cleanup_style.clone()
     };
 
+    // Keep the timed segments for diarization (the reconstructed result below
+    // drops them — the IPC payload stays lean).
+    let segments = result.segments;
+
     // Post-process: optional server AI-cleanup ("raw" = passthrough) + DACH formatting.
     let mut text = result.text;
     if cfg.cleanup_enabled && style != "raw" {
@@ -147,6 +154,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let result = TranscriptResult {
         text,
         quality_mode: result.quality_mode,
+        segments: Vec::new(),
     };
 
     // Paste-back into the captured target window (clipboard + paste per config).
@@ -161,15 +169,16 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         std::thread::spawn(move || crate::synapse::maybe_save(&c, &t, &wt));
     }
 
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
     // Stats + history.
     {
         let mut c = state.config.lock();
         c.total_transcriptions += 1;
         c.total_audio_seconds += duration_s;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
         if c.history_enabled && !result.text.trim().is_empty() {
             let entry = serde_json::json!({
                 "text": result.text,
@@ -195,6 +204,37 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             }
         }
         let _ = c.save();
+    }
+
+    // Long-form diarization: detached (can take up to ~120s) so it never delays
+    // "Done". On completion it tags the stored meeting (found by ts) with a
+    // speaker-labelled transcript + signals the UI to refresh.
+    if want_segments && !segments.is_empty() {
+        use tauri::Emitter;
+        if let Ok(wav) = transcribe::samples_to_wav(&cap.samples, cap.sample_rate) {
+            let (app2, cfg2) = (app.clone(), cfg.clone());
+            std::thread::spawn(move || {
+                if let Some(speaker_text) =
+                    crate::diarize::speaker_transcript(&cfg2, wav, &segments)
+                {
+                    let state = app2.state::<AppState>();
+                    {
+                        let mut c = state.config.lock();
+                        if let Some(m) = c
+                            .meetings
+                            .iter_mut()
+                            .find(|m| m.get("ts").and_then(|v| v.as_u64()) == Some(now))
+                        {
+                            if let Some(obj) = m.as_object_mut() {
+                                obj.insert("speaker_text".into(), serde_json::json!(speaker_text));
+                            }
+                        }
+                        let _ = c.save();
+                    }
+                    let _ = app2.emit("echo://meetings-updated", ());
+                }
+            });
+        }
     }
 
     emit_transcript(app, result.text.clone(), result.quality_mode.clone());

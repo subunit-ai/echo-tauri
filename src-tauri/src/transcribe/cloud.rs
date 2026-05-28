@@ -9,13 +9,14 @@ use std::time::Duration;
 
 use reqwest::blocking::multipart;
 
-use super::{vocab, EngineError, TranscriptResult};
+use super::{vocab, EngineError, Segment, TranscriptResult};
 use crate::config::Config;
 
 pub fn transcribe_subunit(
     cfg: &Config,
     wav: Vec<u8>,
     superfast: bool,
+    want_segments: bool,
 ) -> Result<TranscriptResult, EngineError> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))
@@ -37,6 +38,9 @@ pub fn transcribe_subunit(
     }
     if superfast {
         form = form.text("provider", "superfast");
+    }
+    if want_segments {
+        form = form.text("with_segments", "true");
     }
 
     let mut req = client.post(&cfg.subunit_endpoint).multipart(form);
@@ -74,8 +78,35 @@ pub fn transcribe_subunit(
         .unwrap_or_default()
         .to_string();
 
+    // Timed segments (when with_segments was requested). Server keys: start/end
+    // (seconds) or start_s/end_s — accept either.
+    let segments = json
+        .get("segments")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|s| {
+                    let num = |keys: &[&str]| {
+                        keys.iter()
+                            .find_map(|k| s.get(*k).and_then(|v| v.as_f64()))
+                            .unwrap_or(0.0)
+                    };
+                    Segment {
+                        start_s: num(&["start_s", "start"]),
+                        end_s: num(&["end_s", "end"]),
+                        text: vocab::apply_vocab_replace(
+                            s.get("text").and_then(|v| v.as_str()).unwrap_or_default().trim(),
+                            cfg,
+                        ),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     Ok(TranscriptResult {
         text: vocab::apply_vocab_replace(&text, cfg),
         quality_mode,
+        segments,
     })
 }

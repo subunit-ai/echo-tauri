@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect, useState } from "react";
 import { copyText, processMeeting } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
@@ -12,11 +13,22 @@ const ACTIONS: { style: string; label: string }[] = [
 ];
 
 export function Meetings() {
-  const { config } = useConfig();
+  const { config, reload } = useConfig();
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${i}:${style}`
   const [result, setResult] = useState<Record<number, { label: string; text: string }>>({});
   const [copied, setCopied] = useState(false);
+
+  // Diarization finishes on a background thread → reload when it tags a meeting.
+  useEffect(() => {
+    const un = listen("echo://meetings-updated", () => {
+      reload().catch(() => {});
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [reload]);
+
   if (!config) return null;
 
   const list = config.meetings;
@@ -47,6 +59,7 @@ export function Meetings() {
       ) : (
         list.map((m, i) => {
           const text = String(m.text ?? "");
+          const speakerText = m.speaker_text ? String(m.speaker_text) : "";
           const dur = Number(m.duration_s ?? 0);
           const isOpen = open === i;
           const res = result[i];
@@ -78,6 +91,23 @@ export function Meetings() {
                   {text}
                 </div>
               </div>
+
+              {isOpen && speakerText && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "rgba(91,157,255,0.07)",
+                    border: "1px solid rgba(91,157,255,0.25)",
+                  }}
+                >
+                  <b style={{ color: "#5b9dff", fontSize: "0.8rem" }}>Nach Sprechern</b>
+                  <div className="text" style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
+                    {speakerText}
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
                 {ACTIONS.map((a) => (

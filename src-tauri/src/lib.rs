@@ -6,6 +6,7 @@ mod cleanup;
 mod commands;
 mod config;
 mod dach;
+mod diarize;
 mod events;
 mod hardware;
 mod hotkey;

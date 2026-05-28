@@ -13,10 +13,22 @@ pub mod vocab;
 use crate::config::Config;
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+/// A timed transcript segment (for diarization speaker-merge on long-form).
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct Segment {
+    pub start_s: f64,
+    pub end_s: f64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct TranscriptResult {
     pub text: String,
     pub quality_mode: String,
+    /// Timed segments — only populated when requested (long-form diarization);
+    /// empty for normal dictation so the IPC payload stays lean.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<Segment>,
 }
 
 /// Structured error across the IPC boundary so the frontend branches on `code`
@@ -44,21 +56,24 @@ impl std::error::Error for EngineError {}
 
 /// Dispatch by mode. Cloud encodes WAV from the samples; local resamples to
 /// 16 kHz and runs whisper.cpp.
-pub fn run(
+/// `want_segments` requests timed transcript segments (used by the long-form
+/// diarization merge); off for normal dictation keeps the payload lean.
+pub fn run_opts(
     cfg: &Config,
     samples: &[f32],
     sample_rate: u32,
+    want_segments: bool,
 ) -> Result<TranscriptResult, EngineError> {
     match cfg.mode.as_str() {
         "local" => {
             #[cfg(feature = "local-whisper")]
             {
-                local::run(cfg, samples, sample_rate)
+                local::run(cfg, samples, sample_rate, want_segments)
                     .map_err(|e| EngineError::new("local", e.to_string()))
             }
             #[cfg(not(feature = "local-whisper"))]
             {
-                let _ = (samples, sample_rate);
+                let _ = (samples, sample_rate, want_segments);
                 Err(EngineError::new(
                     "model_missing",
                     "local engine not built — switch to Cloud",
@@ -68,7 +83,7 @@ pub fn run(
         "subunit" => {
             let wav = samples_to_wav(samples, sample_rate)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
-            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast)
+            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast, want_segments)
         }
         other => Err(EngineError::new(
             "unsupported",
