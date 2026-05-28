@@ -9,9 +9,8 @@ mod dach;
 mod events;
 mod hotkey;
 mod inject;
-mod live_ws;
+mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
 mod meet;
-mod streaming;
 mod models;
 mod overlay;
 mod recorder;

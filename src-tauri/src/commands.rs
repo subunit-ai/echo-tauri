@@ -20,7 +20,7 @@ pub struct AppState {
     /// Window captured at record-start, focused again before paste-back.
     pub target: Mutex<Option<Target>>,
     /// Live-dictation control signal while streaming (None = not streaming).
-    /// See [`crate::streaming`]: RUN / FINISH / CANCEL.
+    /// See [`crate::live_ws`]: RUN / FINISH / CANCEL.
     pub streaming: Mutex<Option<Arc<AtomicU8>>>,
 }
 
@@ -67,7 +67,7 @@ pub fn do_start(app: &AppHandle) {
     emit_state(app, EngineState::Recording, None);
 
     if live {
-        let sig = Arc::new(AtomicU8::new(crate::streaming::RUN));
+        let sig = Arc::new(AtomicU8::new(crate::live_ws::RUN));
         *state.streaming.lock() = Some(sig.clone());
         crate::live_ws::spawn(app.clone(), sig);
     }
@@ -77,7 +77,7 @@ pub fn do_cancel(app: &AppHandle) {
     let state = app.state::<AppState>();
     // Live: tell the controller to discard + stop (it clears target + emits Idle).
     if let Some(sig) = state.streaming.lock().take() {
-        sig.store(crate::streaming::CANCEL, Ordering::Relaxed);
+        sig.store(crate::live_ws::CANCEL, Ordering::Relaxed);
         return;
     }
     let _ = state.recorder.stop();
@@ -93,7 +93,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // controller to flush the final segment + stop (it emits Done) — don't
     // stop()/transcribe() here or we'd race its non-draining snapshots.
     if let Some(sig) = state.streaming.lock().take() {
-        sig.store(crate::streaming::FINISH, Ordering::Relaxed);
+        sig.store(crate::live_ws::FINISH, Ordering::Relaxed);
         return Ok(TranscriptResult {
             text: String::new(),
             quality_mode: "live".to_string(),

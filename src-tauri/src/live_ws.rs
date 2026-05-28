@@ -30,7 +30,12 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::commands::AppState;
 use crate::events::{emit_state, EngineState};
-use crate::streaming::{CANCEL, FINISH};
+
+/// Live-dictation control signal (stored in AppState.streaming): the hotkey
+/// release drives FINISH (flush + stop) and Escape drives CANCEL (discard).
+pub const RUN: u8 = 0;
+pub const FINISH: u8 = 1;
+pub const CANCEL: u8 = 2;
 
 const SR: u32 = 16000;
 
