@@ -372,6 +372,30 @@ pub fn hardware_info() -> crate::hardware::HardwareInfo {
     crate::hardware::detect()
 }
 
+/// Re-process a stored meeting's transcript with a cleanup style (summary,
+/// action_items, decisions, minutes, recap_email, …) via /v1/cleanup. Returns
+/// the styled text; the frontend shows it without overwriting the raw transcript.
+/// Refreshes the cloud token first since meetings can sit for a while.
+#[tauri::command]
+pub fn process_meeting(app: AppHandle, index: usize, style: String) -> Result<String, String> {
+    let state = app.state::<AppState>();
+    let text = {
+        let c = state.config.lock();
+        c.meetings
+            .get(index)
+            .and_then(|m| m.get("text"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "meeting not found".to_string())?
+    };
+    if text.trim().is_empty() {
+        return Err("empty transcript".to_string());
+    }
+    crate::auth::ensure_fresh(&app);
+    let cfg = state.config.lock().clone();
+    crate::cleanup::run_style(&cfg, &text, &style).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn mic_level(state: State<'_, AppState>) -> f32 {
     state.recorder.level()

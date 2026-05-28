@@ -109,6 +109,9 @@ export const deleteHistoryEntry = (index: number) =>
   invoke<void>("delete_history_entry", { index });
 /** Clear the whole transcription history. */
 export const clearHistory = () => invoke<void>("clear_history");
+/** Re-process a stored meeting with a cleanup style → returns the styled text. */
+export const processMeeting = (index: number, style: string) =>
+  invoke<string>("process_meeting", { index, style });
 
 // ---- Local whisper models ----
 export interface ModelInfo {

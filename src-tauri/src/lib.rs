@@ -61,6 +61,7 @@ pub fn run() {
             commands::orb_cycle,
             commands::list_audio_devices,
             commands::hardware_info,
+            commands::process_meeting,
             commands::mic_level,
             commands::start_recording,
             commands::cancel_recording,

@@ -20,6 +20,12 @@ pub fn maybe_cleanup(cfg: &Config, text: &str, style: &str) -> String {
     }
 }
 
+/// Run a specific cleanup style on arbitrary text, ignoring `cleanup_enabled`
+/// (used by the Meetings re-process / extract actions). Returns the styled text.
+pub fn run_style(cfg: &Config, text: &str, style: &str) -> anyhow::Result<String> {
+    cleanup(cfg, text, style)
+}
+
 fn cleanup(cfg: &Config, text: &str, style: &str) -> anyhow::Result<String> {
     // Derive the cleanup endpoint from the (configurable) transcribe endpoint.
     // Match the FULL "/v1/transcribe" segment — a bare "/transcribe" also occurs
