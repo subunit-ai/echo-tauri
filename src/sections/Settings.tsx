@@ -266,8 +266,11 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Live-Modus" hint="An: Text wird beim Sprechen live reingetippt (WhisperLive-Stream). Aus: Instant — ganzer Text am Ende reingetippt.">
+            <Row name="Live-Modus (Streaming)" hint="An: WhisperLive-Stream — Text erscheint live beim Sprechen (immer Live-Typing). Aus: Instant — ganzer Text erst am Ende.">
               <Toggle checked={c.live_type} onChange={(v) => set("live_type", v)} />
+            </Row>
+            <Row name="Instant: Live-Tippen" hint="Nur im Instant-Modus: das fertige Ergebnis progressiv reintippen statt auf einmal einfügen. Aus = Instant-Paste (Ctrl+V, atomar, zuverlässig — empfohlen auf Windows).">
+              <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />
             </Row>
             <Row name="DACH-Formatierung" hint="Abkürzungen, Währung, „deutsche“ Anführungszeichen">
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />

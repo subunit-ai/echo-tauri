@@ -120,13 +120,25 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Request timed segments only when we'll diarize this long-form recording.
     let want_segments = is_long && cfg.diarization_enabled;
 
+    log::info!(
+        "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments}",
+        cfg.mode
+    );
+    let t_tx = std::time::Instant::now();
     let result = match transcribe::run_opts(&cfg, &cap.samples, cap.sample_rate, want_segments) {
         Ok(r) => r,
         Err(e) => {
+            log::warn!("transcribe: failed ({}) after {:?}", e.code, t_tx.elapsed());
             emit_state(app, EngineState::Error, Some(e.message.clone()));
             return Err(e);
         }
     };
+    log::info!(
+        "transcribe: ok engine_mode={} chars={} (+{:?})",
+        result.quality_mode,
+        result.text.chars().count(),
+        t_tx.elapsed()
+    );
 
     // Target window (captured at record-start) + style (long-form > auto-mode > config).
     let target = state.target.lock().take();

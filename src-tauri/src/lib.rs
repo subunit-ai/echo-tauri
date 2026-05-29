@@ -42,6 +42,27 @@ pub fn run() {
     let cfg = config::Config::load();
 
     tauri::Builder::default()
+        .plugin(
+            // File + stdout logging. The file lands in the OS log dir
+            // (Win: %LOCALAPPDATA%\ai.subunit.echo\logs\echo.log) so it can be pulled
+            // over the Bridge to diagnose field issues — especially the Win-ARM
+            // paste-back. Our own modules log at Debug; noisy deps are clamped to Warn.
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .level_for("echo_lib", log::LevelFilter::Debug)
+                .level_for("reqwest", log::LevelFilter::Warn)
+                .level_for("tokio_tungstenite", log::LevelFilter::Warn)
+                .level_for("tungstenite", log::LevelFilter::Warn)
+                .max_file_size(5_000_000)
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("echo".into()),
+                    }),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
@@ -79,6 +100,15 @@ pub fn run() {
             commands::delete_local_model,
         ])
         .setup(|app| {
+            // Version/platform banner — first line in every log, mirrors the old
+            // Python "Echo X.Y.Z starting" so field logs are immediately attributable.
+            log::info!(
+                "Echo {} starting (os={}, arch={})",
+                app.package_info().version,
+                std::env::consts::OS,
+                std::env::consts::ARCH,
+            );
+
             // Global hotkey
             if let Err(e) = hotkey::register_from_config(app.handle()) {
                 log::warn!("hotkey: {e}");

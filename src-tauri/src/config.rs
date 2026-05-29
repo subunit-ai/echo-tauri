@@ -121,6 +121,13 @@ pub struct Config {
     pub target_lock: bool,
     pub show_bubble: bool,
 
+    /// CHUNK-API (instant) path only: type the final transcript in progressively
+    /// ("live typing") instead of an instant clipboard+Ctrl+V paste. The streaming
+    /// path (`live_type`) ALWAYS live-types per segment regardless of this — there
+    /// the choice doesn't exist. Default false = instant paste (atomic, native, no
+    /// per-char spam). Both axes are independent + user-settable in Settings.
+    pub instant_live_typing: bool,
+
     /// Empty = system default. Otherwise device name (resolved to index at startup).
     pub mic_device_name: String,
 
@@ -213,6 +220,7 @@ impl Default for Config {
             autopaste: true,
             target_lock: true,
             show_bubble: true,
+            instant_live_typing: false,
 
             mic_device_name: String::new(),
 

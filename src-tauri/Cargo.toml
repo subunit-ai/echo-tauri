@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.1.0"
+version = "0.2.5"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -21,6 +21,8 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
+# File + stdout logging (diagnostics — esp. the paste-back path on Win-ARM).
+tauri-plugin-log = "2"
 # Crash/error reporting (rustls transport — no OpenSSL). No-op without a DSN.
 sentry = { version = "0.34", default-features = false, features = [
   "backtrace",
