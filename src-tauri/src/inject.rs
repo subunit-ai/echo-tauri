@@ -10,11 +10,23 @@
 //!    each segment in as you speak. ALWAYS live typing — no choice (it can't paste).
 //!  * **Chunk / instant mode** (`live_type` off): one full transcript at the end,
 //!    delivered by `deliver()` either as an **instant paste** (clipboard + Ctrl/Cmd+V,
-//!    atomic, the default) or — when `instant_live_typing` is on — **live-typed** in
-//!    via Unicode keystrokes. Independent of the streaming toggle.
+//!    the default) or — when `instant_live_typing` is on — **live-typed** in via
+//!    Unicode keystrokes. Independent of the streaming toggle.
+//!
+//! ## Windows: native SendInput on the paste chord (no enigo there)
+//! enigo 0.2's `key(Key::Unicode('v'), Click)` emits the Ctrl+V chord as THREE
+//! separate, non-atomic `SendInput` calls (Ctrl as a virtual-key, 'v' as a
+//! *scancode*, then Ctrl release). On Win-ARM the gap between those calls raced
+//! the target window's async input handling: the `v` arrived before `Ctrl` was
+//! registered (→ a bare **"v"**) or the queue got processed twice (→ a **double
+//! paste**). Erik hit both. We replace it on Windows with ONE atomic `SendInput`
+//! batch of real virtual-keys `[Ctrl↓, V↓, V↑, Ctrl↑]` — exactly what a physical
+//! keyboard enqueues, with no inter-call gap to race. Unicode *typing* (the
+//! streaming path Erik confirmed clean) still rides enigo's `text()` — we don't
+//! rewrite what already works, only the chord that demonstrably didn't.
 //!
 //! Both injection paths first `clear_modifiers()` — a still-held hotkey modifier
-//! (e.g. Ctrl from `<ctrl>+<space>`) was the Win-ARM "random char spam" cause.
+//! (e.g. Ctrl from `<ctrl>+<space>`) corrupts Unicode typing AND a synthetic chord.
 //!
 //! Every step is logged (see `tauri_plugin_log` wiring in lib.rs) so a field log
 //! pulled over the Bridge tells us exactly which path ran and where it failed.
@@ -137,20 +149,35 @@ fn focus(target: &Target) {
 
 /// Release any modifier that might still be held (e.g. Ctrl from `<ctrl>+<space>`).
 /// A lingering modifier turns Unicode typing AND a synthetic Ctrl+V into garbage —
-/// the #1 cause of the Win-ARM "random character spam" Erik reported. Releasing a
-/// key that isn't down is a harmless no-op.
-fn clear_modifiers(enigo: &mut enigo::Enigo) {
-    use enigo::{Direction, Key, Keyboard};
-    for k in [Key::Control, Key::Shift, Key::Alt, Key::Meta] {
-        if let Err(e) = enigo.key(k, Direction::Release) {
-            log::debug!("clear_modifiers: release {k:?} err: {e}");
+/// the original Win-ARM "random character spam" cause. Releasing a key that isn't
+/// down is a harmless no-op. Native SendInput on Windows; enigo elsewhere.
+fn clear_modifiers() {
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = win::clear_modifiers() {
+            log::debug!("clear_modifiers (win): {e}");
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        match Enigo::new(&Settings::default()) {
+            Ok(mut enigo) => {
+                for k in [Key::Control, Key::Shift, Key::Alt, Key::Meta] {
+                    if let Err(e) = enigo.key(k, Direction::Release) {
+                        log::debug!("clear_modifiers: release {k:?} err: {e}");
+                    }
+                }
+            }
+            Err(e) => log::debug!("clear_modifiers: enigo init err: {e}"),
         }
     }
 }
 
 /// Deliver the transcript: always copy to clipboard (so a manual paste still works);
-/// when `autopaste` is on, inject via the configured `paste_strategy` (focusing the
-/// captured target first when `target_lock` is on).
+/// when `autopaste` is on, inject it — either an instant paste (Ctrl/Cmd+V, the
+/// default) or live-typed Unicode (`instant_live_typing`), focusing the captured
+/// target first when `target_lock` is on.
 pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         log::debug!("deliver: empty text, skip");
@@ -202,32 +229,39 @@ pub fn set_clipboard(text: &str) -> anyhow::Result<()> {
 }
 
 /// Clipboard + platform paste chord (Ctrl/Cmd+V). Atomic — no per-char spam.
+/// Windows uses a native single-batch `SendInput` (see [`win::paste`]); other
+/// platforms use enigo's chord.
 fn paste() -> anyhow::Result<()> {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-
     let t0 = Instant::now();
-    let mut enigo =
-        Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
-
-    clear_modifiers(&mut enigo);
-    std::thread::sleep(std::time::Duration::from_millis(20));
-
-    #[cfg(target_os = "macos")]
-    let modifier = Key::Meta;
-    #[cfg(not(target_os = "macos"))]
-    let modifier = Key::Control;
-
-    enigo
-        .key(modifier, Direction::Press)
-        .map_err(|e| anyhow::anyhow!("paste press: {e}"))?;
-    enigo
-        .key(Key::Unicode('v'), Direction::Click)
-        .map_err(|e| anyhow::anyhow!("paste v: {e}"))?;
-    enigo
-        .key(modifier, Direction::Release)
-        .map_err(|e| anyhow::anyhow!("paste release: {e}"))?;
-    log::info!("paste: chord sent (+{:?})", t0.elapsed());
-    Ok(())
+    #[cfg(target_os = "windows")]
+    {
+        win::paste()?;
+        log::info!("paste: native chord sent (+{:?})", t0.elapsed());
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        clear_modifiers();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let mut enigo =
+            Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
+        #[cfg(target_os = "macos")]
+        let modifier = Key::Meta;
+        #[cfg(not(target_os = "macos"))]
+        let modifier = Key::Control;
+        enigo
+            .key(modifier, Direction::Press)
+            .map_err(|e| anyhow::anyhow!("paste press: {e}"))?;
+        enigo
+            .key(Key::Unicode('v'), Direction::Click)
+            .map_err(|e| anyhow::anyhow!("paste v: {e}"))?;
+        enigo
+            .key(modifier, Direction::Release)
+            .map_err(|e| anyhow::anyhow!("paste release: {e}"))?;
+        log::info!("paste: chord sent (+{:?})", t0.elapsed());
+        Ok(())
+    }
 }
 
 /// Focus the captured target (when target_lock is on) and type a live-dictation
@@ -246,18 +280,81 @@ pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::R
     type_text(text)
 }
 
-/// Modifier-free Unicode typing (streaming + the "type" strategy).
+/// Modifier-free Unicode typing (streaming + the instant "live-type" option).
+/// enigo's `text()` on every platform — the path Erik confirmed clean for
+/// streaming, so we keep it. Modifiers are cleared first (native on Windows).
 pub fn type_text(text: &str) -> anyhow::Result<()> {
     use enigo::{Enigo, Keyboard, Settings};
     let t0 = Instant::now();
+    clear_modifiers();
+    std::thread::sleep(std::time::Duration::from_millis(20));
     let mut enigo =
         Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
-    clear_modifiers(&mut enigo);
-    std::thread::sleep(std::time::Duration::from_millis(20));
     log::debug!("type_text: typing {} via Unicode", text_stats(text));
     enigo
         .text(text)
         .map_err(|e| anyhow::anyhow!("type: {e}"))?;
     log::info!("type_text: done (+{:?})", t0.elapsed());
     Ok(())
+}
+
+/// Native Windows synthetic keyboard input — replaces enigo on the paste chord.
+/// Each logical action is one `SendInput` call, so the OS enqueues its events
+/// atomically and the target window never sees a half-formed chord.
+#[cfg(target_os = "windows")]
+mod win {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
+    };
+
+    /// Build one keyboard `INPUT` for a virtual-key press (`up=false`) or release.
+    fn vk(key: VIRTUAL_KEY, up: bool) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: key,
+                    wScan: 0,
+                    dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+
+    /// Inject a batch of inputs in a single atomic `SendInput` call.
+    fn send(inputs: &[INPUT]) -> anyhow::Result<()> {
+        let n = unsafe { SendInput(inputs, core::mem::size_of::<INPUT>() as i32) };
+        if n as usize != inputs.len() {
+            anyhow::bail!("SendInput injected {n}/{} events", inputs.len());
+        }
+        Ok(())
+    }
+
+    /// Release Ctrl/Shift/Alt/Win in case a hotkey modifier is still held.
+    pub fn clear_modifiers() -> anyhow::Result<()> {
+        let ups = [
+            vk(VK_CONTROL, true),
+            vk(VK_SHIFT, true),
+            vk(VK_MENU, true),
+            vk(VK_LWIN, true),
+            vk(VK_RWIN, true),
+        ];
+        send(&ups)
+    }
+
+    /// Atomic Ctrl+V — `[Ctrl↓, V↓, V↑, Ctrl↑]` in one `SendInput` call.
+    pub fn paste() -> anyhow::Result<()> {
+        clear_modifiers()?;
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let chord = [
+            vk(VK_CONTROL, false),
+            vk(VK_V, false),
+            vk(VK_V, true),
+            vk(VK_CONTROL, true),
+        ];
+        send(&chord)
+    }
 }
