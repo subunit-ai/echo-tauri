@@ -11,6 +11,7 @@ import {
   listAudioDevices,
   openConfigDir,
   openExternal,
+  setAutostart,
   patchForUiMode,
   uiModeOf,
   type Config,
@@ -119,6 +120,14 @@ export function Settings() {
     await invoke("logout").catch(() => {});
     await reload();
   };
+  const toggleAutostart = async (v: boolean) => {
+    try {
+      await setAutostart(v);
+      await reload();
+    } catch (e) {
+      console.error("autostart failed", e);
+    }
+  };
   const doUpdate = async () => {
     setUpdateMsg("Suche…");
     setFoundUpdate(null);
@@ -211,6 +220,9 @@ export function Settings() {
             </Row>
             <Row name="Bubble anzeigen" hint="Kompakter Status-Indikator, wenn das Orb-Overlay aus ist">
               <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
+            </Row>
+            <Row name="Mit System starten" hint="Echo automatisch beim Login starten">
+              <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
             </Row>
             <Row name="Sounds">
               <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />

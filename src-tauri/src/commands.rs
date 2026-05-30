@@ -503,6 +503,25 @@ pub async fn login(app: AppHandle) -> Result<String, String> {
     .map_err(|e| format!("login task: {e}"))?
 }
 
+/// Toggle launch-at-login: flip the OS autostart entry and persist the preference.
+#[tauri::command]
+pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    if enabled {
+        mgr.enable().map_err(|e| e.to_string())?;
+    } else {
+        mgr.disable().map_err(|e| e.to_string())?;
+    }
+    let state = app.state::<AppState>();
+    let cfg = {
+        let mut c = state.config.lock();
+        c.autostart_enabled = enabled;
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
     let mut c = state.config.lock();

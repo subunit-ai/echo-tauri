@@ -60,6 +60,7 @@ futures-util = "0.3"
 # Hardware probe (RAM/cores) for the recommended local-model hint.
 sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 tauri-plugin-single-instance = "2.4.2"
+tauri-plugin-autostart = "2.5.1"
 
 # Local Whisper (whisper.cpp via whisper-rs) is feature-gated: enabling it
 # triggers the whisper.cpp C++ build. Wired in transcribe/local.rs.

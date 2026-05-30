@@ -75,6 +75,12 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Launch-at-login. The actual OS entry is toggled via the set_autostart
+        // command + reconciled on setup against config.autostart_enabled.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| hotkey::on_event(app, shortcut, event))
@@ -114,6 +120,7 @@ pub fn run() {
             commands::stop_and_transcribe,
             commands::login,
             commands::logout,
+            commands::set_autostart,
             commands::check_for_updates,
             commands::install_update,
             commands::start_meeting,
@@ -134,6 +141,24 @@ pub fn run() {
             // Global hotkey
             if let Err(e) = hotkey::register_from_config(app.handle()) {
                 log::warn!("hotkey: {e}");
+            }
+
+            // Reconcile the OS autostart entry with the saved preference (e.g. a
+            // user removed it via the OS, or it was set on another machine).
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let want = app.state::<AppState>().config.lock().autostart_enabled;
+                let mgr = app.autolaunch();
+                match mgr.is_enabled() {
+                    Ok(is) if is != want => {
+                        let r = if want { mgr.enable() } else { mgr.disable() };
+                        if let Err(e) = r {
+                            log::warn!("autostart reconcile: {e}");
+                        }
+                    }
+                    Err(e) => log::warn!("autostart is_enabled: {e}"),
+                    _ => {}
+                }
             }
 
             // System tray

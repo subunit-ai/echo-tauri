@@ -164,6 +164,8 @@ pub struct Config {
     pub account_email: String,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
+    /// Launch Echo at login (OS autostart entry, applied via the autostart plugin).
+    pub autostart_enabled: bool,
     pub has_seen_onboarding: bool,
     pub ui_language: String,
     pub ui_theme: String,
@@ -254,6 +256,7 @@ impl Default for Config {
             account_email: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
+            autostart_enabled: false,
             has_seen_onboarding: false,
             ui_language: "de".to_string(),
             ui_theme: "dark".to_string(),
