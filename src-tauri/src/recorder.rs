@@ -81,7 +81,15 @@ impl Recorder {
         // generous ceiling that still bounds a wedged backend.
         match rrx.recv_timeout(std::time::Duration::from_secs(5)) {
             Ok(r) => r,
-            Err(_) => Err("Mikrofon-Start hat nicht reagiert.".into()),
+            Err(_) => {
+                // The worker may still be opening a slow device. Queue a Stop so
+                // that if the Start eventually succeeds it's torn down immediately,
+                // instead of leaving a phantom active stream behind the error we
+                // return here (state would otherwise disagree with the UI).
+                let (dtx, _drx) = channel();
+                let _ = self.tx.lock().send(Cmd::Stop(dtx));
+                Err("Mikrofon-Start hat nicht reagiert.".into())
+            }
         }
     }
 
