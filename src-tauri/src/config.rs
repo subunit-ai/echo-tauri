@@ -454,21 +454,40 @@ impl Config {
         fs::create_dir_all(&dir)?;
         let path = config_file();
         let json = serde_json::to_string_pretty(self)?;
-        // Atomic write: serialize to a sibling temp file, then rename over the
-        // target. fs::rename replaces atomically on POSIX and on Windows
-        // (MOVEFILE_REPLACE_EXISTING), so a crash mid-write can never leave a
-        // truncated config.json (which would drop the user's tokens + history).
-        let tmp = dir.join("config.json.tmp");
-        fs::write(&tmp, json)?;
-        // The config holds refresh tokens + BYO API keys — tighten to 0600 on POSIX
-        // (set on the temp file so the mode carries over the rename) so a
-        // shared-machine attacker can't grep it (Codex P2, Python parity).
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
+        // Per-process temp name: SAVE_LOCK only serializes within this process, but a
+        // racing second launch (before the single-instance guard exits it) is a
+        // separate process — it must not clobber a shared temp mid-rename.
+        let tmp = dir.join(format!("config.{}.tmp", std::process::id()));
+        // Atomic write: into a temp file, then rename over the target. fs::rename
+        // replaces atomically on POSIX and on Windows (MOVEFILE_REPLACE_EXISTING), so
+        // a crash mid-write can never leave a truncated config.json (which would drop
+        // the user's tokens + history). The config holds refresh tokens + BYO API
+        // keys, so on unix create the temp 0600 *before* the secrets land (not after,
+        // which left a brief world-readable window) and clean it up on any failure.
+        let write_then_rename = || -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::io::Write;
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut f = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(&tmp)?;
+                f.write_all(json.as_bytes())?;
+                f.sync_all()?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::write(&tmp, json.as_bytes())?;
+            }
+            fs::rename(&tmp, &path)
+        };
+        if let Err(e) = write_then_rename() {
+            let _ = fs::remove_file(&tmp); // never leave a token-bearing temp behind
+            return Err(e.into());
         }
-        fs::rename(&tmp, &path)?;
         Ok(())
     }
 }
