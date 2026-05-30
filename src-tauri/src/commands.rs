@@ -490,9 +490,17 @@ pub fn stop_and_transcribe(app: AppHandle) -> Result<TranscriptResult, EngineErr
     do_transcribe(&app)
 }
 
+/// Sign in via the browser OAuth loopback flow. `auth::login` blocks (it waits up
+/// to 30 min for the loopback callback), so run it on a blocking thread instead of
+/// the command/main thread — otherwise the whole UI freezes until the user
+/// finishes (or the timeout fires).
 #[tauri::command]
-pub fn login(app: AppHandle) -> Result<String, String> {
-    crate::auth::login(&app).map_err(|e| e.to_string())
+pub async fn login(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::auth::login(&app).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("login task: {e}"))?
 }
 
 #[tauri::command]
