@@ -63,6 +63,7 @@ export function Settings() {
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [loginErr, setLoginErr] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -103,11 +104,13 @@ export function Settings() {
 
   const doLogin = async () => {
     setBusy(true);
+    setLoginErr("");
     try {
       await invoke("login");
       await reload();
     } catch (e) {
       console.error("login failed", e);
+      setLoginErr("Anmeldung fehlgeschlagen oder abgebrochen. Bitte erneut versuchen.");
     } finally {
       setBusy(false);
     }
@@ -430,9 +433,16 @@ export function Settings() {
                   Abmelden
                 </button>
               ) : (
-                <button className="sub-tab" onClick={doLogin} disabled={busy}>
-                  {busy ? "Browser geöffnet…" : "Anmelden"}
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <button className="sub-tab" onClick={doLogin} disabled={busy}>
+                    {busy ? "Browser geöffnet…" : "Anmelden"}
+                  </button>
+                  {loginErr && (
+                    <span style={{ color: "#f87171", fontSize: "0.78rem", maxWidth: 240, textAlign: "right" }}>
+                      {loginErr}
+                    </span>
+                  )}
+                </div>
               )}
             </Row>
             <Row name="Plan" hint={c.account_email ? "Cloud-Transkription aktiv" : "Nicht angemeldet"}>
