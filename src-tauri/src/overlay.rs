@@ -1,8 +1,10 @@
-//! The floating orb overlay window: transparent, always-on-top, click-through.
-//!
-//! v1 is a pure visual indicator (cursor events ignored). Interactive satellites
-//! + drag-to-reposition are a follow-up (they need cursor-position toggling of
-//! `set_ignore_cursor_events`).
+//! The floating orb overlay window: transparent, always-on-top, with a cursor
+//! hit-test so only the orb's circular area catches the mouse — clicks on the
+//! transparent corners pass through to the app underneath. The bubble fallback
+//! is a pure visual indicator (always click-through).
+
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
@@ -10,6 +12,61 @@ use tauri::{
 };
 
 use crate::commands::AppState;
+
+/// Start the cursor hit-test loop (idempotent via `hit_test_active`). While the
+/// orb is shown it polls the global cursor against the orb window's inscribed
+/// circle and toggles `set_ignore_cursor_events`: inside the circle → interactive
+/// (drag + satellites work), over the transparent corners → click-through so the
+/// underlying app still gets the click. Exits (and restores click-through) when
+/// the orb is hidden or the window closes.
+pub fn ensure_hit_test(app: &AppHandle) {
+    if app
+        .state::<AppState>()
+        .hit_test_active
+        .swap(true, Ordering::SeqCst)
+    {
+        return; // a loop is already running
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_millis(50));
+        let mut last_ignore: Option<bool> = None;
+        loop {
+            tick.tick().await;
+            let orb_on = app.state::<AppState>().config.lock().use_orb_overlay;
+            let win = app.get_webview_window("overlay");
+            if !orb_on || win.is_none() {
+                if let Some(w) = &win {
+                    let _ = w.set_ignore_cursor_events(true); // leave it click-through
+                }
+                break;
+            }
+            let win = win.unwrap();
+            let inside = match (
+                app.cursor_position(),
+                win.outer_position(),
+                win.outer_size(),
+            ) {
+                (Ok(cur), Ok(pos), Ok(size)) => {
+                    let cx = pos.x as f64 + size.width as f64 / 2.0;
+                    let cy = pos.y as f64 + size.height as f64 / 2.0;
+                    let r = size.width.min(size.height) as f64 / 2.0;
+                    let (dx, dy) = (cur.x - cx, cur.y - cy);
+                    dx * dx + dy * dy <= r * r
+                }
+                _ => false,
+            };
+            let ignore = !inside;
+            if last_ignore != Some(ignore) {
+                let _ = win.set_ignore_cursor_events(ignore);
+                last_ignore = Some(ignore);
+            }
+        }
+        app.state::<AppState>()
+            .hit_test_active
+            .store(false, Ordering::SeqCst);
+    });
+}
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     if app.get_webview_window("overlay").is_some() {
@@ -34,10 +91,13 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .focused(false)
         .build()?;
 
-    // Orb mode is interactive (drag + satellites → cursor must reach it). Bubble
-    // mode is a pure visual indicator → click-through so it never blocks clicks.
-    let _ = win.set_ignore_cursor_events(!orb_mode);
+    // Start click-through; the hit-test loop (orb mode) enables interactivity only
+    // while the cursor is over the orb. Bubble mode stays click-through throughout.
+    let _ = win.set_ignore_cursor_events(true);
     position_window(&win, &position, dim);
+    if orb_mode {
+        ensure_hit_test(app);
+    }
     Ok(())
 }
 
@@ -80,8 +140,12 @@ pub fn apply_config(app: &AppHandle) {
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
     let _ = win.set_size(LogicalSize::new(dim, dim));
-    // Orb = interactive, bubble = click-through.
-    let _ = win.set_ignore_cursor_events(!orb_mode);
+    // Orb = dynamic cursor hit-test (idempotent), bubble = always click-through.
+    if orb_mode {
+        ensure_hit_test(app);
+    } else {
+        let _ = win.set_ignore_cursor_events(true);
+    }
     position_window(&win, &position, dim);
 
     // Push the visual config; the overlay root picks Orb vs Bubble from `orbEnabled`
