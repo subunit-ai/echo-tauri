@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
 import { SoundFx } from "./components/SoundFx";
@@ -9,7 +9,9 @@ import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { UpdatePrompt } from "./components/UpdatePrompt";
+import { onState } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
+import { ToastProvider, useToast } from "./state/ToastContext";
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -49,10 +51,28 @@ function Shell() {
   );
 }
 
+// Surfaces engine errors (mic open failed, live-server unreachable, …) as a
+// toast from anywhere in the app — not just when the record panel is on screen.
+function EngineErrorToasts() {
+  const toast = useToast();
+  useEffect(() => {
+    const sub = onState((p) => {
+      if (p.state === "error" && p.detail) toast(p.detail, "error");
+    });
+    return () => {
+      sub.then((un) => un());
+    };
+  }, [toast]);
+  return null;
+}
+
 export default function App() {
   return (
-    <ConfigProvider>
-      <Shell />
-    </ConfigProvider>
+    <ToastProvider>
+      <EngineErrorToasts />
+      <ConfigProvider>
+        <Shell />
+      </ConfigProvider>
+    </ToastProvider>
   );
 }
