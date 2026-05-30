@@ -1,18 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { onState, type EngineState } from "../lib/ipc";
 
 // Compact, non-interactive fallback indicator shown when the orb is off but
 // "Bubble anzeigen" is on. A centered pill: a state dot + a live waveform +
 // a short label. Auto-hides after done/error; invisible while idle.
 
-const LABEL: Record<EngineState, string> = {
-  idle: "",
-  recording: "Aufnahme",
-  transcribing: "Transkribiere",
-  done: "Fertig",
-  error: "Fehler",
-};
 const COLOR: Record<EngineState, string> = {
   idle: "#22d3ee",
   recording: "#ff5c5c",
@@ -21,7 +15,16 @@ const COLOR: Record<EngineState, string> = {
   error: "#ffc450",
 };
 
+const LABEL_KEY: Record<EngineState, string> = {
+  idle: "",
+  recording: "overlay.recording",
+  transcribing: "overlay.transcribing",
+  done: "common.done",
+  error: "common.error",
+};
+
 export function Bubble() {
+  const { t } = useTranslation();
   const [st, setSt] = useState<EngineState>("idle");
   const [visible, setVisible] = useState(false);
   const stRef = useRef<EngineState>("idle");
@@ -151,7 +154,7 @@ export function Bubble() {
             whiteSpace: "nowrap",
           }}
         >
-          {LABEL[st]}
+          {LABEL_KEY[st] ? t(LABEL_KEY[st]) : ""}
         </span>
       </div>
     </div>
