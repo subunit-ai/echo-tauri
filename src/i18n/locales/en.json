@@ -1,4 +1,20 @@
 {
+  "onb": {
+    "welcomeTitle": "Welcome to Echo",
+    "welcomeBody": "Press, speak, done — we'll handle the rest.",
+    "getStarted": "Get started",
+    "accountTitle": "Connect your account",
+    "accountBody": "Sign in with your subunit account for cloud transcription (GDPR, servers in Germany). Echo also runs locally without an account.",
+    "accountSignedIn": "Signed in as {{email}}",
+    "accountSkipHint": "You can do this later in Settings.",
+    "micTitle": "Test your microphone",
+    "micBody": "Say something — the level should move. If it's the wrong device, pick another.",
+    "hotkeyTitle": "Your hotkey",
+    "hotkeyBody": "Hold your hotkey and speak. Releasing it finishes — the text lands straight in the active window.",
+    "hotkeyChangeable": "Changeable any time in Settings.",
+    "modeTitle": "Local, Cloud or Superfast?",
+    "modeBody": "Local = 100% private · Cloud = GDPR servers · Superfast = ultra-fast."
+  },
   "common": {
     "save": "Save",
     "saved": "Saved ✓",

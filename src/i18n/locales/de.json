@@ -1,4 +1,20 @@
 {
+  "onb": {
+    "welcomeTitle": "Willkommen bei Echo",
+    "welcomeBody": "Drücken, sprechen, fertig — den Rest übernehmen wir.",
+    "getStarted": "Los geht's",
+    "accountTitle": "Konto verbinden",
+    "accountBody": "Melde dich mit deinem subunit-Konto an für Cloud-Transkription (DSGVO, Server in DE). Ohne Konto läuft Echo lokal.",
+    "accountSignedIn": "Angemeldet als {{email}}",
+    "accountSkipHint": "Kannst du später in den Einstellungen nachholen.",
+    "micTitle": "Mikrofon testen",
+    "micBody": "Sag etwas — der Pegel sollte ausschlagen. Stimmt das Gerät nicht, wähl ein anderes.",
+    "hotkeyTitle": "Dein Hotkey",
+    "hotkeyBody": "Halte deinen Hotkey gedrückt und sprich. Loslassen heißt fertig — der Text landet direkt im aktiven Fenster.",
+    "hotkeyChangeable": "Jederzeit in den Einstellungen änderbar.",
+    "modeTitle": "Lokal, Cloud oder Superfast?",
+    "modeBody": "Lokal = 100% privat · Cloud = DSGVO-Server · Superfast = ultraschnell."
+  },
   "common": {
     "save": "Speichern",
     "saved": "Gespeichert ✓",
