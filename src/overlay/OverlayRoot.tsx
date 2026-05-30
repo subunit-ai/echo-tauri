@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { Bubble } from "./Bubble";
 import { Orb } from "./Orb";
+import { setLanguage } from "../i18n";
 
 /**
  * The overlay window renders ONE of two indicators: the interactive orb, or —
@@ -15,7 +16,10 @@ export function OverlayRoot() {
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
-      .then((c) => setOrbEnabled(c.use_orb_overlay !== false))
+      .then((c) => {
+        setOrbEnabled(c.use_orb_overlay !== false);
+        setLanguage(typeof c.ui_language === "string" ? c.ui_language : "de");
+      })
       .catch(() => setOrbEnabled(true));
     const un = listen<{ orbEnabled?: boolean }>("echo://orb-config", (e) => {
       if (typeof e.payload.orbEnabled === "boolean") setOrbEnabled(e.payload.orbEnabled);

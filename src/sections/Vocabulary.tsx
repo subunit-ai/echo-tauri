@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { VocabEntry } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
@@ -9,6 +9,19 @@ export function Vocabulary() {
   const { config, patch } = useConfig();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<VocabEntry[] | null>(null);
+
+  // Dirty-guard: persist an unsaved draft when leaving the section (unmount) so
+  // edits aren't silently lost on a sidebar switch. Same filtering as save().
+  const draftRef = useRef<VocabEntry[] | null>(null);
+  draftRef.current = draft;
+  useEffect(
+    () => () => {
+      const d = draftRef.current;
+      if (d !== null) patch({ vocabulary: d.filter((e) => e.write_as.trim()) });
+    },
+    [patch],
+  );
+
   if (!config) return null;
 
   const rows = draft ?? config.vocabulary;

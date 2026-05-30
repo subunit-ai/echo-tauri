@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   onState,
   orbCycle,
@@ -52,6 +53,7 @@ const CLEANUP_LABEL: Record<string, string> = {
 const langLabel = (l: string) => (l === "auto" ? "AUTO" : l.toUpperCase());
 
 export function Orb() {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const state = useRef<EngineState>("idle");
   const level = useRef(0);
@@ -336,7 +338,7 @@ export function Orb() {
         <>
           {/* W — transcription mode */}
           <button
-            title={`Modus: ${quick.mode}`}
+            title={t("overlay.tooltipMode", { value: quick.mode })}
             onClick={cycle("mode")}
             style={{
               ...satBase,
@@ -351,7 +353,7 @@ export function Orb() {
           </button>
           {/* N — language */}
           <button
-            title={`Sprache: ${quick.language}`}
+            title={t("overlay.tooltipLanguage", { value: quick.language })}
             onClick={cycle("language")}
             style={{ ...satBase, top: 0, left: "50%", transform: "translateX(-50%)" }}
           >
@@ -359,7 +361,7 @@ export function Orb() {
           </button>
           {/* E — cleanup style */}
           <button
-            title={`Cleanup: ${quick.cleanup}`}
+            title={t("overlay.tooltipCleanup", { value: quick.cleanup })}
             onClick={cycle("cleanup")}
             style={{ ...satBase, right: 0, top: "50%", transform: "translateY(-50%)" }}
           >

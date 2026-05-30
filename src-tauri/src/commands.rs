@@ -22,6 +22,8 @@ pub struct AppState {
     /// Live-dictation control signal while streaming (None = not streaming).
     /// See [`crate::live_ws`]: RUN / FINISH / CANCEL.
     pub streaming: Mutex<Option<Arc<AtomicU8>>>,
+    /// Guards the single overlay cursor hit-test loop (see [`crate::overlay`]).
+    pub hit_test_active: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -31,6 +33,7 @@ impl AppState {
             recorder: Recorder::new(),
             target: Mutex::new(None),
             streaming: Mutex::new(None),
+            hit_test_active: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }

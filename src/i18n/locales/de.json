@@ -15,6 +15,13 @@
     "modeTitle": "Lokal, Cloud oder Superfast?",
     "modeBody": "Lokal = 100% privat · Cloud = DSGVO-Server · Superfast = ultraschnell."
   },
+  "overlay": {
+    "recording": "Aufnahme",
+    "transcribing": "Transkribiere",
+    "tooltipMode": "Modus: {{value}}",
+    "tooltipLanguage": "Sprache: {{value}}",
+    "tooltipCleanup": "Cleanup: {{value}}"
+  },
   "common": {
     "save": "Speichern",
     "saved": "Gespeichert ✓",
