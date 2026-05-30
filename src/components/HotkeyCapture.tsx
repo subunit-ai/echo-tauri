@@ -1,4 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 
 // Map a JS key event to the token the Rust accelerator parser understands.
 function keyName(e: KeyboardEvent): string | null {
@@ -25,15 +27,15 @@ function conflictWarning(combo: string): string | null {
   if (!combo) return null;
   const c = combo.toLowerCase();
   const hasModifier = /<ctrl>|<shift>|<alt>|<cmd>/.test(c);
-  if (!hasModifier) return "Ohne Modifier (Strg/Alt/…) löst der Hotkey bei jedem Tastendruck aus.";
+  if (!hasModifier) return i18n.t("hotkey.noModifierWarning");
   // Well-known OS/app shortcuts that would clash badly.
   const clashes: [RegExp, string][] = [
-    [/<ctrl>\+<c>$|<ctrl>\+<v>$|<ctrl>\+<x>$|<ctrl>\+<z>$/, "kollidiert mit Kopieren/Einfügen/Rückgängig"],
-    [/<alt>\+<tab>$/, "kollidiert mit dem Fensterwechsel"],
-    [/<cmd>\+<space>$/, "kollidiert mit Spotlight/Suche"],
-    [/<ctrl>\+<shift>\+<esc>$/, "kollidiert mit dem Task-Manager"],
+    [/<ctrl>\+<c>$|<ctrl>\+<v>$|<ctrl>\+<x>$|<ctrl>\+<z>$/, i18n.t("hotkey.clashCopyPaste")],
+    [/<alt>\+<tab>$/, i18n.t("hotkey.clashWindowSwitch")],
+    [/<cmd>\+<space>$/, i18n.t("hotkey.clashSpotlight")],
+    [/<ctrl>\+<shift>\+<esc>$/, i18n.t("hotkey.clashTaskManager")],
   ];
-  for (const [re, msg] of clashes) if (re.test(c)) return `Achtung: ${msg}.`;
+  for (const [re, msg] of clashes) if (re.test(c)) return i18n.t("hotkey.clashPrefix", { msg });
   return null;
 }
 
@@ -45,6 +47,7 @@ export function HotkeyCapture({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t } = useTranslation();
   const [capturing, setCapturing] = useState(false);
   const warning = conflictWarning(value);
 
@@ -73,7 +76,7 @@ export function HotkeyCapture({
         onBlur={() => setCapturing(false)}
         onKeyDown={onKeyDown}
       >
-        {capturing ? "Taste drücken…" : value || "Hotkey setzen"}
+        {capturing ? t("hotkey.pressKey") : value || t("hotkey.setHotkey")}
       </button>
       {warning && !capturing && (
         <span style={{ fontSize: 11, color: "#ffc450", maxWidth: 220, textAlign: "right" }}>

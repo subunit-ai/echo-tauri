@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { VocabEntry } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
@@ -6,6 +7,7 @@ const CATS = ["Person", "Company", "Tech", "Place", "Other"];
 
 export function Vocabulary() {
   const { config, patch } = useConfig();
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<VocabEntry[] | null>(null);
   if (!config) return null;
 
@@ -32,19 +34,16 @@ export function Vocabulary() {
 
   return (
     <div>
-      <h1 className="section-title">Vocabulary</h1>
-      <p className="section-sub">
-        Eigene Begriffe biasen Whisper und korrigieren wiederkehrende Verhörer. „Klingt
-        wie" → wird zu „Schreibweise".
-      </p>
+      <h1 className="section-title">{t("vocab.title")}</h1>
+      <p className="section-sub">{t("vocab.subtitle")}</p>
       <div className="card">
         <table className="vocab">
           <thead>
             <tr>
-              <th>Klingt wie</th>
-              <th>Schreibweise</th>
-              <th>Aliase (Komma-getrennt)</th>
-              <th>Kategorie</th>
+              <th>{t("vocab.colSoundsLike")}</th>
+              <th>{t("vocab.colWriteAs")}</th>
+              <th>{t("vocab.colAliases")}</th>
+              <th>{t("vocab.colCategory")}</th>
               <th />
             </tr>
           </thead>
@@ -76,13 +75,13 @@ export function Vocabulary() {
                   >
                     {CATS.map((c) => (
                       <option key={c} value={c}>
-                        {c}
+                        {t(`vocab.cat.${c}`)}
                       </option>
                     ))}
                   </select>
                 </td>
                 <td>
-                  <button className="rowdel" onClick={() => del(i)} title="Löschen">
+                  <button className="rowdel" onClick={() => del(i)} title={t("common.delete")}>
                     ✕
                   </button>
                 </td>
@@ -91,7 +90,7 @@ export function Vocabulary() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="empty">
-                  Noch keine Einträge.
+                  {t("vocab.empty")}
                 </td>
               </tr>
             )}
@@ -99,12 +98,12 @@ export function Vocabulary() {
         </table>
         <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
           <button className="sub-tab" onClick={add}>
-            + Eintrag
+            {t("vocab.addEntry")}
           </button>
           <div style={{ flex: 1 }} />
           {dirty && (
             <button className="sub-tab" onClick={() => setDraft(null)}>
-              Verwerfen
+              {t("vocab.discard")}
             </button>
           )}
           <button
@@ -113,7 +112,7 @@ export function Vocabulary() {
             onClick={save}
             disabled={!dirty}
           >
-            Speichern
+            {t("common.save")}
           </button>
         </div>
       </div>

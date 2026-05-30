@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { appVersion } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { BrandMark } from "./BrandMark";
 
 export function Header() {
+  const { t } = useTranslation();
   const { config } = useConfig();
   const [version, setVersion] = useState("");
 
@@ -22,7 +24,9 @@ export function Header() {
       </div>
       {version && <span className="version">v{version}</span>}
       <div className="spacer" />
-      <span className={`plan-badge ${planClass}`}>{plan}</span>
+      <span className={`plan-badge ${planClass}`} title={t("header.planBadgeTitle")}>
+        {t(`header.plan.${plan}`)}
+      </span>
     </header>
   );
 }

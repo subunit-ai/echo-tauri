@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { type UiMode } from "../lib/ipc";
 
 function Icon({ kind }: { kind: UiMode }) {
@@ -32,10 +33,10 @@ function Icon({ kind }: { kind: UiMode }) {
   );
 }
 
-const SEGS: { key: UiMode; title: string; sub: string }[] = [
-  { key: "local", title: "Lokal", sub: "100% privat" },
-  { key: "cloud", title: "Cloud", sub: "DSGVO · DE-Server" },
-  { key: "superfast", title: "Superfast", sub: "Ultraschnell" },
+const SEGS: { key: UiMode; titleKey: string; subKey: string }[] = [
+  { key: "local", titleKey: "mode.localTitle", subKey: "mode.localSub" },
+  { key: "cloud", titleKey: "mode.cloudTitle", subKey: "mode.cloudSub" },
+  { key: "superfast", titleKey: "mode.superfastTitle", subKey: "mode.superfastSub" },
 ];
 
 export function BigModeSwitch({
@@ -45,9 +46,10 @@ export function BigModeSwitch({
   value: UiMode;
   onChange: (m: UiMode) => void;
 }) {
+  const { t } = useTranslation();
   const idx = Math.max(0, SEGS.findIndex((s) => s.key === value));
   return (
-    <div className="mode-switch" role="radiogroup" aria-label="Transkriptions-Modus">
+    <div className="mode-switch" role="radiogroup" aria-label={t("mode.ariaLabel")}>
       <div
         className={`mode-ind ${value}`}
         style={{ transform: `translateX(calc(${idx} * (100% + 6px)))` }}
@@ -64,8 +66,8 @@ export function BigModeSwitch({
           <span className="seg-ico">
             <Icon kind={s.key} />
           </span>
-          <span className="seg-title">{s.title}</span>
-          <span className="seg-sub">{s.sub}</span>
+          <span className="seg-title">{t(s.titleKey)}</span>
+          <span className="seg-sub">{t(s.subKey)}</span>
         </button>
       ))}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { installUpdate, onUpdateAvailable, onUpdateProgress } from "../lib/ipc";
 
 /**
@@ -7,6 +8,7 @@ import { installUpdate, onUpdateAvailable, onUpdateProgress } from "../lib/ipc";
  * silently (download → install → relaunch) — no installer wizard, no manual steps.
  */
 export function UpdatePrompt() {
+  const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [pct, setPct] = useState(0);
@@ -69,18 +71,22 @@ export function UpdatePrompt() {
       <div style={{ flex: 1, fontSize: "0.85rem", color: "#e6eefb", lineHeight: 1.35 }}>
         {installing ? (
           <>
-            <b>Update wird installiert{pct > 0 ? ` — ${Math.round(pct)}%` : "…"}</b>
-            <span style={{ color: "#93a4bd" }}> Echo startet gleich automatisch neu.</span>
+            <b>
+              {pct > 0
+                ? t("update.installingPct", { pct: Math.round(pct) })
+                : t("update.installing")}
+            </b>
+            <span style={{ color: "#93a4bd" }}> {t("update.restartHint")}</span>
           </>
         ) : err ? (
           <>
-            <b style={{ color: "#ffb4b4" }}>Update fehlgeschlagen.</b>{" "}
+            <b style={{ color: "#ffb4b4" }}>{t("update.failed")}</b>{" "}
             <span style={{ color: "#93a4bd" }}>{err}</span>
           </>
         ) : (
           <>
-            <b>Update verfügbar — v{version}</b>
-            <span style={{ color: "#93a4bd" }}> · ein Klick, der Rest läuft automatisch.</span>
+            <b>{t("update.available", { version })}</b>
+            <span style={{ color: "#93a4bd" }}> {t("update.oneClickHint")}</span>
           </>
         )}
         {installing && (
@@ -121,7 +127,7 @@ export function UpdatePrompt() {
                 cursor: "pointer",
               }}
             >
-              Jetzt aktualisieren
+              {t("update.updateNow")}
             </button>
           )}
           <button
@@ -136,7 +142,7 @@ export function UpdatePrompt() {
               cursor: "pointer",
             }}
           >
-            Später
+            {t("update.later")}
           </button>
         </div>
       )}

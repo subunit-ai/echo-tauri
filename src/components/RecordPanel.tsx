@@ -1,22 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { onState, onTranscript, type EngineState } from "../lib/ipc";
-
-const LABEL: Record<EngineState, string> = {
-  idle: "Bereit",
-  recording: "Aufnahme läuft…",
-  transcribing: "Transkribiere…",
-  done: "Fertig",
-  error: "Fehler",
-};
 
 // Push-to-talk test control. The real trigger is the global hotkey; this lets
 // you drive the full record → transcribe loop from the window too.
 export function RecordPanel() {
+  const { t } = useTranslation();
   const [state, setState] = useState<EngineState>("idle");
   const [detail, setDetail] = useState("");
   const [last, setLast] = useState("");
   const [level, setLevel] = useState(0);
+
+  const LABEL: Record<EngineState, string> = {
+    idle: t("record.stateIdle"),
+    recording: t("record.stateRecording"),
+    transcribing: t("record.stateTranscribing"),
+    done: t("common.done"),
+    error: t("common.error"),
+  };
 
   useEffect(() => {
     const subs = [
@@ -52,11 +54,11 @@ export function RecordPanel() {
       const code = e?.code;
       setDetail(
         code === "trial_expired"
-          ? "Testzeitraum abgelaufen — bitte Plan upgraden."
+          ? t("record.errorTrialExpired")
           : code === "auth"
-            ? "Nicht angemeldet — in den Einstellungen anmelden."
+            ? t("record.errorNotSignedIn")
             : code === "model_missing"
-              ? "Lokale Engine nicht verfügbar — auf Cloud umstellen."
+              ? t("record.errorModelMissing")
               : (e?.message ?? String(e)),
       );
     });
@@ -69,7 +71,7 @@ export function RecordPanel() {
         <button
           type="button"
           className={`mic-btn ${recording ? "rec" : ""}`}
-          title="Gedrückt halten zum Aufnehmen"
+          title={t("record.holdToRecord")}
           onPointerDown={start}
           onPointerUp={stop}
           onPointerLeave={() => recording && stop()}
