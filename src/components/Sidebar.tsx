@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 export type Section =
   | "home"
   | "history"
@@ -6,13 +8,13 @@ export type Section =
   | "settings"
   | "help";
 
-const ITEMS: { key: Section; label: string; glyph: string }[] = [
-  { key: "home", label: "Home", glyph: "⌂" },
-  { key: "history", label: "Verlauf", glyph: "⏱" },
-  { key: "meetings", label: "Meetings", glyph: "🎙" },
-  { key: "vocabulary", label: "Vocabulary", glyph: "📖" },
-  { key: "settings", label: "Einstellungen", glyph: "⚙" },
-  { key: "help", label: "Hilfe", glyph: "ⓘ" },
+const ITEMS: { key: Section; labelKey: string; glyph: string }[] = [
+  { key: "home", labelKey: "nav.home", glyph: "⌂" },
+  { key: "history", labelKey: "nav.history", glyph: "⏱" },
+  { key: "meetings", labelKey: "nav.meetings", glyph: "🎙" },
+  { key: "vocabulary", labelKey: "nav.vocabulary", glyph: "📖" },
+  { key: "settings", labelKey: "nav.settings", glyph: "⚙" },
+  { key: "help", labelKey: "nav.help", glyph: "ⓘ" },
 ];
 
 export function Sidebar({
@@ -22,6 +24,7 @@ export function Sidebar({
   active: Section;
   onSelect: (s: Section) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <nav className="sidebar">
       {ITEMS.map((it) => (
@@ -33,7 +36,7 @@ export function Sidebar({
           <span className="glyph" aria-hidden>
             {it.glyph}
           </span>
-          {it.label}
+          {t(it.labelKey)}
         </button>
       ))}
     </nav>

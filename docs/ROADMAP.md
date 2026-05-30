@@ -67,7 +67,11 @@ Stand: 2026-05-30. Basis: Stabilitäts-/Port-/UX-/Marktreife-Audit (10 Subsystem
   - ✅ Live-WS gehärtet (SERVER_READY abwarten, Reconnect, Connect-Timeout, Fehler→Error-State).
   - ✅ Autostart (`tauri-plugin-autostart` + Settings-Toggle).
   - ✅ Toast-System + globale Engine-Fehler + Lösch-Bestätigung.
-  - ⏳ offen: **i18n** (groß, jeder String), **target_lock-Robustheit** (braucht Windows-Gerätetest:
-    retry-shield/focused-child-HWND/WM_PASTE), **Onboarding-Rebuild** (Login/Mikro-Test/Hotkey-Schritt),
-    Vocabulary-Dirty-Guard, Orb-click-through-Hit-Test, languages.ts auf 99.
+  - ✅ **i18n** (PR #3): react-i18next, de/en-Katalog (234 Keys, symmetrisch), `ui_language`-Picker,
+    alle 13 string-tragenden Komponenten auf `t()` migriert.
+  - ✅ **Onboarding-Rebuild** (PR #3): 5-Schritt-Flow (Welcome → Konto/Login → Mikro-Live-Test →
+    Hotkey → Modus/Features), i18n-nativ.
+  - ⏳ offen: **target_lock-Robustheit** — BLOCKIERT auf Windows-Gerätetest (retry-shield/
+    focused-child-HWND/WM_PASTE sind reiner Windows-FFI-Code, nicht auf Linux verifizierbar).
+    Vocabulary-Dirty-Guard, Orb-click-through-Hit-Test, languages.ts auf 99, Overlay-Strings (eigener Root).
 - **Sprint 3 (Marktreife):** Azure-Signing + Key-Rotation + Rechtsartefakte → erste signierte Release.

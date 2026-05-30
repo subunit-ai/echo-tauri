@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { getConfig, setConfig, type Config } from "../lib/ipc";
+import { setLanguage } from "../i18n";
 
 interface Ctx {
   config: Config | null;
@@ -39,7 +40,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     getConfig()
-      .then(setLocal)
+      .then((c) => {
+        setLocal(c);
+        setLanguage(c.ui_language); // apply the saved UI language on startup
+      })
       .catch((e) => console.error("getConfig failed", e));
   }, []);
 

@@ -1,18 +1,21 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { copyText, processMeeting } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
 // Re-process styles available on a stored meeting transcript (server /v1/cleanup).
-const ACTIONS: { style: string; label: string }[] = [
-  { style: "summary", label: "Zusammenfassung" },
-  { style: "action_items", label: "Aufgaben" },
-  { style: "decisions", label: "Entscheidungen" },
-  { style: "minutes", label: "Protokoll" },
-  { style: "recap_email", label: "Recap-E-Mail" },
+// `labelKey` resolves through i18n at render time.
+const ACTIONS: { style: string; labelKey: string }[] = [
+  { style: "summary", labelKey: "meetings.actionSummary" },
+  { style: "action_items", labelKey: "meetings.actionTasks" },
+  { style: "decisions", labelKey: "meetings.actionDecisions" },
+  { style: "minutes", labelKey: "meetings.actionMinutes" },
+  { style: "recap_email", labelKey: "meetings.actionRecapEmail" },
 ];
 
 export function Meetings() {
+  const { t } = useTranslation();
   const { config, reload } = useConfig();
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${i}:${style}`
@@ -40,7 +43,10 @@ export function Meetings() {
       const text = await processMeeting(i, style);
       setResult((r) => ({ ...r, [i]: { label, text } }));
     } catch (e) {
-      setResult((r) => ({ ...r, [i]: { label, text: `Fehler: ${String(e)}` } }));
+      setResult((r) => ({
+        ...r,
+        [i]: { label, text: t("meetings.processError", { error: String(e) }) },
+      }));
     } finally {
       setBusy(null);
     }
@@ -48,14 +54,11 @@ export function Meetings() {
 
   return (
     <div>
-      <h1 className="section-title">Meetings</h1>
-      <p className="section-sub">
-        Lange Aufnahmen (≥ {thresholdMin} Min) — separat gespeichert. Klick öffnet das volle
-        Transkript; die Buttons erzeugen Zusammenfassung / Aufgaben / Entscheidungen.
-      </p>
+      <h1 className="section-title">{t("meetings.title")}</h1>
+      <p className="section-sub">{t("meetings.subtitle", { minutes: thresholdMin })}</p>
 
       {list.length === 0 ? (
-        <div className="empty">Noch keine langen Aufnahmen.</div>
+        <div className="empty">{t("meetings.empty")}</div>
       ) : (
         list.map((m, i) => {
           const text = String(m.text ?? "");
@@ -71,7 +74,7 @@ export function Meetings() {
               >
                 <div className="meta" style={{ marginTop: 0, marginBottom: 6 }}>
                   <span className="tier-badge">{String(m.quality_mode ?? "") || "local"}</span>
-                  <span>{Math.max(1, Math.round(dur / 60))} Min</span>
+                  <span>{t("meetings.minutesShort", { minutes: Math.max(1, Math.round(dur / 60)) })}</span>
                   {m.ts != null && (
                     <span>{new Date(Number(m.ts) * 1000).toLocaleString("de-DE")}</span>
                   )}
@@ -102,7 +105,7 @@ export function Meetings() {
                     border: "1px solid rgba(91,157,255,0.25)",
                   }}
                 >
-                  <b style={{ color: "#5b9dff", fontSize: "0.8rem" }}>Nach Sprechern</b>
+                  <b style={{ color: "#5b9dff", fontSize: "0.8rem" }}>{t("meetings.bySpeaker")}</b>
                   <div className="text" style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
                     {speakerText}
                   </div>
@@ -110,16 +113,19 @@ export function Meetings() {
               )}
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-                {ACTIONS.map((a) => (
-                  <button
-                    key={a.style}
-                    className="sub-tab"
-                    disabled={busy !== null}
-                    onClick={() => run(i, a.style, a.label)}
-                  >
-                    {busy === `${i}:${a.style}` ? "…" : a.label}
-                  </button>
-                ))}
+                {ACTIONS.map((a) => {
+                  const label = t(a.labelKey);
+                  return (
+                    <button
+                      key={a.style}
+                      className="sub-tab"
+                      disabled={busy !== null}
+                      onClick={() => run(i, a.style, label)}
+                    >
+                      {busy === `${i}:${a.style}` ? "…" : label}
+                    </button>
+                  );
+                })}
               </div>
 
               {res && (
@@ -149,7 +155,7 @@ export function Meetings() {
                         window.setTimeout(() => setCopied(false), 1200);
                       }}
                     >
-                      {copied ? "Kopiert ✓" : "Kopieren"}
+                      {copied ? t("common.copied") : t("common.copy")}
                     </button>
                   </div>
                   <div className="text" style={{ whiteSpace: "pre-wrap" }}>

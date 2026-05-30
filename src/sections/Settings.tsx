@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
@@ -17,14 +18,15 @@ import {
   type Config,
 } from "../lib/ipc";
 import { LANGUAGES } from "../lib/languages";
+import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
 type Tab = "general" | "transcription" | "overlay" | "account";
-const TABS: { key: Tab; label: string }[] = [
-  { key: "general", label: "Allgemein" },
-  { key: "transcription", label: "Transkription" },
-  { key: "overlay", label: "Overlay" },
-  { key: "account", label: "Account" },
+const TABS: { key: Tab; labelKey: string }[] = [
+  { key: "general", labelKey: "settings.tabGeneral" },
+  { key: "transcription", labelKey: "settings.tabTranscription" },
+  { key: "overlay", labelKey: "settings.tabOverlay" },
+  { key: "account", labelKey: "settings.tabAccount" },
 ];
 
 function Row({ name, hint, children }: { name: string; hint?: string; children: ReactNode }) {
@@ -60,6 +62,7 @@ function Sel({
 }
 
 export function Settings() {
+  const { t } = useTranslation();
   const { config, patch, reload, save, savedTick } = useConfig();
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
@@ -111,7 +114,7 @@ export function Settings() {
       await reload();
     } catch (e) {
       console.error("login failed", e);
-      setLoginErr("Anmeldung fehlgeschlagen oder abgebrochen. Bitte erneut versuchen.");
+      setLoginErr(t("settings.loginFailed"));
     } finally {
       setBusy(false);
     }
@@ -129,27 +132,27 @@ export function Settings() {
     }
   };
   const doUpdate = async () => {
-    setUpdateMsg("Suche…");
+    setUpdateMsg(t("settings.updateSearching"));
     setFoundUpdate(null);
     try {
       const v = await checkForUpdates();
       if (v) {
         setFoundUpdate(v);
-        setUpdateMsg(`Update verfügbar: v${v}`);
+        setUpdateMsg(t("settings.updateAvailable", { version: v }));
       } else {
-        setUpdateMsg("Aktuell — kein Update");
+        setUpdateMsg(t("settings.updateUpToDate"));
       }
     } catch (e) {
-      setUpdateMsg(`Fehler: ${String(e)}`);
+      setUpdateMsg(t("settings.updateError", { error: String(e) }));
     }
   };
   const doInstall = async () => {
     setUpdating(true);
-    setUpdateMsg("Wird installiert… Echo startet gleich automatisch neu.");
+    setUpdateMsg(t("settings.updateInstalling"));
     try {
       await installUpdate(); // on success the app relaunches; never returns
     } catch (e) {
-      setUpdateMsg(`Fehler: ${String(e)}`);
+      setUpdateMsg(t("settings.updateError", { error: String(e) }));
       setUpdating(false);
     }
   };
@@ -157,7 +160,7 @@ export function Settings() {
   return (
     <div>
       <h1 className="section-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        Einstellungen
+        {t("settings.title")}
         <span
           aria-live="polite"
           style={{
@@ -174,17 +177,17 @@ export function Settings() {
             pointerEvents: "none",
           }}
         >
-          Gespeichert ✓
+          {t("common.saved")}
         </span>
       </h1>
       <div className="sub-tabs">
-        {TABS.map((t) => (
+        {TABS.map((tab2) => (
           <button
-            key={t.key}
-            className={`sub-tab ${t.key === tab ? "active" : ""}`}
-            onClick={() => setTab(t.key)}
+            key={tab2.key}
+            className={`sub-tab ${tab2.key === tab ? "active" : ""}`}
+            onClick={() => setTab(tab2.key)}
           >
-            {t.label}
+            {t(tab2.labelKey)}
           </button>
         ))}
       </div>
@@ -192,42 +195,42 @@ export function Settings() {
       <div className="card">
         {tab === "general" && (
           <>
-            <Row name="Aufnahme-Modus" hint="Halten (Push-to-Talk) oder Umschalten">
+            <Row name={t("settings.recordingMode")} hint={t("settings.recordingModeHint")}>
               <Sel
                 value={c.recording_mode}
                 onChange={(v) => set("recording_mode", v)}
                 options={[
-                  ["hold", "Halten"],
-                  ["toggle", "Umschalten"],
+                  ["hold", t("settings.recordingModeHold")],
+                  ["toggle", t("settings.recordingModeToggle")],
                 ]}
               />
             </Row>
-            <Row name="Hotkey" hint="Klicken, dann Tastenkombination drücken">
+            <Row name={t("settings.hotkey")} hint={t("settings.hotkeyHint")}>
               <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
             </Row>
-            <Row name="Mikrofon">
+            <Row name={t("settings.microphone")}>
               <Sel
                 value={c.mic_device_name || ""}
                 onChange={(v) => set("mic_device_name", v)}
-                options={[["", "System-Standard"], ...devices.map((d): [string, string] => [d, d])]}
+                options={[["", t("settings.micSystemDefault")], ...devices.map((d): [string, string] => [d, d])]}
               />
             </Row>
-            <Row name="Auto-Paste" hint="Text nach der Transkription einfügen">
+            <Row name={t("settings.autoPaste")} hint={t("settings.autoPasteHint")}>
               <Toggle checked={c.autopaste} onChange={(v) => set("autopaste", v)} />
             </Row>
-            <Row name="Fenster-Fokus merken" hint="Ins zuletzt fokussierte Fenster einfügen">
+            <Row name={t("settings.targetLock")} hint={t("settings.targetLockHint")}>
               <Toggle checked={c.target_lock} onChange={(v) => set("target_lock", v)} />
             </Row>
-            <Row name="Bubble anzeigen" hint="Kompakter Status-Indikator, wenn das Orb-Overlay aus ist">
+            <Row name={t("settings.showBubble")} hint={t("settings.showBubbleHint")}>
               <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
             </Row>
-            <Row name="Mit System starten" hint="Echo automatisch beim Login starten">
+            <Row name={t("settings.autostart")} hint={t("settings.autostartHint")}>
               <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
             </Row>
-            <Row name="Sounds">
+            <Row name={t("settings.sounds")}>
               <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />
             </Row>
-            <Row name="Lautstärke">
+            <Row name={t("settings.volume")}>
               <input
                 type="range"
                 min={0}
@@ -237,14 +240,24 @@ export function Settings() {
                 onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
               />
             </Row>
-            <Row name="Design">
+            <Row name={t("settings.theme")}>
               <Sel
                 value={c.ui_theme}
                 onChange={(v) => set("ui_theme", v)}
                 options={[
-                  ["dark", "Dunkel"],
-                  ["light", "Hell"],
+                  ["dark", t("settings.themeDark")],
+                  ["light", t("settings.themeLight")],
                 ]}
+              />
+            </Row>
+            <Row name={t("settings.language")} hint={t("settings.languageHint")}>
+              <Sel
+                value={c.ui_language === "en" ? "en" : "de"}
+                onChange={(v) => {
+                  setLanguage(v);
+                  set("ui_language", v);
+                }}
+                options={SUPPORTED_LANGUAGES.map((l) => [l.code, l.label])}
               />
             </Row>
           </>
@@ -252,62 +265,62 @@ export function Settings() {
 
         {tab === "transcription" && (
           <>
-            <Row name="Modus" hint="Lokal (privat) · Cloud (DSGVO) · Superfast">
+            <Row name={t("settings.mode")} hint={t("settings.modeHint")}>
               <div style={{ flex: 1, maxWidth: 360 }}>
                 <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
               </div>
             </Row>
             <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
               <div className="meta">
-                <div className="name">Lokales Modell</div>
+                <div className="name">{t("settings.localModel")}</div>
                 <div className="hint">
-                  Klick wählt + lädt das Modell (mit GPU ruhig groß — large-v3-turbo).
+                  {t("settings.localModelHint")}
                 </div>
               </div>
               <ModelManager />
             </div>
-            <Row name="Transkriptions-Sprache" hint='"Automatisch erkennen" für gemischte Sprachen'>
+            <Row name={t("settings.transcriptionLanguage")} hint={t("settings.transcriptionLanguageHint")}>
               <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
             </Row>
-            <Row name="Cloud-Qualität">
+            <Row name={t("settings.cloudQuality")}>
               <Sel
                 value={c.cloud_quality_mode}
                 onChange={(v) => set("cloud_quality_mode", v)}
                 options={[
-                  ["quality", "Qualität"],
-                  ["fast", "Schnell"],
-                  ["instant", "Instant"],
-                  ["auto", "Auto"],
+                  ["quality", t("settings.cloudQualityQuality")],
+                  ["fast", t("settings.cloudQualityFast")],
+                  ["instant", t("settings.cloudQualityInstant")],
+                  ["auto", t("settings.cloudQualityAuto")],
                 ]}
               />
             </Row>
-            <Row name="Live-Modus (Streaming)" hint="An: WhisperLive-Stream — Text erscheint live beim Sprechen (immer Live-Typing). Aus: Instant — ganzer Text erst am Ende.">
+            <Row name={t("settings.liveMode")} hint={t("settings.liveModeHint")}>
               <Toggle checked={c.live_type} onChange={(v) => set("live_type", v)} />
             </Row>
-            <Row name="Instant: Live-Tippen" hint="Nur im Instant-Modus: das fertige Ergebnis progressiv reintippen statt auf einmal einfügen. Aus = Instant-Paste (Ctrl+V, atomar, zuverlässig — empfohlen auf Windows).">
+            <Row name={t("settings.instantLiveTyping")} hint={t("settings.instantLiveTypingHint")}>
               <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />
             </Row>
-            <Row name="DACH-Formatierung" hint="Abkürzungen, Währung, „deutsche“ Anführungszeichen">
+            <Row name={t("settings.dachFormat")} hint={t("settings.dachFormatHint")}>
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />
             </Row>
-            <Row name="KI-Cleanup">
+            <Row name={t("settings.aiCleanup")}>
               <Toggle checked={c.cleanup_enabled} onChange={(v) => set("cleanup_enabled", v)} />
             </Row>
-            <Row name="Cleanup-Stil">
+            <Row name={t("settings.cleanupStyle")}>
               <Sel
                 value={c.cleanup_style}
                 onChange={(v) => set("cleanup_style", v)}
                 options={[
-                  ["prompt", "Prompt"],
-                  ["email", "E-Mail"],
-                  ["slack", "Slack"],
-                  ["formal", "Formal"],
+                  ["prompt", t("settings.cleanupStylePrompt")],
+                  ["email", t("settings.cleanupStyleEmail")],
+                  ["slack", t("settings.cleanupStyleSlack")],
+                  ["formal", t("settings.cleanupStyleFormal")],
                 ]}
               />
             </Row>
             <Row
-              name="Auto-Modus"
-              hint="Stil automatisch nach aktivem Fenster (ChatGPT/Cursor→Prompt, Gmail→E-Mail, Slack→Slack, Word/Notion→Formal)"
+              name={t("settings.autoMode")}
+              hint={t("settings.autoModeHint")}
             >
               <Toggle checked={c.cleanup_auto_mode} onChange={(v) => set("cleanup_auto_mode", v)} />
             </Row>
@@ -317,16 +330,16 @@ export function Settings() {
                 style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}
               >
                 <div className="meta">
-                  <div className="name">Eigene Regeln</div>
+                  <div className="name">{t("settings.customRules")}</div>
                   <div className="hint">
-                    Fenstertitel enthält „Text" → Stil. Überschreibt die eingebauten Regeln.
+                    {t("settings.customRulesHint")}
                   </div>
                 </div>
                 {(ovr ?? []).map(([key, style], i) => (
                   <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <input
                       style={{ flex: 1 }}
-                      placeholder="Fenstertitel enthält…"
+                      placeholder={t("settings.windowTitleContains")}
                       value={key}
                       onChange={(e) => {
                         const next = [...(ovr ?? [])];
@@ -342,10 +355,10 @@ export function Settings() {
                         writeOvr(next);
                       }}
                       options={[
-                        ["prompt", "Prompt"],
-                        ["email", "E-Mail"],
-                        ["slack", "Slack"],
-                        ["formal", "Formal"],
+                        ["prompt", t("settings.cleanupStylePrompt")],
+                        ["email", t("settings.cleanupStyleEmail")],
+                        ["slack", t("settings.cleanupStyleSlack")],
+                        ["formal", t("settings.cleanupStyleFormal")],
                       ]}
                     />
                     <button
@@ -361,7 +374,7 @@ export function Settings() {
                   style={{ alignSelf: "flex-start" }}
                   onClick={() => writeOvr([...(ovr ?? []), ["", "prompt"]])}
                 >
-                  + Regel
+                  {t("settings.addRule")}
                 </button>
               </div>
             )}
@@ -370,15 +383,15 @@ export function Settings() {
 
         {tab === "overlay" && (
           <>
-            <Row name="Orb-Overlay anzeigen">
+            <Row name={t("settings.showOrbOverlay")}>
               <Toggle checked={c.use_orb_overlay} onChange={(v) => set("use_orb_overlay", v)} />
             </Row>
-            <Row name="Stil">
+            <Row name={t("settings.orbStyle")}>
               <Sel
                 value={c.orb_overlay_style}
                 onChange={(v) => set("orb_overlay_style", v)}
                 options={[
-                  ["ping", "Ping (Echo-Ringe)"],
+                  ["ping", t("settings.orbStylePing")],
                   ["sphere", "Sphere"],
                   ["sonar", "Sonar"],
                   ["bars", "Bars"],
@@ -387,7 +400,7 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Farbe">
+            <Row name={t("settings.orbColor")}>
               <Sel
                 value={c.orb_color_theme}
                 onChange={(v) => set("orb_color_theme", v)}
@@ -398,21 +411,21 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Position">
+            <Row name={t("settings.orbPosition")}>
               <Sel
                 value={c.orb_position}
                 onChange={(v) => set("orb_position", v)}
                 options={[
-                  ["bottom-center", "Unten Mitte"],
-                  ["bottom-left", "Unten Links"],
-                  ["bottom-right", "Unten Rechts"],
-                  ["top-center", "Oben Mitte"],
-                  ["top-left", "Oben Links"],
-                  ["top-right", "Oben Rechts"],
+                  ["bottom-center", t("settings.posBottomCenter")],
+                  ["bottom-left", t("settings.posBottomLeft")],
+                  ["bottom-right", t("settings.posBottomRight")],
+                  ["top-center", t("settings.posTopCenter")],
+                  ["top-left", t("settings.posTopLeft")],
+                  ["top-right", t("settings.posTopRight")],
                 ]}
               />
             </Row>
-            <Row name="Größe">
+            <Row name={t("settings.orbSize")}>
               <Sel
                 value={String(c.orb_overlay_size)}
                 onChange={(v) => set("orb_overlay_size", parseFloat(v))}
@@ -425,10 +438,10 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name="Idle-Puls">
+            <Row name={t("settings.idlePulse")}>
               <Toggle checked={c.orb_idle_pulse} onChange={(v) => set("orb_idle_pulse", v)} />
             </Row>
-            <Row name="Im Leerlauf verstecken">
+            <Row name={t("settings.hideWhenIdle")}>
               <Toggle checked={c.orb_overlay_auto_hide} onChange={(v) => set("orb_overlay_auto_hide", v)} />
             </Row>
           </>
@@ -437,17 +450,17 @@ export function Settings() {
         {tab === "account" && (
           <>
             <Row
-              name="Konto"
-              hint={c.account_email || "Mit auth.subunit.ai anmelden für Cloud-Transkription"}
+              name={t("settings.account")}
+              hint={c.account_email || t("settings.accountHint")}
             >
               {c.account_email ? (
                 <button className="sub-tab" onClick={doLogout}>
-                  Abmelden
+                  {t("settings.signOut")}
                 </button>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
                   <button className="sub-tab" onClick={doLogin} disabled={busy}>
-                    {busy ? "Browser geöffnet…" : "Anmelden"}
+                    {busy ? t("settings.browserOpened") : t("settings.signIn")}
                   </button>
                   {loginErr && (
                     <span style={{ color: "#f87171", fontSize: "0.78rem", maxWidth: 240, textAlign: "right" }}>
@@ -457,7 +470,7 @@ export function Settings() {
                 </div>
               )}
             </Row>
-            <Row name="Plan" hint={c.account_email ? "Cloud-Transkription aktiv" : "Nicht angemeldet"}>
+            <Row name={t("settings.plan")} hint={c.account_email ? t("settings.planActive") : t("settings.planNotSignedIn")}>
               <span
                 style={{
                   textTransform: "uppercase",
@@ -473,46 +486,46 @@ export function Settings() {
                 {c.plan || "free"}
               </span>
             </Row>
-            <Row name="Speaker-Diarization" hint="Wer-spricht-wann bei langen Aufnahmen (Server)">
+            <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
               <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
             </Row>
-            <Row name="In Synapse speichern" hint="Transkripte in die Wissensbasis schreiben">
+            <Row name={t("settings.saveToSynapse")} hint={t("settings.saveToSynapseHint")}>
               <Toggle checked={c.synapse_save_enabled} onChange={(v) => set("synapse_save_enabled", v)} />
             </Row>
-            <Row name="Verlauf speichern">
+            <Row name={t("settings.saveHistory")}>
               <Toggle checked={c.history_enabled} onChange={(v) => set("history_enabled", v)} />
             </Row>
-            <Row name="Auto-Update">
+            <Row name={t("settings.autoUpdate")}>
               <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
             </Row>
-            <Row name="Updates" hint={updateMsg}>
+            <Row name={t("settings.updates")} hint={updateMsg}>
               {foundUpdate ? (
                 <button className="sub-tab" onClick={doInstall} disabled={updating}>
-                  {updating ? "Installiere…" : `Jetzt installieren (v${foundUpdate})`}
+                  {updating ? t("settings.installing") : t("settings.installNow", { version: foundUpdate })}
                 </button>
               ) : (
                 <button className="sub-tab" onClick={doUpdate}>
-                  Nach Updates suchen
+                  {t("settings.checkForUpdates")}
                 </button>
               )}
             </Row>
 
             <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
-              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>Über Echo</div>
-              <Row name="Version" hint={ver ? `Echo v${ver}` : ""}>
+              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>{t("settings.aboutEcho")}</div>
+              <Row name={t("settings.version")} hint={ver ? t("settings.versionHint", { version: ver }) : ""}>
                 <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
               </Row>
-              <Row name="Datenordner" hint="Konfiguration + Modelle (~/.config/echo)">
+              <Row name={t("settings.dataFolder")} hint={t("settings.dataFolderHint")}>
                 <button className="sub-tab" onClick={() => openConfigDir()}>
-                  Ordner öffnen
+                  {t("settings.openFolder")}
                 </button>
               </Row>
-              <Row name="Quellcode / Releases">
+              <Row name={t("settings.sourceCode")}>
                 <button
                   className="sub-tab"
                   onClick={() => openExternal("https://github.com/subunit-ai/echo-tauri")}
                 >
-                  GitHub →
+                  {t("settings.github")}
                 </button>
               </Row>
             </div>
@@ -530,7 +543,7 @@ export function Settings() {
         }}
       >
         <span style={{ fontSize: "0.78rem", color: "var(--muted, #93a4bd)" }}>
-          Änderungen werden automatisch gespeichert
+          {t("settings.autoSaveNote")}
         </span>
         <button
           onClick={() => save()}
@@ -549,7 +562,7 @@ export function Settings() {
           onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
           onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
         >
-          {showSaved ? "Gespeichert ✓" : "Speichern"}
+          {showSaved ? t("common.saved") : t("common.save")}
         </button>
       </div>
     </div>

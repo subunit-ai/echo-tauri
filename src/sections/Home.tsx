@@ -1,32 +1,34 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { RecordPanel } from "../components/RecordPanel";
 import { patchForUiMode, uiModeOf } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
 export function Home() {
+  const { t } = useTranslation();
   const { config, patch } = useConfig();
   const [meet, setMeet] = useState("");
   if (!config) return null;
   const recent = config.history.slice(0, 5);
 
   const startMeeting = async () => {
-    setMeet("Erstelle Meeting…");
+    setMeet(t("home.meetingCreating"));
     try {
       const m = await invoke<{ code: string; share_url: string }>("start_meeting");
-      setMeet(`Meeting ${m.code} geöffnet`);
+      setMeet(t("home.meetingOpened", { code: m.code }));
     } catch (e) {
-      setMeet(`Fehler: ${String(e)}`);
+      setMeet(t("common.error") + ": " + String(e));
     }
   };
 
   return (
     <div>
-      <h1 className="section-title">Drücken & sprechen</h1>
+      <h1 className="section-title">{t("home.title")}</h1>
       <p className="section-sub">
-        Hotkey: <b>{config.hotkey}</b> ·{" "}
-        {config.recording_mode === "hold" ? "Halten zum Aufnehmen" : "Umschalten zum Aufnehmen"}
+        {t("home.hotkeyLabel")}: <b>{config.hotkey}</b> ·{" "}
+        {config.recording_mode === "hold" ? t("home.modeHold") : t("home.modeToggle")}
       </p>
 
       <RecordPanel />
@@ -35,36 +37,36 @@ export function Home() {
 
       <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
         <button className="sub-tab" onClick={startMeeting}>
-          🎙 Meeting starten
+          {t("home.startMeeting")}
         </button>
         {meet && <span style={{ color: "var(--muted)", fontSize: 12 }}>{meet}</span>}
       </div>
 
       <div className="stat-grid" style={{ marginTop: 24 }}>
         <div className="card stat-card">
-          <div className="label">Transkriptionen</div>
+          <div className="label">{t("home.statTranscriptions")}</div>
           <div className="value">{config.total_transcriptions}</div>
         </div>
         <div className="card stat-card">
-          <div className="label">Im Verlauf</div>
+          <div className="label">{t("home.statInHistory")}</div>
           <div className="value">{config.history.length}</div>
         </div>
         <div className="card stat-card">
-          <div className="label">Audio (min)</div>
+          <div className="label">{t("home.statAudioMin")}</div>
           <div className="value">{Math.round(config.total_audio_seconds / 60)}</div>
         </div>
         <div className="card stat-card">
-          <div className="label">Zeit gespart</div>
+          <div className="label">{t("home.statTimeSaved")}</div>
           <div className="value">
             {Math.round((config.total_audio_seconds * 3) / 60)}
-            <span style={{ fontSize: 13, opacity: 0.6 }}> min</span>
+            <span style={{ fontSize: 13, opacity: 0.6 }}> {t("home.unitMin")}</span>
           </div>
         </div>
       </div>
 
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "6px 0 12px" }}>Zuletzt</h2>
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "6px 0 12px" }}>{t("home.recentHeading")}</h2>
       {recent.length === 0 ? (
-        <div className="empty">Noch keine Transkriptionen — drück deinen Hotkey und leg los.</div>
+        <div className="empty">{t("home.emptyHistory")}</div>
       ) : (
         recent.map((e, i) => (
           <div key={i} className="history-item">

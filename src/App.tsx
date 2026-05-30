@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
 import { SoundFx } from "./components/SoundFx";
@@ -14,20 +15,22 @@ import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
 function Placeholder({ title }: { title: string }) {
+  const { t } = useTranslation();
   return (
     <div>
       <h1 className="section-title">{title}</h1>
-      <div className="empty">Kommt in einer der nächsten Phasen.</div>
+      <div className="empty">{t("app.comingSoon")}</div>
     </div>
   );
 }
 
 function Shell() {
+  const { t } = useTranslation();
   const { config } = useConfig();
   const [section, setSection] = useState<Section>("home");
 
   if (!config) {
-    return <div className="empty" style={{ paddingTop: 90 }}>Lädt…</div>;
+    return <div className="empty" style={{ paddingTop: 90 }}>{t("common.loading")}</div>;
   }
   if (!config.has_seen_onboarding) {
     return <Onboarding />;
@@ -45,7 +48,7 @@ function Shell() {
         {section === "settings" && <Settings />}
         {section === "meetings" && <Meetings />}
         {section === "vocabulary" && <Vocabulary />}
-        {section === "help" && <Placeholder title="Hilfe" />}
+        {section === "help" && <Placeholder title={t("app.help")} />}
       </main>
     </div>
   );

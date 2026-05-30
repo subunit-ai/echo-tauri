@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { clearHistory, copyText, deleteHistoryEntry } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { useToast } from "../state/ToastContext";
@@ -6,12 +7,13 @@ import { useToast } from "../state/ToastContext";
 export function History() {
   const { config, reload } = useConfig();
   const toast = useToast();
+  const { t } = useTranslation();
   const [copied, setCopied] = useState<number | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
   if (!config) return null;
 
   const onCopy = async (text: string, i: number) => {
-    await copyText(text).catch(() => toast("Konnte nicht kopieren.", "error"));
+    await copyText(text).catch(() => toast(t("history.copyFailed"), "error"));
     setCopied(i);
     window.setTimeout(() => setCopied((c) => (c === i ? null : c)), 1200);
   };
@@ -20,7 +22,7 @@ export function History() {
       await deleteHistoryEntry(i);
       await reload();
     } catch {
-      toast("Eintrag konnte nicht gelöscht werden.", "error");
+      toast(t("history.deleteEntryFailed"), "error");
     }
   };
   const onClear = async () => {
@@ -28,41 +30,41 @@ export function History() {
     try {
       await clearHistory();
       await reload();
-      toast("Verlauf gelöscht.", "success");
+      toast(t("history.cleared"), "success");
     } catch {
-      toast("Verlauf konnte nicht gelöscht werden.", "error");
+      toast(t("history.clearFailed"), "error");
     }
   };
 
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h1 className="section-title">Verlauf</h1>
+        <h1 className="section-title">{t("history.title")}</h1>
         {config.history.length > 0 &&
           (confirmingClear ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Wirklich alles löschen?</span>
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>{t("history.confirmClear")}</span>
               <button className="sub-tab" onClick={onClear}>
-                Ja
+                {t("common.yes")}
               </button>
               <button className="sub-tab" onClick={() => setConfirmingClear(false)}>
-                Abbrechen
+                {t("common.cancel")}
               </button>
             </div>
           ) : (
             <button className="sub-tab" onClick={() => setConfirmingClear(true)}>
-              Alle löschen
+              {t("common.deleteAll")}
             </button>
           ))}
       </div>
       <p className="section-sub">
         {config.history_enabled
-          ? "Deine letzten Transkriptionen."
-          : "Verlauf ist deaktiviert (Einstellungen → Account)."}
+          ? t("history.subEnabled")
+          : t("history.subDisabled")}
       </p>
 
       {config.history.length === 0 ? (
-        <div className="empty">Noch nichts aufgenommen.</div>
+        <div className="empty">{t("history.empty")}</div>
       ) : (
         config.history.map((e, i) => {
           const tier = String(e.quality_mode ?? "") || "local";
@@ -80,10 +82,10 @@ export function History() {
                 )}
                 <span style={{ flex: 1 }} />
                 <button className="sub-tab" onClick={() => onCopy(text, i)}>
-                  {copied === i ? "Kopiert ✓" : "Kopieren"}
+                  {copied === i ? t("common.copied") : t("common.copy")}
                 </button>
                 <button className="sub-tab" onClick={() => onDelete(i)}>
-                  Löschen
+                  {t("common.delete")}
                 </button>
               </div>
             </div>

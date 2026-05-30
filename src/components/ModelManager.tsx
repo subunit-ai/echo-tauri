@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   deleteLocalModel,
   downloadModel,
@@ -11,6 +12,7 @@ import {
 import { useConfig } from "../state/ConfigContext";
 
 export function ModelManager() {
+  const { t } = useTranslation();
   const { config, patch } = useConfig();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
@@ -71,7 +73,7 @@ export function ModelManager() {
           <span>{hw.summary}</span>
           <span>·</span>
           <span>
-            Empfohlen: <b style={{ color: "#22d3ee" }}>{hw.recommended_model}</b>
+            {t("models.recommendedLabel")} <b style={{ color: "#22d3ee" }}>{hw.recommended_model}</b>
           </span>
         </div>
       )}
@@ -89,24 +91,24 @@ export function ModelManager() {
             <div className="model-meta">
               <div className="model-label">
                 {m.label}
-                {isActive && <span className="model-active">aktiv</span>}
+                {isActive && <span className="model-active">{t("models.active")}</span>}
                 {recommended && !isActive && (
                   <span
                     className="model-active"
                     style={{ background: "rgba(34,211,238,0.15)", color: "#22d3ee" }}
                   >
-                    empfohlen
+                    {t("models.recommended")}
                   </span>
                 )}
               </div>
               <div className="model-status">
                 {p === -1
-                  ? "Download fehlgeschlagen — nochmal klicken"
+                  ? t("models.downloadFailed")
                   : loading
-                    ? `Lädt… ${p}%`
+                    ? t("models.loadingPercent", { pct: p })
                     : m.downloaded
-                      ? `✓ geladen · ${m.size_mb} MB`
-                      : "nicht geladen — Klick lädt + nutzt"}
+                      ? t("models.downloadedSize", { size: m.size_mb })
+                      : t("models.notDownloaded")}
               </div>
               {loading && (
                 <div className="model-bar">
@@ -115,7 +117,7 @@ export function ModelManager() {
               )}
             </div>
             {m.downloaded && !loading && (
-              <button className="rowdel" title="Löschen" onClick={(e) => remove(e, m.key)}>
+              <button className="rowdel" title={t("common.delete")} onClick={(e) => remove(e, m.key)}>
                 ✕
               </button>
             )}
