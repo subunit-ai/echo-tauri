@@ -56,6 +56,10 @@ fn default_category() -> String {
 /// Code/OpenClaw/Ollama/Cursor/Ubuntu/Gründungszuschuss + Subunit/Erik aliases).
 const VOCAB_SEED_VERSION: u32 = 1;
 
+/// Serializes [`Config::save`] across threads so concurrent writers can't clobber
+/// the shared temp file mid-rename. See `save()`.
+static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Baseline DACH vocabulary (ported verbatim from `DEFAULT_VOCABULARY` in
 /// config.py). Seeded once, gated by `vocabulary_default_seeded`, so user
 /// deletions stick.
@@ -443,18 +447,28 @@ impl Config {
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
+        // Serialize all saves process-wide so concurrent writers (the main set_config
+        // + detached diarization/stats threads) can't interleave onto the temp file.
+        let _guard = SAVE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = config_dir();
         fs::create_dir_all(&dir)?;
         let path = config_file();
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(&path, json)?;
-        // The config holds refresh tokens + BYO API keys — tighten to 0600 on
-        // POSIX so a shared-machine attacker can't grep it (Codex P2, Python parity).
+        // Atomic write: serialize to a sibling temp file, then rename over the
+        // target. fs::rename replaces atomically on POSIX and on Windows
+        // (MOVEFILE_REPLACE_EXISTING), so a crash mid-write can never leave a
+        // truncated config.json (which would drop the user's tokens + history).
+        let tmp = dir.join("config.json.tmp");
+        fs::write(&tmp, json)?;
+        // The config holds refresh tokens + BYO API keys — tighten to 0600 on POSIX
+        // (set on the temp file so the mode carries over the rename) so a
+        // shared-machine attacker can't grep it (Codex P2, Python parity).
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
         }
+        fs::rename(&tmp, &path)?;
         Ok(())
     }
 }
