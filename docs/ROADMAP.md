@@ -60,7 +60,14 @@ Stand: 2026-05-30. Basis: Stabilitäts-/Port-/UX-/Marktreife-Audit (10 Subsystem
 ---
 
 ## Sprint-Plan
-- **Sprint 1 (Stabilität, dieser Branch `fix/sprint1-stability`):** Login-async, Mic-Fehler-State,
+- **Sprint 1 (Stabilität) ✅ erledigt (Branch `fix/sprint1-stability`, PR #2):** Login-async, Mic-Fehler-State,
   ErrorBoundary, atomares Save, Refresh-Single-Flight, Single-Instance, Hide-to-Tray, Login-UI-Feedback.
-- **Sprint 2 (Live + Port):** Live-WS härten, Autostart, i18n, target_lock-Robustheit, Toast-System, Onboarding.
+  Codex-Review: 0 P0; 2 P1 + 1 P2 (per-Prozess-Temp, 0600-before-write, Late-Stream-Abort) — alle gefixt.
+- **Sprint 2 (Live + Port) — teilweise erledigt (gleicher Branch):**
+  - ✅ Live-WS gehärtet (SERVER_READY abwarten, Reconnect, Connect-Timeout, Fehler→Error-State).
+  - ✅ Autostart (`tauri-plugin-autostart` + Settings-Toggle).
+  - ✅ Toast-System + globale Engine-Fehler + Lösch-Bestätigung.
+  - ⏳ offen: **i18n** (groß, jeder String), **target_lock-Robustheit** (braucht Windows-Gerätetest:
+    retry-shield/focused-child-HWND/WM_PASTE), **Onboarding-Rebuild** (Login/Mikro-Test/Hotkey-Schritt),
+    Vocabulary-Dirty-Guard, Orb-click-through-Hit-Test, languages.ts auf 99.
 - **Sprint 3 (Marktreife):** Azure-Signing + Key-Rotation + Rechtsartefakte → erste signierte Release.
