@@ -1,0 +1,23 @@
+{
+  "common": {
+    "save": "Speichern",
+    "saved": "Gespeichert ✓",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "deleteAll": "Alle löschen",
+    "copy": "Kopieren",
+    "copied": "Kopiert ✓",
+    "close": "Schließen",
+    "yes": "Ja",
+    "no": "Nein",
+    "loading": "Lädt…",
+    "error": "Fehler",
+    "back": "Zurück",
+    "next": "Weiter",
+    "done": "Fertig",
+    "retry": "Erneut versuchen",
+    "search": "Suchen",
+    "on": "An",
+    "off": "Aus"
+  }
+}

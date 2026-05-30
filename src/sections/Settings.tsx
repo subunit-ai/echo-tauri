@@ -17,6 +17,7 @@ import {
   type Config,
 } from "../lib/ipc";
 import { LANGUAGES } from "../lib/languages";
+import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
 type Tab = "general" | "transcription" | "overlay" | "account";
@@ -245,6 +246,16 @@ export function Settings() {
                   ["dark", "Dunkel"],
                   ["light", "Hell"],
                 ]}
+              />
+            </Row>
+            <Row name="Sprache" hint="Sprache der Benutzeroberfläche">
+              <Sel
+                value={c.ui_language === "en" ? "en" : "de"}
+                onChange={(v) => {
+                  setLanguage(v);
+                  set("ui_language", v);
+                }}
+                options={SUPPORTED_LANGUAGES.map((l) => [l.code, l.label])}
               />
             </Row>
           </>
