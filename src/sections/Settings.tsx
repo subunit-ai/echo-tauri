@@ -11,6 +11,7 @@ import {
   listAudioDevices,
   openConfigDir,
   openExternal,
+  setAutostart,
   patchForUiMode,
   uiModeOf,
   type Config,
@@ -63,6 +64,7 @@ export function Settings() {
   const [tab, setTab] = useState<Tab>("general");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [loginErr, setLoginErr] = useState("");
   const [updateMsg, setUpdateMsg] = useState("");
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -103,11 +105,13 @@ export function Settings() {
 
   const doLogin = async () => {
     setBusy(true);
+    setLoginErr("");
     try {
       await invoke("login");
       await reload();
     } catch (e) {
       console.error("login failed", e);
+      setLoginErr("Anmeldung fehlgeschlagen oder abgebrochen. Bitte erneut versuchen.");
     } finally {
       setBusy(false);
     }
@@ -115,6 +119,14 @@ export function Settings() {
   const doLogout = async () => {
     await invoke("logout").catch(() => {});
     await reload();
+  };
+  const toggleAutostart = async (v: boolean) => {
+    try {
+      await setAutostart(v);
+      await reload();
+    } catch (e) {
+      console.error("autostart failed", e);
+    }
   };
   const doUpdate = async () => {
     setUpdateMsg("Suche…");
@@ -208,6 +220,9 @@ export function Settings() {
             </Row>
             <Row name="Bubble anzeigen" hint="Kompakter Status-Indikator, wenn das Orb-Overlay aus ist">
               <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
+            </Row>
+            <Row name="Mit System starten" hint="Echo automatisch beim Login starten">
+              <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
             </Row>
             <Row name="Sounds">
               <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />
@@ -430,9 +445,16 @@ export function Settings() {
                   Abmelden
                 </button>
               ) : (
-                <button className="sub-tab" onClick={doLogin} disabled={busy}>
-                  {busy ? "Browser geöffnet…" : "Anmelden"}
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                  <button className="sub-tab" onClick={doLogin} disabled={busy}>
+                    {busy ? "Browser geöffnet…" : "Anmelden"}
+                  </button>
+                  {loginErr && (
+                    <span style={{ color: "#f87171", fontSize: "0.78rem", maxWidth: 240, textAlign: "right" }}>
+                      {loginErr}
+                    </span>
+                  )}
+                </div>
               )}
             </Row>
             <Row name="Plan" hint={c.account_email ? "Cloud-Transkription aktiv" : "Nicht angemeldet"}>

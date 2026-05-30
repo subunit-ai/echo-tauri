@@ -42,6 +42,16 @@ pub fn run() {
     let cfg = config::Config::load();
 
     tauri::Builder::default()
+        // Single-instance guard FIRST: a second launch must not spawn a rival
+        // process fighting over the global hotkey / tray / config file. Instead it
+        // hands focus to the already-running window and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(
             // File + stdout logging. The file lands in the OS log dir
             // (Win: %LOCALAPPDATA%\ai.subunit.echo\logs\echo.log) so it can be pulled
@@ -65,12 +75,30 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Launch-at-login. The actual OS entry is toggled via the set_autostart
+        // command + reconciled on setup against config.autostart_enabled.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| hotkey::on_event(app, shortcut, event))
                 .build(),
         )
         .manage(AppState::new(cfg))
+        // Closing the main window hides it to the tray instead of quitting — Echo
+        // is a background hotkey daemon; an accidental X must not kill the hotkey.
+        // Real quit is the tray's "Beenden" (app.exit). Only the main window; the
+        // overlay manages its own lifecycle.
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::set_config,
@@ -92,6 +120,7 @@ pub fn run() {
             commands::stop_and_transcribe,
             commands::login,
             commands::logout,
+            commands::set_autostart,
             commands::check_for_updates,
             commands::install_update,
             commands::start_meeting,
@@ -112,6 +141,24 @@ pub fn run() {
             // Global hotkey
             if let Err(e) = hotkey::register_from_config(app.handle()) {
                 log::warn!("hotkey: {e}");
+            }
+
+            // Reconcile the OS autostart entry with the saved preference (e.g. a
+            // user removed it via the OS, or it was set on another machine).
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let want = app.state::<AppState>().config.lock().autostart_enabled;
+                let mgr = app.autolaunch();
+                match mgr.is_enabled() {
+                    Ok(is) if is != want => {
+                        let r = if want { mgr.enable() } else { mgr.disable() };
+                        if let Err(e) = r {
+                            log::warn!("autostart reconcile: {e}");
+                        }
+                    }
+                    Err(e) => log::warn!("autostart is_enabled: {e}"),
+                    _ => {}
+                }
             }
 
             // System tray

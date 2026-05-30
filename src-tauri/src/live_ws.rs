@@ -38,11 +38,21 @@ pub const FINISH: u8 = 1;
 pub const CANCEL: u8 = 2;
 
 const SR: u32 = 16000;
+/// Wait this long for the WhisperLive model to come up (SERVER_READY) before
+/// giving up — streaming audio before it's ready drops the first words.
+const READY_TIMEOUT_SECS: u64 = 15;
+/// Bound the WS connect so a black-holed network surfaces as a drop, not a hang.
+const CONNECT_TIMEOUT_SECS: u64 = 10;
+/// Recover a dropped connection mid-dictation this many times before wrapping up.
+const MAX_RECONNECTS: u32 = 3;
+const RECONNECT_BACKOFF_MS: u64 = 500;
 
 pub fn spawn(app: AppHandle, signal: Arc<AtomicU8>) {
     tauri::async_runtime::spawn(async move {
         if let Err(e) = run(app.clone(), signal).await {
             log::warn!("live_ws: {e}");
+            // run() handles its own terminal states; this is the last-resort path.
+            emit_state(&app, EngineState::Error, Some("Live-Diktat fehlgeschlagen.".into()));
         }
         // Whatever happened, leave the engine in a clean state.
         let state = app.state::<AppState>();
@@ -112,15 +122,94 @@ fn full_text(v: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
+/// How a single WS session ended — drives the reconnect decision in [`run`].
+#[derive(PartialEq)]
+enum Phase {
+    /// Clean finish (hotkey released / recording stopped) — tail flushed.
+    Finished,
+    /// User hit Escape — discard.
+    Canceled,
+    /// Connection dropped/failed unexpectedly while still recording.
+    Disconnected,
+}
+
 async fn run(app: AppHandle, signal: Arc<AtomicU8>) -> anyhow::Result<()> {
     // Auth + config snapshot up front.
     crate::auth::ensure_fresh(&app);
-    let (cfg, target) = {
+    let (mut cfg, target) = {
         let state = app.state::<AppState>();
         let cfg = state.config.lock().clone();
         let target = state.target.lock().clone();
         (cfg, target)
     };
+
+    // Survives across reconnects: `typed` is the prefix already typed in the
+    // CURRENT session, `sent` the recorder samples already streamed.
+    let mut typed = String::new();
+    let mut sent: usize = 0;
+    let mut reconnects: u32 = 0;
+
+    loop {
+        let phase = stream_session(&app, &cfg, target.as_ref(), &signal, &mut typed, &mut sent)
+            .await
+            .unwrap_or(Phase::Disconnected); // connect/handshake error → treat as a drop
+
+        match phase {
+            Phase::Finished => {
+                emit_state(&app, EngineState::Done, None);
+                return Ok(());
+            }
+            Phase::Canceled => {
+                emit_state(&app, EngineState::Idle, None);
+                return Ok(());
+            }
+            Phase::Disconnected => {
+                // Only reconnect if the user is still actively dictating. If they
+                // already released/escaped or the mic stopped, just wrap up.
+                let sig = signal.load(Ordering::Relaxed);
+                let recording = app.state::<AppState>().recorder.is_recording();
+                let wrapping_up = sig != RUN || !recording;
+                if wrapping_up || reconnects >= MAX_RECONNECTS {
+                    if sig == CANCEL {
+                        emit_state(&app, EngineState::Idle, None);
+                    } else if typed.is_empty() {
+                        // Nothing ever transcribed across all attempts → real failure.
+                        emit_state(
+                            &app,
+                            EngineState::Error,
+                            Some("Verbindung zum Live-Server fehlgeschlagen.".into()),
+                        );
+                    } else {
+                        // Keep whatever we already typed in.
+                        emit_state(&app, EngineState::Done, None);
+                    }
+                    return Ok(());
+                }
+                reconnects += 1;
+                log::warn!("live_ws: disconnected — reconnect {reconnects}/{MAX_RECONNECTS}");
+                // A reconnected WhisperLive session starts a fresh transcript
+                // coordinate system, so reset `typed` (we keep `sent` so we don't
+                // re-stream — and re-type — audio the old session already consumed).
+                typed.clear();
+                tokio::time::sleep(Duration::from_millis(RECONNECT_BACKOFF_MS)).await;
+                crate::auth::ensure_fresh(&app); // token may have expired during the outage
+                cfg = app.state::<AppState>().config.lock().clone();
+            }
+        }
+    }
+}
+
+/// One WS session: connect, handshake, wait for SERVER_READY, stream mic audio,
+/// type finalized words, and on a clean finish drain + flush the tail. Returns how
+/// the session ended so [`run`] can reconnect on an unexpected drop.
+async fn stream_session(
+    app: &AppHandle,
+    cfg: &crate::config::Config,
+    target: Option<&crate::inject::Target>,
+    signal: &Arc<AtomicU8>,
+    typed: &mut String,
+    sent: &mut usize,
+) -> anyhow::Result<Phase> {
     let token = cfg.subunit_access_token.clone();
     let endpoint = if cfg.live_ws_endpoint.trim().is_empty() {
         "wss://live-transcribe.subunit.ai".to_string()
@@ -130,7 +219,13 @@ async fn run(app: AppHandle, signal: Arc<AtomicU8>) -> anyhow::Result<()> {
     let sep = if endpoint.contains('?') { '&' } else { '?' };
     let url = format!("{endpoint}{sep}token={token}");
 
-    let (ws, _resp) = tokio_tungstenite::connect_async(&url).await?;
+    // Bounded connect so a black-holed network surfaces as a drop, not a hang.
+    let (ws, _resp) = tokio::time::timeout(
+        Duration::from_secs(CONNECT_TIMEOUT_SECS),
+        tokio_tungstenite::connect_async(&url),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("connect timeout"))??;
     let (mut write, mut read) = ws.split();
 
     // Config handshake.
@@ -143,29 +238,38 @@ async fn run(app: AppHandle, signal: Arc<AtomicU8>) -> anyhow::Result<()> {
     });
     write.send(Message::Text(hello.to_string())).await?;
 
-    let mut typed = String::new(); // stable text already typed (never re-typed)
-    let mut last_full = String::new(); // most recent full text (for the finish flush)
-    let mut sent: usize = 0; // recorder samples already streamed
-    let mut canceled = false;
+    let mut ready = false; // server confirmed SERVER_READY — don't stream before this
+    let mut last_full = String::new();
+    let connect_start = std::time::Instant::now();
     let mut tick = tokio::time::interval(Duration::from_millis(200));
 
     loop {
         tokio::select! {
             _ = tick.tick() => {
                 let sig = signal.load(Ordering::Relaxed);
-                if sig == CANCEL { canceled = true; break; }
-                let recording = { app.state::<AppState>().recorder.is_recording() };
+                if sig == CANCEL { return Ok(Phase::Canceled); }
+                let recording = app.state::<AppState>().recorder.is_recording();
                 let finishing = sig == FINISH || !recording;
 
-                if let Some(cap) = { app.state::<AppState>().recorder.snapshot() } {
-                    if cap.samples.len() > sent {
-                        let new = cap.samples[sent..].to_vec();
-                        sent = cap.samples.len();
+                if !ready {
+                    // Hold audio until the model is up — streaming before
+                    // SERVER_READY means the first words get dropped server-side.
+                    if connect_start.elapsed() > Duration::from_secs(READY_TIMEOUT_SECS) {
+                        anyhow::bail!("server not ready in time");
+                    }
+                    if finishing { break; } // user finished before we ever got ready
+                    continue;
+                }
+
+                if let Some(cap) = app.state::<AppState>().recorder.snapshot() {
+                    if cap.samples.len() > *sent {
+                        let new = cap.samples[*sent..].to_vec();
+                        *sent = cap.samples.len();
                         let pcm = resample_16k(&new, cap.sample_rate);
                         if !pcm.is_empty()
                             && write.send(Message::Binary(f32_le_bytes(&pcm))).await.is_err()
                         {
-                            break;
+                            return Ok(Phase::Disconnected);
                         }
                     }
                 }
@@ -175,53 +279,51 @@ async fn run(app: AppHandle, signal: Arc<AtomicU8>) -> anyhow::Result<()> {
                 match msg {
                     Some(Ok(Message::Text(t))) => {
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
+                            if !ready {
+                                if v.get("message").and_then(|m| m.as_str()) == Some("SERVER_READY") {
+                                    ready = true;
+                                }
+                                continue;
+                            }
                             last_full = full_text(&v);
                             if let Some(stable) = stable_text(&v) {
-                                if stable.len() > typed.len() && stable.starts_with(&typed) {
+                                if stable.len() > typed.len() && stable.starts_with(typed.as_str()) {
                                     let delta = format!("{} ", &stable[typed.len()..].trim_start());
-                                    typed = stable;
-                                    let _ = crate::inject::type_live(&delta, &cfg, target.as_ref());
+                                    *typed = stable;
+                                    let _ = crate::inject::type_live(&delta, cfg, target);
                                 }
                             }
                         }
                     }
-                    Some(Ok(Message::Close(_))) | None => break,
-                    Some(Err(_)) => break,
+                    Some(Ok(Message::Close(_))) | None => return Ok(Phase::Disconnected),
+                    Some(Err(_)) => return Ok(Phase::Disconnected),
                     _ => {}
                 }
             }
         }
     }
 
-    // Finish: stop sending, ask the server to close, drain remaining results and
-    // flush the final segment (everything is stable once recording stopped).
+    // Clean finish: stop sending, ask the server to close, drain remaining results
+    // and flush the trailing final segment (all stable once recording stopped).
     let _ = write.send(Message::Close(None)).await;
-    if !canceled {
-        let drain = tokio::time::timeout(Duration::from_secs(5), async {
-            while let Some(Ok(msg)) = read.next().await {
-                if let Message::Text(t) = msg {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
-                        last_full = full_text(&v);
-                    }
-                } else if matches!(msg, Message::Close(_)) {
-                    break;
+    let drain = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(Ok(msg)) = read.next().await {
+            if let Message::Text(t) = msg {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&t) {
+                    last_full = full_text(&v);
                 }
-            }
-        });
-        let _ = drain.await;
-        // Type whatever stable text wasn't typed yet (the trailing final segment).
-        if last_full.len() > typed.len() && last_full.starts_with(&typed) {
-            let tail = last_full[typed.len()..].trim();
-            if !tail.is_empty() {
-                let _ = crate::inject::type_live(&format!("{tail} "), &cfg, target.as_ref());
+            } else if matches!(msg, Message::Close(_)) {
+                break;
             }
         }
+    });
+    let _ = drain.await;
+    if last_full.len() > typed.len() && last_full.starts_with(typed.as_str()) {
+        let tail = last_full[typed.len()..].trim();
+        if !tail.is_empty() {
+            let _ = crate::inject::type_live(&format!("{tail} "), cfg, target);
+            *typed = last_full;
+        }
     }
-
-    emit_state(
-        &app,
-        if canceled { EngineState::Idle } else { EngineState::Done },
-        None,
-    );
-    Ok(())
+    Ok(Phase::Finished)
 }

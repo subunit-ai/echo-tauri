@@ -57,9 +57,18 @@ pub fn do_start(app: &AppHandle) {
     if lock || live {
         *state.target.lock() = Some(crate::inject::capture_active_window());
     }
-    state
+    // Wait for the recorder to actually open the mic. A failure here (no device /
+    // busy / permission) must surface as an error — never a phantom "recording"
+    // state where the user talks into nothing.
+    if let Err(msg) = state
         .recorder
-        .start(if dev.is_empty() { None } else { Some(dev) });
+        .start(if dev.is_empty() { None } else { Some(dev) })
+    {
+        log::warn!("do_start: mic start failed: {msg}");
+        *state.target.lock() = None;
+        emit_state(app, EngineState::Error, Some(msg));
+        return;
+    }
     emit_state(app, EngineState::Recording, None);
 
     if live {
@@ -481,9 +490,36 @@ pub fn stop_and_transcribe(app: AppHandle) -> Result<TranscriptResult, EngineErr
     do_transcribe(&app)
 }
 
+/// Sign in via the browser OAuth loopback flow. `auth::login` blocks (it waits up
+/// to 30 min for the loopback callback), so run it on a blocking thread instead of
+/// the command/main thread — otherwise the whole UI freezes until the user
+/// finishes (or the timeout fires).
 #[tauri::command]
-pub fn login(app: AppHandle) -> Result<String, String> {
-    crate::auth::login(&app).map_err(|e| e.to_string())
+pub async fn login(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::auth::login(&app).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("login task: {e}"))?
+}
+
+/// Toggle launch-at-login: flip the OS autostart entry and persist the preference.
+#[tauri::command]
+pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    if enabled {
+        mgr.enable().map_err(|e| e.to_string())?;
+    } else {
+        mgr.disable().map_err(|e| e.to_string())?;
+    }
+    let state = app.state::<AppState>();
+    let cfg = {
+        let mut c = state.config.lock();
+        c.autostart_enabled = enabled;
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())
 }
 
 #[tauri::command]

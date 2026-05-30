@@ -130,25 +130,49 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
     }
 }
 
+/// Serializes token refreshes process-wide. Two callers (e.g. a transcribe and a
+/// meeting re-process firing together) would otherwise both POST /refresh with the
+/// same rotating refresh token; the second request then carries an already-rotated
+/// (invalid) token and logs the user out. Single-flight + a double-check inside the
+/// lock means only the first does the work and the rest see the fresh token.
+static REFRESH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Does the cloud access token need refreshing right now? (false = either still
+/// valid, or there's no refresh token to use).
+fn needs_refresh(app: &AppHandle) -> bool {
+    let st = app.state::<AppState>();
+    let c = st.config.lock();
+    if c.subunit_refresh_token.is_empty() {
+        return false;
+    }
+    let now = now_secs();
+    // Still valid with a 60s safety margin?
+    !(c.subunit_token_issued_at > 0.0
+        && c.subunit_token_expires_in > 0
+        && (now - c.subunit_token_issued_at) < (c.subunit_token_expires_in as f64 - 60.0))
+}
+
 /// Refresh the access token if it's expired (or about to be). Best-effort.
 pub fn ensure_fresh(app: &AppHandle) {
-    let (refresh, issued, expires) = {
+    // Fast path without the lock — the common case is a still-valid token.
+    if !needs_refresh(app) {
+        return;
+    }
+    // Serialize: only one refresh in flight. (Poison can't corrupt a `()` guard.)
+    let _guard = REFRESH_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    // Re-check: another thread may have refreshed while we waited for the lock.
+    if !needs_refresh(app) {
+        return;
+    }
+    let refresh = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
-        (
-            c.subunit_refresh_token.clone(),
-            c.subunit_token_issued_at,
-            c.subunit_token_expires_in,
-        )
+        c.subunit_refresh_token.clone()
     };
     if refresh.is_empty() {
         return;
     }
     let now = now_secs();
-    // Still valid (60s safety margin)?
-    if issued > 0.0 && expires > 0 && (now - issued) < (expires as f64 - 60.0) {
-        return;
-    }
     match do_refresh(&refresh) {
         Ok((access, new_refresh, exp)) => {
             let st = app.state::<AppState>();

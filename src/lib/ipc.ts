@@ -48,6 +48,7 @@ export interface Config {
   account_email: string;
   last_cloud_mode: string;
   auto_update_check: boolean;
+  autostart_enabled: boolean;
   has_seen_onboarding: boolean;
   ui_language: string;
   ui_theme: string; // dark | light
@@ -85,6 +86,9 @@ export interface Config {
 
 export const getConfig = () => invoke<Config>("get_config");
 export const setConfig = (config: Config) => invoke<void>("set_config", { config });
+/** Toggle launch-at-login (flips the OS autostart entry + persists). */
+export const setAutostart = (enabled: boolean) =>
+  invoke<void>("set_autostart", { enabled });
 /** Persist a drag-set orb position (logical screen px) as orb_position custom-x-y. */
 export const setOrbPosition = (x: number, y: number) =>
   invoke<void>("set_orb_position", { x, y });

@@ -56,6 +56,10 @@ fn default_category() -> String {
 /// Code/OpenClaw/Ollama/Cursor/Ubuntu/Gründungszuschuss + Subunit/Erik aliases).
 const VOCAB_SEED_VERSION: u32 = 1;
 
+/// Serializes [`Config::save`] across threads so concurrent writers can't clobber
+/// the shared temp file mid-rename. See `save()`.
+static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Baseline DACH vocabulary (ported verbatim from `DEFAULT_VOCABULARY` in
 /// config.py). Seeded once, gated by `vocabulary_default_seeded`, so user
 /// deletions stick.
@@ -160,6 +164,8 @@ pub struct Config {
     pub account_email: String,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
+    /// Launch Echo at login (OS autostart entry, applied via the autostart plugin).
+    pub autostart_enabled: bool,
     pub has_seen_onboarding: bool,
     pub ui_language: String,
     pub ui_theme: String,
@@ -250,6 +256,7 @@ impl Default for Config {
             account_email: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
+            autostart_enabled: false,
             has_seen_onboarding: false,
             ui_language: "de".to_string(),
             ui_theme: "dark".to_string(),
@@ -443,17 +450,46 @@ impl Config {
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
+        // Serialize all saves process-wide so concurrent writers (the main set_config
+        // + detached diarization/stats threads) can't interleave onto the temp file.
+        let _guard = SAVE_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = config_dir();
         fs::create_dir_all(&dir)?;
         let path = config_file();
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(&path, json)?;
-        // The config holds refresh tokens + BYO API keys — tighten to 0600 on
-        // POSIX so a shared-machine attacker can't grep it (Codex P2, Python parity).
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        // Per-process temp name: SAVE_LOCK only serializes within this process, but a
+        // racing second launch (before the single-instance guard exits it) is a
+        // separate process — it must not clobber a shared temp mid-rename.
+        let tmp = dir.join(format!("config.{}.tmp", std::process::id()));
+        // Atomic write: into a temp file, then rename over the target. fs::rename
+        // replaces atomically on POSIX and on Windows (MOVEFILE_REPLACE_EXISTING), so
+        // a crash mid-write can never leave a truncated config.json (which would drop
+        // the user's tokens + history). The config holds refresh tokens + BYO API
+        // keys, so on unix create the temp 0600 *before* the secrets land (not after,
+        // which left a brief world-readable window) and clean it up on any failure.
+        let write_then_rename = || -> std::io::Result<()> {
+            #[cfg(unix)]
+            {
+                use std::io::Write;
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut f = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(&tmp)?;
+                f.write_all(json.as_bytes())?;
+                f.sync_all()?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::write(&tmp, json.as_bytes())?;
+            }
+            fs::rename(&tmp, &path)
+        };
+        if let Err(e) = write_then_rename() {
+            let _ = fs::remove_file(&tmp); // never leave a token-bearing temp behind
+            return Err(e.into());
         }
         Ok(())
     }
