@@ -26,7 +26,14 @@ pub struct Capture {
 }
 
 enum Cmd {
-    Start { device: Option<String> },
+    /// Open + start the input stream. Replies Ok(()) once the stream is playing,
+    /// or Err(german message) if the mic couldn't be opened (no device / busy /
+    /// permission) — so the UI can surface a real error instead of pretending to
+    /// record into nothing.
+    Start {
+        device: Option<String>,
+        reply: Sender<Result<(), String>>,
+    },
     Stop(Sender<Capture>),
     /// Non-draining clone of the buffer so far (for live streaming).
     Snapshot(Sender<Capture>),
@@ -57,8 +64,25 @@ impl Recorder {
         }
     }
 
-    pub fn start(&self, device: Option<String>) {
-        let _ = self.tx.lock().send(Cmd::Start { device });
+    /// Start capture and wait for the worker to confirm the stream is live.
+    /// Returns a user-facing (German) error if the mic couldn't be opened so the
+    /// caller can emit an error state instead of a phantom "recording" state.
+    pub fn start(&self, device: Option<String>) -> Result<(), String> {
+        let (rtx, rrx) = channel();
+        if self
+            .tx
+            .lock()
+            .send(Cmd::Start { device, reply: rtx })
+            .is_err()
+        {
+            return Err("Audio-Subsystem nicht verfügbar.".into());
+        }
+        // Opening a WASAPI/ALSA device is normally well under a second; 5 s is a
+        // generous ceiling that still bounds a wedged backend.
+        match rrx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(r) => r,
+            Err(_) => Err("Mikrofon-Start hat nicht reagiert.".into()),
+        }
     }
 
     /// Stop and return the captured buffer (blocks until the worker replies).
@@ -104,8 +128,9 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
 
     while let Ok(cmd) = rx.recv() {
         match cmd {
-            Cmd::Start { device } => {
+            Cmd::Start { device, reply } => {
                 if active.is_some() {
+                    let _ = reply.send(Ok(())); // already recording (idempotent)
                     continue;
                 }
                 match build_stream(device, level.clone()) {
@@ -113,10 +138,19 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                         Ok(()) => {
                             recording.store(true, Ordering::Relaxed);
                             active = Some((stream, buf, sr));
+                            let _ = reply.send(Ok(()));
                         }
-                        Err(e) => log::error!("recorder: stream.play failed: {e}"),
+                        Err(e) => {
+                            log::error!("recorder: stream.play failed: {e}");
+                            let _ = reply.send(Err(format!(
+                                "Mikrofon konnte nicht gestartet werden (evtl. von einer anderen App belegt): {e}"
+                            )));
+                        }
                     },
-                    Err(e) => log::error!("recorder: start failed: {e}"),
+                    Err(e) => {
+                        log::error!("recorder: start failed: {e}");
+                        let _ = reply.send(Err(friendly_mic_error(&e)));
+                    }
                 }
             }
             Cmd::Snapshot(reply) => {
@@ -153,6 +187,21 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                 }
             }
         }
+    }
+}
+
+/// Map a cpal/device error to a short, user-facing German message. The raw error
+/// is logged separately; this is what the UI shows.
+fn friendly_mic_error(e: &anyhow::Error) -> String {
+    let s = e.to_string().to_lowercase();
+    if s.contains("no input device") || s.contains("no default input device") {
+        "Kein Mikrofon gefunden. Bitte ein Mikrofon anschließen und erneut versuchen.".into()
+    } else if s.contains("denied") || s.contains("permission") || s.contains("access") {
+        "Mikrofon-Zugriff verweigert. Bitte die Mikrofon-Berechtigung erlauben.".into()
+    } else if s.contains("not available") || s.contains("in use") || s.contains("busy") {
+        "Mikrofon nicht verfügbar (evtl. von einer anderen App belegt).".into()
+    } else {
+        format!("Mikrofon konnte nicht geöffnet werden: {e}")
     }
 }
 

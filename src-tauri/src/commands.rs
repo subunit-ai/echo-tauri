@@ -57,9 +57,18 @@ pub fn do_start(app: &AppHandle) {
     if lock || live {
         *state.target.lock() = Some(crate::inject::capture_active_window());
     }
-    state
+    // Wait for the recorder to actually open the mic. A failure here (no device /
+    // busy / permission) must surface as an error — never a phantom "recording"
+    // state where the user talks into nothing.
+    if let Err(msg) = state
         .recorder
-        .start(if dev.is_empty() { None } else { Some(dev) });
+        .start(if dev.is_empty() { None } else { Some(dev) })
+    {
+        log::warn!("do_start: mic start failed: {msg}");
+        *state.target.lock() = None;
+        emit_state(app, EngineState::Error, Some(msg));
+        return;
+    }
     emit_state(app, EngineState::Recording, None);
 
     if live {
