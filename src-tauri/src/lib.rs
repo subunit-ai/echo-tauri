@@ -42,6 +42,16 @@ pub fn run() {
     let cfg = config::Config::load();
 
     tauri::Builder::default()
+        // Single-instance guard FIRST: a second launch must not spawn a rival
+        // process fighting over the global hotkey / tray / config file. Instead it
+        // hands focus to the already-running window and exits.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(
             // File + stdout logging. The file lands in the OS log dir
             // (Win: %LOCALAPPDATA%\ai.subunit.echo\logs\echo.log) so it can be pulled
@@ -71,6 +81,18 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::new(cfg))
+        // Closing the main window hides it to the tray instead of quitting — Echo
+        // is a background hotkey daemon; an accidental X must not kill the hotkey.
+        // Real quit is the tray's "Beenden" (app.exit). Only the main window; the
+        // overlay manages its own lifecycle.
+        .on_window_event(|window, event| {
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::set_config,
