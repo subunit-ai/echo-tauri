@@ -42,13 +42,15 @@ function Shell() {
       <UpdatePrompt />
       <Header />
       <Sidebar active={section} onSelect={setSection} />
-      <main className="content">
-        {section === "home" && <Home />}
-        {section === "history" && <History />}
-        {section === "settings" && <Settings />}
-        {section === "meetings" && <Meetings />}
-        {section === "vocabulary" && <Vocabulary />}
-        {section === "help" && <Placeholder title={t("app.help")} />}
+      <main className="content" key={section}>
+        <div className="page-animate">
+          {section === "home" && <Home />}
+          {section === "history" && <History />}
+          {section === "settings" && <Settings />}
+          {section === "meetings" && <Meetings />}
+          {section === "vocabulary" && <Vocabulary />}
+          {section === "help" && <Placeholder title={t("app.help")} />}
+        </div>
       </main>
     </div>
   );

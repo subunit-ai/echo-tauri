@@ -37,6 +37,8 @@
     "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1); /* OutCubic-ish */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy spring-like */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 
   color-scheme: dark;
 }
