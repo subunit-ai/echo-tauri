@@ -30,7 +30,9 @@ fn cleanup(cfg: &Config, text: &str, style: &str) -> anyhow::Result<String> {
     // Derive the cleanup endpoint from the (configurable) transcribe endpoint.
     // Match the FULL "/v1/transcribe" segment — a bare "/transcribe" also occurs
     // in the host (transcribe.subunit.ai) and str::replace would corrupt it.
-    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/cleanup");
+    let url = cfg
+        .subunit_endpoint
+        .replace("/v1/transcribe", "/v1/cleanup");
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()?;

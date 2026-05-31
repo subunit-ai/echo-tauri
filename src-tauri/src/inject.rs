@@ -84,7 +84,10 @@ pub fn capture_active_window() -> Target {
                         .filter(|o| o.status.success())
                         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
                         .unwrap_or_default();
-                    log::debug!("capture: linux target id={id} title=\"{}\"", short_title(&title));
+                    log::debug!(
+                        "capture: linux target id={id} title=\"{}\"",
+                        short_title(&title)
+                    );
                     return Target { id, title };
                 }
             }
@@ -105,7 +108,10 @@ pub fn capture_active_window() -> Target {
                     String::new()
                 };
                 let id = (hwnd.0 as isize).to_string();
-                log::debug!("capture: win target hwnd={id} title=\"{}\"", short_title(&title));
+                log::debug!(
+                    "capture: win target hwnd={id} title=\"{}\"",
+                    short_title(&title)
+                );
                 // Encode the HWND pointer as a decimal string so Target stays Send.
                 return Target { id, title };
             }
@@ -139,7 +145,11 @@ fn focus(target: &Target) {
         if let Ok(raw) = target.id.parse::<isize>() {
             let hwnd = HWND(raw as *mut core::ffi::c_void);
             let ok = unsafe { SetForegroundWindow(hwnd) };
-            log::debug!("focus: win SetForegroundWindow hwnd={} ok={}", target.id, ok.as_bool());
+            log::debug!(
+                "focus: win SetForegroundWindow hwnd={} ok={}",
+                target.id,
+                ok.as_bool()
+            );
             std::thread::sleep(std::time::Duration::from_millis(40));
         } else {
             log::warn!("focus: unparseable target id={}", target.id);
@@ -184,7 +194,11 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
         return Ok(());
     }
     let t0 = Instant::now();
-    let method = if cfg.instant_live_typing { "live-type" } else { "instant-paste" };
+    let method = if cfg.instant_live_typing {
+        "live-type"
+    } else {
+        "instant-paste"
+    };
     log::info!(
         "deliver: method={method} autopaste={} target_lock={} {}",
         cfg.autopaste,
@@ -196,7 +210,10 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
     log::debug!("deliver: clipboard set (+{:?})", t0.elapsed());
 
     if !cfg.autopaste {
-        log::info!("deliver: autopaste off — clipboard only (+{:?})", t0.elapsed());
+        log::info!(
+            "deliver: autopaste off — clipboard only (+{:?})",
+            t0.elapsed()
+        );
         return Ok(());
     }
 
@@ -271,7 +288,11 @@ pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::R
     if text.trim().is_empty() {
         return Ok(());
     }
-    log::debug!("type_live: {} target_lock={}", text_stats(text), cfg.target_lock);
+    log::debug!(
+        "type_live: {} target_lock={}",
+        text_stats(text),
+        cfg.target_lock
+    );
     if cfg.target_lock {
         if let Some(t) = target {
             focus(t);
@@ -291,9 +312,7 @@ pub fn type_text(text: &str) -> anyhow::Result<()> {
     let mut enigo =
         Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
     log::debug!("type_text: typing {} via Unicode", text_stats(text));
-    enigo
-        .text(text)
-        .map_err(|e| anyhow::anyhow!("type: {e}"))?;
+    enigo.text(text).map_err(|e| anyhow::anyhow!("type: {e}"))?;
     log::info!("type_text: done (+{:?})", t0.elapsed());
     Ok(())
 }
@@ -316,7 +335,11 @@ mod win {
                 ki: KEYBDINPUT {
                     wVk: key,
                     wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        KEYBD_EVENT_FLAGS(0)
+                    },
                     time: 0,
                     dwExtraInfo: 0,
                 },

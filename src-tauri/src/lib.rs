@@ -1,7 +1,7 @@
 //! Echo — Tauri backend entrypoint.
 
 mod auth;
-mod auto_mode;
+pub mod auto_mode;
 mod cleanup;
 mod commands;
 mod config;
@@ -14,9 +14,9 @@ mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
 mod meet;
 mod models;
-mod synapse;
 mod overlay;
 mod recorder;
+mod synapse;
 mod transcribe;
 
 use commands::AppState;
@@ -170,8 +170,8 @@ pub fn run() {
                 .separator()
                 .item(&quit)
                 .build()?;
-            let mut tray = TrayIconBuilder::with_id("tray").menu(&menu).on_menu_event(|app, event| {
-                match event.id().as_ref() {
+            let mut tray = TrayIconBuilder::with_id("tray").menu(&menu).on_menu_event(
+                |app, event| match event.id().as_ref() {
                     "open" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -191,8 +191,8 @@ pub fn run() {
                     }
                     "quit" => app.exit(0),
                     _ => {}
-                }
-            });
+                },
+            );
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone());
             }

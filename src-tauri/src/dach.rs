@@ -62,15 +62,31 @@ fn parse_german_compound(word: &str) -> Option<i64> {
     if let Some(idx) = w.find("tausend") {
         let left = &w[..idx];
         let right = &w[idx + "tausend".len()..];
-        let left_n = if left.is_empty() { 1 } else { parse_german_compound(left)? };
-        let right_n = if right.is_empty() { 0 } else { parse_german_compound(right)? };
+        let left_n = if left.is_empty() {
+            1
+        } else {
+            parse_german_compound(left)?
+        };
+        let right_n = if right.is_empty() {
+            0
+        } else {
+            parse_german_compound(right)?
+        };
         return Some(left_n * 1000 + right_n);
     }
     if let Some(idx) = w.find("hundert") {
         let left = &w[..idx];
         let right = &w[idx + "hundert".len()..];
-        let left_n = if left.is_empty() { 1 } else { parse_german_compound(left)? };
-        let right_n = if right.is_empty() { 0 } else { parse_german_compound(right)? };
+        let left_n = if left.is_empty() {
+            1
+        } else {
+            parse_german_compound(left)?
+        };
+        let right_n = if right.is_empty() {
+            0
+        } else {
+            parse_german_compound(right)?
+        };
         return Some(left_n * 100 + right_n);
     }
     // "einundzwanzig" → <ones>und<tens>
@@ -251,7 +267,10 @@ mod tests {
     fn conservative() {
         // bare scale word + running prose must be left alone
         assert_eq!(dach_format("der Euro fällt"), "der Euro fällt");
-        assert_eq!(dach_format("Aktien für tausend Euro"), "Aktien für tausend Euro");
+        assert_eq!(
+            dach_format("Aktien für tausend Euro"),
+            "Aktien für tausend Euro"
+        );
     }
 
     #[test]

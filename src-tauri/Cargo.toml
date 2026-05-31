@@ -88,3 +88,10 @@ local-whisper = ["dep:whisper-rs"]
 # CPU fallback, binary still loads without a GPU — unlike CUDA). Needs the
 # Vulkan SDK + glslc at build time.
 local-whisper-gpu = ["local-whisper", "whisper-rs/vulkan"]
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "auto_mode_bench"
+harness = false
