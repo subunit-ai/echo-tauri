@@ -267,7 +267,10 @@ fn build_stream(
             device.build_input_stream(
                 &config,
                 move |data: &[u16], _| {
-                    let f: Vec<f32> = data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0).collect();
+                    let f: Vec<f32> = data
+                        .iter()
+                        .map(|s| (*s as f32 - 32768.0) / 32768.0)
+                        .collect();
                     ingest(&f, channels, max_samples, &b, &l);
                 },
                 err_fn,

@@ -73,14 +73,47 @@ fn default_vocabulary() -> Vec<VocabEntry> {
     vec![
         // Brand / product names
         v("Echo", "Echo", &["Eko", "Ecko", "Echo."], "Company"),
-        v("Sub-Unit", "Subunit", &["Subunit.", "Sub unit", "Subnit", "Subunit AI", "Sabjunit", "Sub Unit", "Zunder"], "Company"),
+        v(
+            "Sub-Unit",
+            "Subunit",
+            &[
+                "Subunit.",
+                "Sub unit",
+                "Subnit",
+                "Subunit AI",
+                "Sabjunit",
+                "Sub Unit",
+                "Zunder",
+            ],
+            "Company",
+        ),
         v("Synaps", "Synapse", &["Synaps."], "Company"),
         v("Es-Enn-I", "SNI", &["S N I"], "Tech"),
-        v("Higgs Field", "Higgsfield", &["Higs Field", "Higsfield"], "Company"),
+        v(
+            "Higgs Field",
+            "Higgsfield",
+            &["Higs Field", "Higsfield"],
+            "Company",
+        ),
         // Tech terms Whisper consistently mangles in German
-        v("Instant", "Instant", &["Inzin", "Insent", "Instent", "Instand"], "Tech"),
-        v("transkrivieren", "transkribieren", &["transkriebieren", "transkrieben", "transkrivieren"], "Tech"),
-        v("transkriviert", "transkribiert", &["transkrieviert", "transkriebiert"], "Tech"),
+        v(
+            "Instant",
+            "Instant",
+            &["Inzin", "Insent", "Instent", "Instand"],
+            "Tech",
+        ),
+        v(
+            "transkrivieren",
+            "transkribieren",
+            &["transkriebieren", "transkrieben", "transkrivieren"],
+            "Tech",
+        ),
+        v(
+            "transkriviert",
+            "transkribiert",
+            &["transkrieviert", "transkriebiert"],
+            "Tech",
+        ),
         v("Whisper", "Whisper", &["Wisper", "Visper"], "Tech"),
         v("Klaud", "Claude", &["Klod", "Klode"], "Tech"),
         v("Antropik", "Anthropic", &["Antrobik"], "Company"),
@@ -93,7 +126,12 @@ fn default_vocabulary() -> Vec<VocabEntry> {
         // subunit stack, tools + recurring terms (TJ-curated 2026-05-28)
         v("Synkor", "Syncore", &["Cincore", "Syncor"], "Company"),
         v("Zitron", "Citron", &["Sitron"], "Company"),
-        v("Klod Koud", "Claude Code", &["Cloud Code", "Glode Code"], "Tech"),
+        v(
+            "Klod Koud",
+            "Claude Code",
+            &["Cloud Code", "Glode Code"],
+            "Tech",
+        ),
         v("Open Claw", "OpenClaw", &["Open Klo", "Openclor"], "Tech"),
         v("Olama", "Ollama", &["Oh Lama"], "Tech"),
         v("Körser", "Cursor", &["Curser"], "Tech"),
@@ -359,6 +397,13 @@ impl Config {
             // v0.9.14: auto's instant/fast tiers degraded German accuracy.
             self.cloud_quality_mode = "quality".to_string();
         }
+
+        let mut lowercased_overrides = HashMap::new();
+        for (k, v) in self.auto_mode_overrides.drain() {
+            lowercased_overrides.insert(k.to_lowercase(), v);
+        }
+        self.auto_mode_overrides = lowercased_overrides;
+
         self.route_default_engine();
     }
 

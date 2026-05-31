@@ -16,8 +16,16 @@ pub const MODELS: &[(&str, &str, &str)] = &[
     ("base", "ggml-base.bin", "Base · ~150 MB · schnell"),
     ("small", "ggml-small.bin", "Small · ~500 MB"),
     ("medium", "ggml-medium.bin", "Medium · ~1,5 GB"),
-    ("large-v3-turbo", "ggml-large-v3-turbo.bin", "Large v3 Turbo · ~1,6 GB · beste Balance"),
-    ("large-v3", "ggml-large-v3.bin", "Large v3 · ~3 GB · höchste Qualität"),
+    (
+        "large-v3-turbo",
+        "ggml-large-v3-turbo.bin",
+        "Large v3 Turbo · ~1,6 GB · beste Balance",
+    ),
+    (
+        "large-v3",
+        "ggml-large-v3.bin",
+        "Large v3 · ~3 GB · höchste Qualität",
+    ),
 ];
 
 #[derive(Serialize)]
@@ -89,7 +97,11 @@ fn fetch(model: &str, app: Option<&AppHandle>) -> anyhow::Result<PathBuf> {
     let dir = models_dir();
     fs::create_dir_all(&dir)?;
     let path = dir.join(file);
-    if path.exists() && fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
+    if path.exists()
+        && fs::metadata(&path)
+            .map(|m| m.len() > 1_000_000)
+            .unwrap_or(false)
+    {
         return Ok(path);
     }
     let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file}");

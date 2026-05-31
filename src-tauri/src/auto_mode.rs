@@ -10,36 +10,92 @@ const CURATED: &[(&[&str], &str)] = &[
     // AI chats, code editors, terminals → structured prompt rewrite
     (
         &[
-            "claude", "chatgpt", "chat.openai", "openai", "gemini", "perplexity", "copilot",
-            "cursor", "vs code", "vscode", "vscodium", "visual studio code", "jetbrains",
-            "intellij", "pycharm", "webstorm", "goland", "rubymine", "clion", "rider",
-            "phpstorm", "datagrip", "sublime text", "zed", "neovim", "nvim", "terminal",
-            "iterm", "konsole", "alacritty", "kitty", "hyper", "powershell",
-            "eingabeaufforderung", "cmd.exe",
+            "claude",
+            "chatgpt",
+            "chat.openai",
+            "openai",
+            "gemini",
+            "perplexity",
+            "copilot",
+            "cursor",
+            "vs code",
+            "vscode",
+            "vscodium",
+            "visual studio code",
+            "jetbrains",
+            "intellij",
+            "pycharm",
+            "webstorm",
+            "goland",
+            "rubymine",
+            "clion",
+            "rider",
+            "phpstorm",
+            "datagrip",
+            "sublime text",
+            "zed",
+            "neovim",
+            "nvim",
+            "terminal",
+            "iterm",
+            "konsole",
+            "alacritty",
+            "kitty",
+            "hyper",
+            "powershell",
+            "eingabeaufforderung",
+            "cmd.exe",
         ],
         "prompt",
     ),
     // Mail clients → polite email body
     (
         &[
-            "gmail", "outlook", "apple mail", "mail —", "posteingang", "thunderbird",
-            "spark mail", "protonmail", "proton.me", "fastmail", "hey.com", "superhuman",
+            "gmail",
+            "outlook",
+            "apple mail",
+            "mail —",
+            "posteingang",
+            "thunderbird",
+            "spark mail",
+            "protonmail",
+            "proton.me",
+            "fastmail",
+            "hey.com",
+            "superhuman",
         ],
         "email",
     ),
     // Chat apps → short casual message
     (
         &[
-            "slack", "discord", "telegram", "whatsapp", "microsoft teams", "teams.microsoft",
-            "signal", "imessage", "messages —", "mattermost", "rocket.chat",
+            "slack",
+            "discord",
+            "telegram",
+            "whatsapp",
+            "microsoft teams",
+            "teams.microsoft",
+            "signal",
+            "imessage",
+            "messages —",
+            "mattermost",
+            "rocket.chat",
         ],
         "slack",
     ),
     // Documents / business writing → formal tone
     (
         &[
-            "word", ".docx", "libreoffice writer", "openoffice writer", "google docs",
-            "docs.google", "notion", "pages", "confluence", "obsidian",
+            "word",
+            ".docx",
+            "libreoffice writer",
+            "openoffice writer",
+            "google docs",
+            "docs.google",
+            "notion",
+            "pages",
+            "confluence",
+            "obsidian",
         ],
         "formal",
     ),
@@ -48,7 +104,7 @@ const CURATED: &[(&[&str], &str)] = &[
 pub fn pick_style(title: &str, overrides: &HashMap<String, String>, default: &str) -> String {
     let t = title.to_lowercase();
     for (sub, style) in overrides {
-        if !sub.is_empty() && t.contains(&sub.to_lowercase()) {
+        if !sub.is_empty() && t.contains(sub) {
             return style.clone();
         }
     }
