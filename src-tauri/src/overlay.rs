@@ -41,7 +41,9 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 }
                 break;
             }
-            let win = win.unwrap();
+            let Some(win) = win else {
+                break;
+            };
             let inside = match (
                 app.cursor_position(),
                 win.outer_position(),
@@ -75,7 +77,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let (size_mult, position, orb_mode) = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
-        (c.orb_overlay_size as f64, c.orb_position.clone(), c.use_orb_overlay)
+        (
+            c.orb_overlay_size as f64,
+            c.orb_position.clone(),
+            c.use_orb_overlay,
+        )
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
 

@@ -222,7 +222,10 @@ fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
     }
     Ok((
         access,
-        j.get("refresh_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        j.get("refresh_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         j.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
     ))
 }

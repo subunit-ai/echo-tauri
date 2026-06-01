@@ -24,7 +24,9 @@ pub fn detect() -> HardwareInfo {
     let mut sys = System::new();
     sys.refresh_memory();
     let ram_gb = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
-    let cpu_cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let cpu_cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
     let gpu_build = cfg!(feature = "local-whisper-gpu");
 
     // GPU build → best balance; else size the model to available RAM.
@@ -43,7 +45,11 @@ pub fn detect() -> HardwareInfo {
     if ram_gb > 0.0 {
         parts.push(format!("{ram_gb:.0} GB RAM"));
     }
-    parts.push(if gpu_build { "GPU-Build".into() } else { "nur CPU".into() });
+    parts.push(if gpu_build {
+        "GPU-Build".into()
+    } else {
+        "nur CPU".into()
+    });
 
     HardwareInfo {
         summary: parts.join(" · "),

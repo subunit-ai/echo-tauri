@@ -27,14 +27,19 @@ pub fn run(
     let model = cfg.local_model.clone();
     let path = crate::models::ensure_blocking(&model)?;
 
-    let mut guard = CTX.lock().map_err(|_| anyhow::anyhow!("whisper context mutex poisoned"))?;
+    let mut guard = CTX
+        .lock()
+        .map_err(|_| anyhow::anyhow!("whisper context mutex poisoned"))?;
     let reload = guard.as_ref().map(|(m, _)| m != &model).unwrap_or(true);
     if reload {
         let ctx = WhisperContext::new_with_params(&path, WhisperContextParameters::default())
             .map_err(|e| anyhow::anyhow!("whisper load: {e}"))?;
         *guard = Some((model.clone(), ctx));
     }
-    let ctx = &guard.as_ref().ok_or_else(|| anyhow::anyhow!("whisper context not initialized"))?.1;
+    let ctx = &guard
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("whisper context not initialized"))?
+        .1;
     let mut state = ctx
         .create_state()
         .map_err(|e| anyhow::anyhow!("whisper state: {e}"))?;
