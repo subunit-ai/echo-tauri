@@ -5,16 +5,15 @@
 //! we overlap-merge here against the Whisper [`Segment`]s and format a
 //! speaker-tagged transcript. Best-effort: returns None on any failure.
 
-use std::fmt::Write;
 use std::time::Duration;
 
 use crate::config::Config;
 use crate::transcribe::Segment;
 
-pub struct SpeakerSpan {
-    pub start_s: f64,
-    pub end_s: f64,
-    pub speaker: String,
+struct SpeakerSpan {
+    start_s: f64,
+    end_s: f64,
+    speaker: String,
 }
 
 /// POST the WAV to /v1/diarize and return the speaker spans (None on any error).
@@ -92,7 +91,7 @@ fn merge(transcript: &[Segment], speakers: &[SpeakerSpan]) -> String {
             if cur_speaker.is_some() {
                 out.push_str("\n\n");
             }
-            let _ = write!(&mut out, "{}: ", label(&sp));
+            out.push_str(&format!("{}: ", label(&sp)));
             cur_speaker = Some(sp);
         } else {
             out.push(' ');
@@ -113,7 +112,11 @@ fn label(raw: &str) -> String {
 
 /// Full flow: diarize the WAV + merge with the transcript segments → a
 /// speaker-tagged transcript, or None if diarization wasn't possible.
-pub fn speaker_transcript(cfg: &Config, wav: Vec<u8>, transcript: &[Segment]) -> Option<String> {
+pub fn speaker_transcript(
+    cfg: &Config,
+    wav: Vec<u8>,
+    transcript: &[Segment],
+) -> Option<String> {
     if transcript.is_empty() {
         return None;
     }
