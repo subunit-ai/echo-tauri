@@ -80,8 +80,59 @@ pub fn ensure_blocking(model: &str) -> anyhow::Result<PathBuf> {
 }
 
 /// Download with progress events (`echo://model-progress`) for the UI.
-pub fn download(app: &AppHandle, model: &str) -> anyhow::Result<()> {
-    fetch(model, Some(app)).map(|_| ())
+pub async fn download(app: &AppHandle, model: &str) -> anyhow::Result<()> {
+    fetch_async(model, Some(app)).await.map(|_| ())
+}
+
+async fn fetch_async(model: &str, app: Option<&AppHandle>) -> anyhow::Result<PathBuf> {
+    let file = filename(model);
+    let dir = models_dir();
+    tokio::fs::create_dir_all(&dir).await?;
+    let path = dir.join(file);
+    if path.exists() && tokio::fs::metadata(&path).await.map(|m| m.len() > 1_000_000).unwrap_or(false) {
+        return Ok(path);
+    }
+    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file}");
+    let tmp = path.with_extension("part");
+    let _ = tokio::fs::remove_file(&tmp).await;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3600))
+        .build()?;
+    let mut resp = client.get(&url).header("User-Agent", "Echo/0.1").send().await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("download {}", resp.status());
+    }
+    let total = resp.content_length().unwrap_or(0);
+    let mut f = tokio::fs::File::create(&tmp).await?;
+    let mut received: u64 = 0;
+    let mut last = Instant::now();
+
+    use tokio::io::AsyncWriteExt;
+    while let Some(chunk) = resp.chunk().await? {
+        f.write_all(&chunk).await?;
+        received += chunk.len() as u64;
+        if let Some(a) = app {
+            if last.elapsed().as_millis() > 200 {
+                let _ = a.emit(
+                    "echo://model-progress",
+                    serde_json::json!({"model": model, "received": received, "total": total}),
+                );
+                last = Instant::now();
+            }
+        }
+    }
+    f.flush().await?;
+    let tmp_verify = tmp.clone();
+    tokio::task::spawn_blocking(move || verify(&tmp_verify)).await??;
+    tokio::fs::rename(&tmp, &path).await?;
+    if let Some(a) = app {
+        let _ = a.emit(
+            "echo://model-progress",
+            serde_json::json!({"model": model, "received": received, "total": total, "done": true}),
+        );
+    }
+    Ok(path)
 }
 
 fn fetch(model: &str, app: Option<&AppHandle>) -> anyhow::Result<PathBuf> {

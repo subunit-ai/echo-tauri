@@ -52,9 +52,9 @@ rand = "0.8"
 base64 = "0.22"
 # HTTP client (rustls — no OpenSSL link, avoids the Win-ARM `requests`/urllib3
 # WSAEACCES class of bugs that plagued the Python build).
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json", "blocking", "stream"] }
 # WebSocket client for LIVE streaming dictation (live-transcribe.subunit.ai → WhisperLive).
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync", "fs"] }
 tokio-tungstenite = { version = "0.23", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 # Hardware probe (RAM/cores) for the recommended local-model hint.
