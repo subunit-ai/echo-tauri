@@ -1,6 +1,8 @@
 //! Auto-Mode: pick the cleanup style from the active window title (port of
 //! auto_mode.py). User overrides (substring → style) win over the curated map.
 
+use once_cell::sync::Lazy;
+use regex::RegexSet;
 use std::collections::HashMap;
 
 // Curated window-title → style map (substring match on the lowercased title;
@@ -45,6 +47,16 @@ const CURATED: &[(&[&str], &str)] = &[
     ),
 ];
 
+static CURATED_REGEX_SET: Lazy<RegexSet> = Lazy::new(|| {
+    let patterns = CURATED.iter().map(|(subs, _)| {
+        subs.iter()
+            .map(|s| regex::escape(s))
+            .collect::<Vec<_>>()
+            .join("|")
+    });
+    RegexSet::new(patterns).expect("Failed to compile CURATED_REGEX_SET")
+});
+
 pub fn pick_style(title: &str, overrides: &HashMap<String, String>, default: &str) -> String {
     let t = title.to_lowercase();
     for (sub, style) in overrides {
@@ -52,10 +64,52 @@ pub fn pick_style(title: &str, overrides: &HashMap<String, String>, default: &st
             return style.clone();
         }
     }
-    for (subs, style) in CURATED {
-        if subs.iter().any(|s| t.contains(s)) {
-            return style.to_string();
-        }
+
+    if let Some(matches) = CURATED_REGEX_SET.matches(&t).into_iter().next() {
+        return CURATED[matches].1.to_string();
     }
+
     default.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn test_pick_style() {
+        let mut overrides = HashMap::new();
+        overrides.insert("my-custom-app".to_string(), "custom_style".to_string());
+
+        assert_eq!(pick_style("Some my-custom-app Window", &overrides, "default"), "custom_style");
+        assert_eq!(pick_style("chatgpt", &HashMap::new(), "default"), "prompt");
+        assert_eq!(pick_style("Gmail - Inbox", &HashMap::new(), "default"), "email");
+        assert_eq!(pick_style("Slack | random", &HashMap::new(), "default"), "slack");
+        assert_eq!(pick_style("My cool document.docx - Word", &HashMap::new(), "default"), "formal");
+        assert_eq!(pick_style("Unknown App", &HashMap::new(), "default"), "default");
+    }
+
+    #[test]
+    fn bench_pick_style() {
+        let overrides = HashMap::new();
+        let titles = vec![
+            "Some my-custom-app Window",
+            "chatgpt",
+            "Gmail - Inbox",
+            "Slack | random",
+            "My cool document.docx - Word",
+            "Unknown App",
+            "A very long window title that does not match anything in the curated list but we need to check everything",
+        ];
+
+        let start = Instant::now();
+        for _ in 0..100_000 {
+            for title in &titles {
+                std::hint::black_box(pick_style(title, &overrides, "default"));
+            }
+        }
+        let duration = start.elapsed();
+        println!("Benchmark duration: {:?}", duration);
+    }
 }
