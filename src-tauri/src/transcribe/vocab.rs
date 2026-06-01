@@ -48,40 +48,45 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
     // Longest pattern first (by char count, so multi-word/punctuated win).
     pairs.sort_by_key(|(p, _)| std::cmp::Reverse(p.chars().count()));
 
+    // Instead of an external crate like `lru` or a static cache, we just use a small
+    // thread-local HashMap to cache the compiled patterns since the vocabulary list
+    // changes very rarely.
     thread_local! {
-        // Use a small bounded cache to prevent unbounded memory growth if the config changes often.
-        // 512 is plenty for a typical user vocabulary.
-        static REGEX_CACHE: std::cell::RefCell<lru::LruCache<String, Regex>> =
-            std::cell::RefCell::new(lru::LruCache::new(std::num::NonZeroUsize::new(512).unwrap()));
+        static REGEX_CACHE: std::cell::RefCell<std::collections::HashMap<String, Regex>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
     }
 
     let mut out = text.to_string();
     REGEX_CACHE.with(|cache| {
         let mut cache_mut = cache.borrow_mut();
+
+        // Prevent unbounded memory growth if the user is wildly adding terms over weeks
+        // without restarting, though normally this is bounded by their vocabulary size.
+        if cache_mut.len() > 1024 {
+            cache_mut.clear();
+        }
+
         for (p, target) in pairs {
             // Whole-token, case-insensitive, with boundaries CAPTURED (the regex
             // crate has no lookaround). Handles patterns ending in punctuation
             // ("Echo.", "M.C.P.", "T.J.") that a plain \b…\b would miss.
             let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
 
-            let re = if let Some(r) = cache_mut.get(&pat) {
-                r.clone()
-            } else {
-                // regex::escape guarantees the pattern is valid, so this should never fail.
-                #[allow(clippy::regex_creation_in_loops)]
-                if let Ok(r) = Regex::new(&pat) {
-                    cache_mut.put(pat, r.clone());
+            // regex::escape guarantees the pattern is valid, so Ok is effectively guaranteed.
+            #[allow(clippy::regex_creation_in_loops)]
+            if let Some(re) = cache_mut.get(&pat).cloned().or_else(|| {
+                #[allow(clippy::manual_inspect)]
+                Regex::new(&pat).ok().map(|r| {
+                    cache_mut.insert(pat, r.clone());
                     r
-                } else {
-                    continue; // Skip invalid patterns instead of panicking
-                }
-            };
-
-            out = re
-                .replace_all(&out, |caps: &regex::Captures| {
-                    format!("{}{}{}", &caps[1], target, &caps[2])
                 })
-                .into_owned();
+            }) {
+                out = re
+                    .replace_all(&out, |caps: &regex::Captures| {
+                        format!("{}{}{}", &caps[1], target, &caps[2])
+                    })
+                    .into_owned();
+            }
         }
     });
     out
