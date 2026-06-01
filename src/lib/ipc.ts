@@ -172,6 +172,10 @@ export interface TranscriptPayload {
 
 export const onState = (cb: (p: StatePayload) => void): Promise<UnlistenFn> =>
   listen<StatePayload>("echo://state", (e) => cb(e.payload));
+/** Emitted by Rust when the config changed from outside the main window (e.g. an
+ *  orb-satellite cycle or a drag) — the main window should reload to stay in sync. */
+export const onConfigChanged = (cb: () => void): Promise<UnlistenFn> =>
+  listen("echo://config-changed", () => cb());
 export const onLevel = (cb: (p: LevelPayload) => void): Promise<UnlistenFn> =>
   listen<LevelPayload>("echo://mic-level", (e) => cb(e.payload));
 export const onTranscript = (
