@@ -173,7 +173,10 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         text = crate::cleanup::maybe_cleanup(&cfg, &text, &style);
     }
     if cfg.dach_format_enabled {
-        text = crate::dach::dach_format(&text);
+        match crate::dach::dach_format(&text) {
+            Ok(formatted) => text = formatted,
+            Err(e) => log::error!("DACH formatting failed: {}", e),
+        }
     }
     let result = TranscriptResult {
         text,

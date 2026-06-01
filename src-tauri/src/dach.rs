@@ -130,13 +130,12 @@ fn multiply_phrase(words: &[&str]) -> Option<i64> {
 // A number (digit literal OR 1–4 German number words) directly before a
 // currency word. `\b` keeps the boundary zero-width so adjacent amounts both
 // match. The regex crate's `\w`/`\b` are Unicode-aware (umlauts count).
-static CURRENCY: Lazy<Regex> = Lazy::new(|| {
+static CURRENCY: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| {
     Regex::new(
         r"(?i)\b(\d+(?:[.,]\d+)?|[a-zäöüß]+(?:\s+[a-zäöüß]+){0,3})\s+(Euro|Cent|CHF|Franken)\b",
     )
-    .expect("invalid CURRENCY regex pattern")
 });
-static DIGIT_ONLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").expect("invalid DIGIT_ONLY regex pattern"));
+static DIGIT_ONLY: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$"));
 
 /// Scale words that must never stand alone as "the number" — "tausend Euro" is
 /// too ambiguous (e.g. "Aktien für tausend Euro") so we leave it untouched.
@@ -147,13 +146,13 @@ fn is_scale_only(w: &str) -> bool {
     )
 }
 
-fn format_currency(caps: &Captures) -> String {
+fn format_currency(caps: &Captures, digit_only: &Regex) -> String {
     let whole = caps[0].to_string();
     let raw = caps[1].trim();
     let unit = &caps[2];
     let unit_lower = unit.to_lowercase();
 
-    let n_str = if DIGIT_ONLY.is_match(raw) {
+    let n_str = if digit_only.is_match(raw) {
         raw.to_string()
     } else {
         let words: Vec<&str> = raw.split_whitespace().collect();
@@ -183,7 +182,7 @@ fn format_currency(caps: &Captures) -> String {
     format!("{n_str}{suffix}")
 }
 
-static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+static ABBREVIATIONS: Lazy<Result<Vec<(Regex, &'static str)>, regex::Error>> = Lazy::new(|| {
     [
         (r"(?i)\bz\.\s*B\.", "z. B."),
         (r"(?i)\bd\.\s*h\.", "d. h."),
@@ -201,31 +200,45 @@ static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         (r"(?i)\bevtl\.", "evtl."),
     ]
     .into_iter()
-    .map(|(p, r)| (Regex::new(p).expect("invalid ABBREVIATIONS regex pattern"), r))
+    .map(|(p, r)| Regex::new(p).map(|re| (re, r)))
     .collect()
 });
 
-static PUNCT_BEFORE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])").expect("invalid PUNCT_BEFORE regex pattern"));
+static PUNCT_BEFORE: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])"));
 // Lookahead-free port of `([,;:!?])(?=[^\s\d])`: capture + re-emit the next char.
-static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").expect("invalid PUNCT_AFTER regex pattern"));
-static MULTISPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").expect("invalid MULTISPACE regex pattern"));
-static QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").expect("invalid QUOTES regex pattern"));
+static PUNCT_AFTER: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])"));
+static MULTISPACE: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| Regex::new(r" {2,}"));
+static QUOTES: Lazy<Result<Regex, regex::Error>> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\""));
 
 /// Apply the full DACH pipeline. Order matters: currency first (expects
 /// unmangled number words), then abbreviations, punctuation, finally quotes.
-pub fn dach_format(text: &str) -> String {
+pub fn dach_format(text: &str) -> Result<String, regex::Error> {
     if text.is_empty() {
-        return String::new();
+        return Ok(String::new());
     }
-    let mut s = CURRENCY.replace_all(text, format_currency).into_owned();
-    for (re, repl) in ABBREVIATIONS.iter() {
+
+    let currency_re = CURRENCY.as_ref().map_err(|e| e.clone())?;
+    let digit_only_re = DIGIT_ONLY.as_ref().map_err(|e| e.clone())?;
+    let mut s = currency_re.replace_all(text, |caps: &regex::Captures| format_currency(caps, digit_only_re)).into_owned();
+
+    let abbreviations = ABBREVIATIONS.as_ref().map_err(|e| e.clone())?;
+    for (re, repl) in abbreviations.iter() {
         s = re.replace_all(&s, *repl).into_owned();
     }
-    s = PUNCT_BEFORE.replace_all(&s, "$1").into_owned();
-    s = PUNCT_AFTER.replace_all(&s, "$1 $2").into_owned();
-    s = MULTISPACE.replace_all(&s, " ").into_owned();
-    s = QUOTES.replace_all(&s, "„$1“").into_owned();
-    s.trim().to_string()
+
+    let punct_before_re = PUNCT_BEFORE.as_ref().map_err(|e| e.clone())?;
+    s = punct_before_re.replace_all(&s, "$1").into_owned();
+
+    let punct_after_re = PUNCT_AFTER.as_ref().map_err(|e| e.clone())?;
+    s = punct_after_re.replace_all(&s, "$1 $2").into_owned();
+
+    let multispace_re = MULTISPACE.as_ref().map_err(|e| e.clone())?;
+    s = multispace_re.replace_all(&s, " ").into_owned();
+
+    let quotes_re = QUOTES.as_ref().map_err(|e| e.clone())?;
+    s = quotes_re.replace_all(&s, "„$1“").into_owned();
+
+    Ok(s.trim().to_string())
 }
 
 #[cfg(test)]
@@ -234,35 +247,35 @@ mod tests {
 
     #[test]
     fn digit_currency() {
-        assert_eq!(dach_format("das kostet 20 Euro"), "das kostet 20 €");
-        assert_eq!(dach_format("50 Cent bitte"), "50 ct bitte");
+        assert_eq!(dach_format("das kostet 20 Euro").unwrap(), "das kostet 20 €");
+        assert_eq!(dach_format("50 Cent bitte").unwrap(), "50 ct bitte");
     }
 
     #[test]
     fn spoken_currency() {
-        assert_eq!(dach_format("zweihundert Euro"), "200 €");
-        assert_eq!(dach_format("zweihundertfünfzig Euro"), "250 €");
-        assert_eq!(dach_format("dreitausend Euro"), "3000 €");
-        assert_eq!(dach_format("drei tausend Euro"), "3000 €");
-        assert_eq!(dach_format("einundzwanzig Euro"), "21 €");
+        assert_eq!(dach_format("zweihundert Euro").unwrap(), "200 €");
+        assert_eq!(dach_format("zweihundertfünfzig Euro").unwrap(), "250 €");
+        assert_eq!(dach_format("dreitausend Euro").unwrap(), "3000 €");
+        assert_eq!(dach_format("drei tausend Euro").unwrap(), "3000 €");
+        assert_eq!(dach_format("einundzwanzig Euro").unwrap(), "21 €");
     }
 
     #[test]
     fn conservative() {
         // bare scale word + running prose must be left alone
-        assert_eq!(dach_format("der Euro fällt"), "der Euro fällt");
-        assert_eq!(dach_format("Aktien für tausend Euro"), "Aktien für tausend Euro");
+        assert_eq!(dach_format("der Euro fällt").unwrap(), "der Euro fällt");
+        assert_eq!(dach_format("Aktien für tausend Euro").unwrap(), "Aktien für tausend Euro");
     }
 
     #[test]
     fn abbreviations_and_quotes() {
-        assert_eq!(dach_format("z.B. das"), "z. B. das");
-        assert_eq!(dach_format("er sagte \"Hallo\""), "er sagte „Hallo“");
+        assert_eq!(dach_format("z.B. das").unwrap(), "z. B. das");
+        assert_eq!(dach_format("er sagte \"Hallo\"").unwrap(), "er sagte „Hallo“");
     }
 
     #[test]
     fn punctuation_spacing() {
-        assert_eq!(dach_format("Hallo , Welt"), "Hallo, Welt");
-        assert_eq!(dach_format("eins,zwei"), "eins, zwei");
+        assert_eq!(dach_format("Hallo , Welt").unwrap(), "Hallo, Welt");
+        assert_eq!(dach_format("eins,zwei").unwrap(), "eins, zwei");
     }
 }
