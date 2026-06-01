@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getConfig, setConfig, type Config } from "../lib/ipc";
+import { getConfig, onConfigChanged, setConfig, type Config } from "../lib/ipc";
 import { setLanguage } from "../i18n";
 
 interface Ctx {
@@ -88,6 +88,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       console.error("save failed", e);
     }
   }, []);
+
+  // Orb-satellite cycles / drags mutate the config from the overlay window →
+  // reload so the main window (mode switch, settings, position) stays in sync.
+  useEffect(() => {
+    const sub = onConfigChanged(() => {
+      void reload();
+    });
+    return () => {
+      sub.then((un) => un());
+    };
+  }, [reload]);
 
   return (
     <ConfigCtx.Provider value={{ config, patch, reload, save, savedTick }}>

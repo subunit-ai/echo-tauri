@@ -77,17 +77,23 @@ export function Orb() {
     const un = onState((p) => {
       state.current = p.state;
     });
-    // Live config updates from Settings (set_config emits this) — restyle without reload.
-    const unCfg = listen<{ style?: string; color?: string; idlePulse?: boolean; autoHide?: boolean }>(
-      "echo://orb-config",
-      (e) => {
-        const p = e.payload;
-        if (typeof p.style === "string") style.current = p.style;
-        if (p.color && THEME[p.color]) color.current = THEME[p.color];
-        idlePulse.current = p.idlePulse !== false;
-        autoHide.current = p.autoHide === true;
-      },
-    );
+    // Live config updates from Settings (set_config emits this) — restyle without
+    // reload, and refresh the satellite quick-state so a mode/language/cleanup
+    // change made in the main window shows on the orb too.
+    const unCfg = listen<{
+      style?: string;
+      color?: string;
+      idlePulse?: boolean;
+      autoHide?: boolean;
+      quick?: OrbQuick;
+    }>("echo://orb-config", (e) => {
+      const p = e.payload;
+      if (typeof p.style === "string") style.current = p.style;
+      if (p.color && THEME[p.color]) color.current = THEME[p.color];
+      idlePulse.current = p.idlePulse !== false;
+      autoHide.current = p.autoHide === true;
+      if (p.quick) setQuick(p.quick);
+    });
     return () => {
       un.then((f) => f());
       unCfg.then((f) => f());

@@ -348,17 +348,23 @@ pub fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
 /// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
 /// the orb reopens where the user dropped it. Called from the overlay on drag.
 #[tauri::command]
-pub fn set_orb_position(state: State<'_, AppState>, x: f64, y: f64) -> Result<(), String> {
+pub fn set_orb_position(app: AppHandle, state: State<'_, AppState>, x: f64, y: f64) -> Result<(), String> {
     let cfg = {
         let mut c = state.config.lock();
         c.orb_position = format!("custom-{}-{}", x.round() as i64, y.round() as i64);
         c.clone()
     };
-    cfg.save().map_err(|e| e.to_string())
+    cfg.save().map_err(|e| e.to_string())?;
+    // A drag sets a custom position; let the main window's position UI catch up.
+    {
+        use tauri::Emitter;
+        let _ = app.emit("echo://config-changed", ());
+    }
+    Ok(())
 }
 
 /// Current orb-satellite display state (UI mode / language / cleanup).
-fn orb_quick_json(c: &Config) -> serde_json::Value {
+pub(crate) fn orb_quick_json(c: &Config) -> serde_json::Value {
     let mode = if c.mode == "local" {
         "local"
     } else if c.cloud_superfast {
@@ -435,6 +441,12 @@ pub fn orb_cycle(
     cfg.save().map_err(|e| e.to_string())?;
     // Mode change can flip the overlay's state colour mapping; keep it in sync.
     crate::overlay::apply_config(&app);
+    // Tell the main window to refresh — an orb-satellite cycle changes
+    // mode/language/cleanup, which its Settings/mode UI must reflect.
+    {
+        use tauri::Emitter;
+        let _ = app.emit("echo://config-changed", ());
+    }
     Ok(orb_quick_json(&cfg))
 }
 
