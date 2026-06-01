@@ -59,3 +59,48 @@ pub fn pick_style(title: &str, overrides: &HashMap<String, String>, default: &st
     }
     default.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_default_fallback() {
+        let overrides = HashMap::new();
+        assert_eq!(pick_style("Some Random Window", &overrides, "default"), "default");
+    }
+
+    #[test]
+    fn test_curated_matching() {
+        let overrides = HashMap::new();
+        assert_eq!(pick_style("Google Docs - Document", &overrides, "default"), "formal");
+        assert_eq!(pick_style("Visual Studio Code", &overrides, "default"), "prompt");
+        assert_eq!(pick_style("Slack | General", &overrides, "default"), "slack");
+    }
+
+    #[test]
+    fn test_override_precedence() {
+        let mut overrides = HashMap::new();
+        overrides.insert("docs".to_string(), "custom".to_string());
+
+        assert_eq!(pick_style("Google Docs", &overrides, "default"), "custom");
+    }
+
+    #[test]
+    fn test_case_insensitivity() {
+        let mut overrides = HashMap::new();
+        overrides.insert("MYAPP".to_string(), "uppercase".to_string());
+
+        assert_eq!(pick_style("using myapp today", &overrides, "default"), "uppercase");
+        assert_eq!(pick_style("GOOGLE DOCS", &HashMap::new(), "default"), "formal");
+    }
+
+    #[test]
+    fn test_empty_overrides_ignored() {
+        let mut overrides = HashMap::new();
+        overrides.insert("".to_string(), "empty".to_string());
+
+        assert_eq!(pick_style("Some Title", &overrides, "default"), "default");
+    }
+}
