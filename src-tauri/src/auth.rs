@@ -37,14 +37,9 @@ fn random_state() -> String {
 }
 
 fn open_browser(url: &str) {
-    #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .spawn();
+    if let Err(e) = tauri_plugin_opener::open_url(url.to_string(), None::<&str>) {
+        log::warn!("failed to open browser: {}", e);
+    }
 }
 
 /// Blocking: opens the browser and waits for the loopback callback. Returns the
