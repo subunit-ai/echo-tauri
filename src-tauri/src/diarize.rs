@@ -112,7 +112,11 @@ fn label(raw: &str) -> String {
 
 /// Full flow: diarize the WAV + merge with the transcript segments → a
 /// speaker-tagged transcript, or None if diarization wasn't possible.
-pub fn speaker_transcript(cfg: &Config, wav: Vec<u8>, transcript: &[Segment]) -> Option<String> {
+pub fn speaker_transcript(
+    cfg: &Config,
+    wav: Vec<u8>,
+    transcript: &[Segment],
+) -> Option<String> {
     if transcript.is_empty() {
         return None;
     }

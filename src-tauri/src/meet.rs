@@ -19,9 +19,7 @@ pub fn create_meeting(cfg: &Config) -> anyhow::Result<MeetingInfo> {
     if cfg.subunit_access_token.is_empty() && cfg.subunit_api_key.is_empty() {
         anyhow::bail!("nicht angemeldet — Meetings brauchen Subunit-Login");
     }
-    let url = cfg
-        .subunit_endpoint
-        .replace("/v1/transcribe", "/v1/meetings");
+    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/meetings");
     let host_name = if cfg.account_email.is_empty() {
         "Echo Desktop".to_string()
     } else {
@@ -48,11 +46,7 @@ pub fn create_meeting(cfg: &Config) -> anyhow::Result<MeetingInfo> {
         anyhow::bail!("Server {status}");
     }
     let j: serde_json::Value = resp.json()?;
-    let code = j
-        .get("code")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
+    let code = j.get("code").and_then(|v| v.as_str()).unwrap_or_default().to_string();
     if code.is_empty() {
         anyhow::bail!("keine Meeting-ID erhalten");
     }
@@ -61,11 +55,7 @@ pub fn create_meeting(cfg: &Config) -> anyhow::Result<MeetingInfo> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .unwrap_or_else(|| format!("https://meet.subunit.ai/{code}"));
-    let host_token = j
-        .get("host_token")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
+    let host_token = j.get("host_token").and_then(|v| v.as_str()).unwrap_or_default().to_string();
     Ok(MeetingInfo {
         code,
         share_url,

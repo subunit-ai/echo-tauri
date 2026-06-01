@@ -56,12 +56,7 @@ pub fn transcribe_subunit(
     let status = resp.status();
     match status.as_u16() {
         402 => return Err(EngineError::new("trial_expired", "Testzeitraum abgelaufen")),
-        401 => {
-            return Err(EngineError::new(
-                "auth",
-                "Nicht angemeldet oder Token abgelaufen",
-            ))
-        }
+        401 => return Err(EngineError::new("auth", "Nicht angemeldet oder Token abgelaufen")),
         s if !(200..300).contains(&s) => {
             let body = resp.text().unwrap_or_default();
             return Err(EngineError::new("server", format!("Server {s}: {body}")));
@@ -100,10 +95,7 @@ pub fn transcribe_subunit(
                         start_s: num(&["start_s", "start"]),
                         end_s: num(&["end_s", "end"]),
                         text: vocab::apply_vocab_replace(
-                            s.get("text")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or_default()
-                                .trim(),
+                            s.get("text").and_then(|v| v.as_str()).unwrap_or_default().trim(),
                             cfg,
                         ),
                     }

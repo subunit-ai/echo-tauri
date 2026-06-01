@@ -52,11 +52,7 @@ pub fn spawn(app: AppHandle, signal: Arc<AtomicU8>) {
         if let Err(e) = run(app.clone(), signal).await {
             log::warn!("live_ws: {e}");
             // run() handles its own terminal states; this is the last-resort path.
-            emit_state(
-                &app,
-                EngineState::Error,
-                Some("Live-Diktat fehlgeschlagen.".into()),
-            );
+            emit_state(&app, EngineState::Error, Some("Live-Diktat fehlgeschlagen.".into()));
         }
         // Whatever happened, leave the engine in a clean state.
         let state = app.state::<AppState>();

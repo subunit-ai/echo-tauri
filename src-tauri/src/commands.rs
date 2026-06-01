@@ -274,11 +274,8 @@ pub fn get_config(state: State<'_, AppState>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    mut config: Config,
-) -> Result<(), String> {
+pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config) -> Result<(), String> {
+    // Lowercase invariants for auto mode mapping cache.
     let mut lowercased_overrides = std::collections::HashMap::new();
     for (k, v) in config.auto_mode_overrides.drain() {
         lowercased_overrides.insert(k.to_lowercase(), v);
@@ -430,10 +427,7 @@ pub fn orb_cycle(
                     c.cleanup_style = "prompt".to_string();
                 } else {
                     let order = ["prompt", "email", "slack", "formal"];
-                    let idx = order
-                        .iter()
-                        .position(|x| *x == c.cleanup_style)
-                        .unwrap_or(0);
+                    let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
                     if idx + 1 >= order.len() {
                         c.cleanup_enabled = false;
                     } else {
