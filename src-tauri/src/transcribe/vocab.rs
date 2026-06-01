@@ -48,19 +48,41 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
     // Longest pattern first (by char count, so multi-word/punctuated win).
     pairs.sort_by_key(|(p, _)| std::cmp::Reverse(p.chars().count()));
 
+    thread_local! {
+        // Use a small bounded cache to prevent unbounded memory growth if the config changes often.
+        // 512 is plenty for a typical user vocabulary.
+        static REGEX_CACHE: std::cell::RefCell<lru::LruCache<String, Regex>> =
+            std::cell::RefCell::new(lru::LruCache::new(std::num::NonZeroUsize::new(512).unwrap()));
+    }
+
     let mut out = text.to_string();
-    for (p, target) in pairs {
-        // Whole-token, case-insensitive, with boundaries CAPTURED (the regex
-        // crate has no lookaround). Handles patterns ending in punctuation
-        // ("Echo.", "M.C.P.", "T.J.") that a plain \b…\b would miss.
-        let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
-        if let Ok(re) = Regex::new(&pat) {
+    REGEX_CACHE.with(|cache| {
+        let mut cache_mut = cache.borrow_mut();
+        for (p, target) in pairs {
+            // Whole-token, case-insensitive, with boundaries CAPTURED (the regex
+            // crate has no lookaround). Handles patterns ending in punctuation
+            // ("Echo.", "M.C.P.", "T.J.") that a plain \b…\b would miss.
+            let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
+
+            let re = if let Some(r) = cache_mut.get(&pat) {
+                r.clone()
+            } else {
+                // regex::escape guarantees the pattern is valid, so this should never fail.
+                #[allow(clippy::regex_creation_in_loops)]
+                if let Ok(r) = Regex::new(&pat) {
+                    cache_mut.put(pat, r.clone());
+                    r
+                } else {
+                    continue; // Skip invalid patterns instead of panicking
+                }
+            };
+
             out = re
                 .replace_all(&out, |caps: &regex::Captures| {
                     format!("{}{}{}", &caps[1], target, &caps[2])
                 })
                 .into_owned();
         }
-    }
+    });
     out
 }
