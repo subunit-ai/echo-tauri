@@ -229,7 +229,24 @@ fn read_request_line(stream: &TcpStream) -> anyhow::Result<String> {
     Ok(line)
 }
 
+fn escape_html(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len());
+    for c in input.chars() {
+        match c {
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '&' => escaped.push_str("&amp;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
 fn write_html(stream: &mut TcpStream, title: &str, msg: &str) -> std::io::Result<()> {
+    let title = escape_html(title);
+    let msg = escape_html(msg);
     let body = format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"></head>\
 <body style=\"font-family:-apple-system,system-ui,sans-serif;background:#0f172a;color:#e2e8f0;text-align:center;padding-top:90px\">\
