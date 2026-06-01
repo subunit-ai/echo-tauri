@@ -67,7 +67,7 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
                 let reqline = read_request_line(&stream).unwrap_or_default();
                 let path = reqline.split_whitespace().nth(1).unwrap_or("").to_string();
-                let route = path.splitn(2, '?').next().unwrap_or("");
+                let route = path.split('?').next().unwrap_or("");
 
                 // Exact route only; keep serving until a VALID callback or deadline
                 // (stray/forged requests are answered and ignored, not fatal).
@@ -75,7 +75,7 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                     let _ = write_html(&mut stream, "Echo", "Warte auf Login…");
                     continue;
                 }
-                let qs = path.splitn(2, '?').nth(1).unwrap_or("");
+                let qs = path.split_once('?').map(|x| x.1).unwrap_or("");
                 let params = query_params(qs);
                 if params.get("state").map(String::as_str) != Some(state.as_str()) {
                     let _ = write_html(&mut stream, "Echo", "Warte auf Login…");
@@ -222,7 +222,10 @@ fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
     }
     Ok((
         access,
-        j.get("refresh_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        j.get("refresh_token")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string(),
         j.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
     ))
 }

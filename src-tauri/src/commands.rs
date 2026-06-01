@@ -274,7 +274,11 @@ pub fn get_config(state: State<'_, AppState>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config) -> Result<(), String> {
+pub fn set_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mut config: Config,
+) -> Result<(), String> {
     // Preserve secret fields server-side: the frontend neither sees nor sets
     // them (get_config blanks them), so never let a round-trip clobber tokens.
     let hotkey_changed = {
@@ -420,7 +424,10 @@ pub fn orb_cycle(
                     c.cleanup_style = "prompt".to_string();
                 } else {
                     let order = ["prompt", "email", "slack", "formal"];
-                    let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
+                    let idx = order
+                        .iter()
+                        .position(|x| *x == c.cleanup_style)
+                        .unwrap_or(0);
                     if idx + 1 >= order.len() {
                         c.cleanup_enabled = false;
                     } else {

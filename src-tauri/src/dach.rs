@@ -62,15 +62,31 @@ fn parse_german_compound(word: &str) -> Option<i64> {
     if let Some(idx) = w.find("tausend") {
         let left = &w[..idx];
         let right = &w[idx + "tausend".len()..];
-        let left_n = if left.is_empty() { 1 } else { parse_german_compound(left)? };
-        let right_n = if right.is_empty() { 0 } else { parse_german_compound(right)? };
+        let left_n = if left.is_empty() {
+            1
+        } else {
+            parse_german_compound(left)?
+        };
+        let right_n = if right.is_empty() {
+            0
+        } else {
+            parse_german_compound(right)?
+        };
         return Some(left_n * 1000 + right_n);
     }
     if let Some(idx) = w.find("hundert") {
         let left = &w[..idx];
         let right = &w[idx + "hundert".len()..];
-        let left_n = if left.is_empty() { 1 } else { parse_german_compound(left)? };
-        let right_n = if right.is_empty() { 0 } else { parse_german_compound(right)? };
+        let left_n = if left.is_empty() {
+            1
+        } else {
+            parse_german_compound(left)?
+        };
+        let right_n = if right.is_empty() {
+            0
+        } else {
+            parse_german_compound(right)?
+        };
         return Some(left_n * 100 + right_n);
     }
     // "einundzwanzig" → <ones>und<tens>
@@ -134,9 +150,10 @@ static CURRENCY: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"(?i)\b(\d+(?:[.,]\d+)?|[a-zäöüß]+(?:\s+[a-zäöüß]+){0,3})\s+(Euro|Cent|CHF|Franken)\b",
     )
-    .unwrap()
+    .expect("Failed to compile CURRENCY regex")
 });
-static DIGIT_ONLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").unwrap());
+static DIGIT_ONLY: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").expect("Failed to compile DIGIT_ONLY regex"));
 
 /// Scale words that must never stand alone as "the number" — "tausend Euro" is
 /// too ambiguous (e.g. "Aktien für tausend Euro") so we leave it untouched.
@@ -201,15 +218,24 @@ static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         (r"(?i)\bevtl\.", "evtl."),
     ]
     .into_iter()
-    .map(|(p, r)| (Regex::new(p).unwrap(), r))
+    .map(|(p, r)| {
+        (
+            Regex::new(p).expect("Failed to compile abbreviation regex"),
+            r,
+        )
+    })
     .collect()
 });
 
-static PUNCT_BEFORE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])").unwrap());
+static PUNCT_BEFORE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\s+([,.;:!?])").expect("Failed to compile PUNCT_BEFORE regex"));
 // Lookahead-free port of `([,;:!?])(?=[^\s\d])`: capture + re-emit the next char.
-static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").unwrap());
-static MULTISPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").unwrap());
-static QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").unwrap());
+static PUNCT_AFTER: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").expect("Failed to compile PUNCT_AFTER regex"));
+static MULTISPACE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r" {2,}").expect("Failed to compile MULTISPACE regex"));
+static QUOTES: Lazy<Regex> =
+    Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").expect("Failed to compile QUOTES regex"));
 
 /// Apply the full DACH pipeline. Order matters: currency first (expects
 /// unmangled number words), then abbreviations, punctuation, finally quotes.
@@ -251,7 +277,10 @@ mod tests {
     fn conservative() {
         // bare scale word + running prose must be left alone
         assert_eq!(dach_format("der Euro fällt"), "der Euro fällt");
-        assert_eq!(dach_format("Aktien für tausend Euro"), "Aktien für tausend Euro");
+        assert_eq!(
+            dach_format("Aktien für tausend Euro"),
+            "Aktien für tausend Euro"
+        );
     }
 
     #[test]
