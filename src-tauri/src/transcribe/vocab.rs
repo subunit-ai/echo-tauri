@@ -64,3 +64,63 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, VocabEntry};
+
+    #[test]
+    fn test_apply_vocab_replace_empty_text() {
+        let cfg = Config::default();
+        let result = apply_vocab_replace("", &cfg);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_apply_vocab_replace_empty_vocab_entry() {
+        let mut cfg = Config::default();
+        // create a vocab entry that is basically empty
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: "".to_string(),
+            write_as: "".to_string(),
+            aliases: vec![],
+            category: "test".to_string(),
+        });
+
+        let text = "Hello world";
+        let result = apply_vocab_replace(text, &cfg);
+        assert_eq!(result, text);
+    }
+
+    #[test]
+    fn test_apply_vocab_replace_basic() {
+        let mut cfg = Config::default();
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: "Klod Koud".to_string(),
+            write_as: "Claude Code".to_string(),
+            aliases: vec!["Clod Code".to_string()],
+            category: "test".to_string(),
+        });
+
+        // Match sounds like
+        let result = apply_vocab_replace("I use Klod Koud.", &cfg);
+        assert_eq!(result, "I use Claude Code.");
+
+        // Match alias
+        let result2 = apply_vocab_replace("It is Clod Code", &cfg);
+        assert_eq!(result2, "It is Claude Code");
+
+        // Match with punctuation
+        let result3 = apply_vocab_replace("Klod Koud, really?", &cfg);
+        assert_eq!(result3, "Claude Code, really?");
+
+        // Case insensitive
+        let result4 = apply_vocab_replace("i use klod koud", &cfg);
+        assert_eq!(result4, "i use Claude Code");
+
+        // Not matching sub-word
+        let result5 = apply_vocab_replace("I use Klod Kouding", &cfg);
+        assert_eq!(result5, "I use Klod Kouding");
+    }
+}
