@@ -64,12 +64,11 @@ pub fn create_meeting(cfg: &Config) -> anyhow::Result<MeetingInfo> {
 }
 
 pub fn open_url(url: &str) {
-    #[cfg(target_os = "linux")]
-    let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(url).spawn();
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("rundll32")
-        .args(["url.dll,FileProtocolHandler", url])
-        .spawn();
+    // Use the opener plugin (already a dependency) instead of a per-OS shell-out.
+    // The old Windows `cmd /C start "" <url>` let cmd metacharacters in the URL
+    // (e.g. a server-provided meeting share_url) inject commands; the plugin opens
+    // via the OS handler with no shell. Consistent with auth::open_browser.
+    if let Err(e) = tauri_plugin_opener::open_url(url, None::<&str>) {
+        log::warn!("open_url failed: {e}");
+    }
 }
