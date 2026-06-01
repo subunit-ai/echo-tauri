@@ -1,0 +1,42 @@
+name: pr-check
+
+# Schneller Linux-Gate auf JEDEN PR + push:main: Frontend-Build + cargo check + tests
+# (+ clippy advisory). Bewusst OHNE die schweren nativen whisper.cpp-Targets — die laufen
+# manuell in build-check.yml (Windows Vulkan/ARM). Default-Features ziehen kein whisper-rs-sys,
+# darum hier schnell. Zweck: AI/Jules-PRs werden automatisch kompiliert+getestet statt blind.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+      - name: Linux Tauri-Systemdeps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Frontend deps + build
+        run: |
+          npm ci
+          npm run build
+      - name: cargo check + test (BLOCKING)
+        working-directory: src-tauri
+        run: |
+          cargo check --locked
+          cargo test --locked
+      - name: clippy (advisory)
+        working-directory: src-tauri
+        run: cargo clippy --locked -- -D warnings || cargo clippy --locked
