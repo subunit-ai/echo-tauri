@@ -134,9 +134,9 @@ static CURRENCY: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"(?i)\b(\d+(?:[.,]\d+)?|[a-zäöüß]+(?:\s+[a-zäöüß]+){0,3})\s+(Euro|Cent|CHF|Franken)\b",
     )
-    .unwrap()
+    .expect("invalid CURRENCY regex pattern")
 });
-static DIGIT_ONLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").unwrap());
+static DIGIT_ONLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").expect("invalid DIGIT_ONLY regex pattern"));
 
 /// Scale words that must never stand alone as "the number" — "tausend Euro" is
 /// too ambiguous (e.g. "Aktien für tausend Euro") so we leave it untouched.
@@ -201,15 +201,15 @@ static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
         (r"(?i)\bevtl\.", "evtl."),
     ]
     .into_iter()
-    .map(|(p, r)| (Regex::new(p).unwrap(), r))
+    .map(|(p, r)| (Regex::new(p).expect("invalid ABBREVIATIONS regex pattern"), r))
     .collect()
 });
 
-static PUNCT_BEFORE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])").unwrap());
+static PUNCT_BEFORE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])").expect("invalid PUNCT_BEFORE regex pattern"));
 // Lookahead-free port of `([,;:!?])(?=[^\s\d])`: capture + re-emit the next char.
-static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").unwrap());
-static MULTISPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").unwrap());
-static QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").unwrap());
+static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").expect("invalid PUNCT_AFTER regex pattern"));
+static MULTISPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").expect("invalid MULTISPACE regex pattern"));
+static QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").expect("invalid QUOTES regex pattern"));
 
 /// Apply the full DACH pipeline. Order matters: currency first (expects
 /// unmangled number words), then abbreviations, punctuation, finally quotes.
