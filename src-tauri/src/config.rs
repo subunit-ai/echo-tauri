@@ -191,6 +191,9 @@ pub struct Config {
     pub sound_volume: f32,
 
     pub vocabulary: Vec<VocabEntry>,
+    #[serde(skip)]
+    pub vocab_regex_cache: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, regex::Regex>>>,
+
     pub vocabulary_default_seeded: bool,
     /// Which `VOCAB_SEED_VERSION` batch this config has merged. Lets us push new
     /// default terms/aliases to already-seeded users without resurrecting their
@@ -280,6 +283,7 @@ impl Default for Config {
             sound_volume: 0.6,
 
             vocabulary: Vec::new(),
+            vocab_regex_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             vocabulary_default_seeded: false,
             vocab_seed_version: 0,
 
@@ -304,9 +308,12 @@ impl Config {
         if path.exists() {
             match Self::read_from(&path) {
                 Ok(mut c) => {
+                    // Initialize the non-serialized cache
+                    c.vocab_regex_cache = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
                     c.migrate();
                     c.seed_default_vocabulary();
                     c.merge_default_vocab_updates();
+                    c.build_vocab_regex_cache();
                     let _ = c.save();
                     c
                 }
@@ -321,9 +328,11 @@ impl Config {
             match Self::read_from(&legacy_config_file()) {
                 Ok(mut c) => {
                     log::info!("config: migrating legacy synapse-voice config → echo");
+                    c.vocab_regex_cache = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
                     c.migrate();
                     c.seed_default_vocabulary();
                     c.merge_default_vocab_updates();
+                    c.build_vocab_regex_cache();
                     let _ = c.save();
                     c
                 }
@@ -346,6 +355,7 @@ impl Config {
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
+        c.build_vocab_regex_cache();
         let _ = c.save();
         c
     }
@@ -447,6 +457,37 @@ impl Config {
             .unwrap_or(0);
         let backup = config_dir().join(format!("config.broken-{ts}.json"));
         let _ = fs::rename(path, backup);
+    }
+
+    /// Pre-compiles vocabulary regexes into the cache.
+    pub fn build_vocab_regex_cache(&self) {
+        let mut pairs: Vec<(&str, &str)> = Vec::new();
+        for e in &self.vocabulary {
+            let target = e.write_as.trim();
+            if target.is_empty() {
+                continue;
+            }
+            let sl = e.sounds_like.trim();
+            if !sl.is_empty() && !sl.eq_ignore_ascii_case(target) {
+                pairs.push((sl, target));
+            }
+            for a in &e.aliases {
+                let a = a.trim();
+                if !a.is_empty() && !a.eq_ignore_ascii_case(target) {
+                    pairs.push((a, target));
+                }
+            }
+        }
+
+        let mut cache = self.vocab_regex_cache.lock().unwrap();
+        cache.clear();
+
+        for (p, _) in pairs {
+            let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
+            if let Ok(re) = regex::Regex::new(&pat) {
+                cache.insert(p.to_string(), re);
+            }
+        }
     }
 
     pub fn save(&self) -> anyhow::Result<()> {
