@@ -129,3 +129,77 @@ pub fn speaker_transcript(
         Some(merged)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_label() {
+        assert_eq!(label("SPEAKER_00"), "Sprecher 1");
+        assert_eq!(label("SPEAKER_01"), "Sprecher 2");
+        assert_eq!(label("0"), "Sprecher 1");
+        assert_eq!(label("12"), "Sprecher 13");
+        assert_eq!(label("?"), "Sprecher ?");
+        assert_eq!(label("unknown"), "Sprecher unknown");
+    }
+
+    #[test]
+    fn test_merge_basic() {
+        let transcript = vec![
+            Segment { start_s: 0.0, end_s: 2.0, text: " Hello".to_string() },
+            Segment { start_s: 2.0, end_s: 4.0, text: " world.".to_string() },
+            Segment { start_s: 4.0, end_s: 6.0, text: " How are you?".to_string() },
+        ];
+        let speakers = vec![
+            SpeakerSpan { start_s: 0.0, end_s: 4.5, speaker: "0".to_string() },
+            SpeakerSpan { start_s: 4.5, end_s: 6.0, speaker: "1".to_string() },
+        ];
+
+        let result = merge(&transcript, &speakers);
+        assert_eq!(result, "Sprecher 1: Hello world.\n\nSprecher 2: How are you?");
+    }
+
+    #[test]
+    fn test_merge_overlap() {
+        let transcript = vec![
+            // Overlaps "0" by 1.0s and "1" by 3.0s -> should pick "1"
+            Segment { start_s: 0.0, end_s: 4.0, text: " I span two speakers.".to_string() },
+        ];
+        let speakers = vec![
+            SpeakerSpan { start_s: 0.0, end_s: 1.0, speaker: "0".to_string() },
+            SpeakerSpan { start_s: 1.0, end_s: 4.0, speaker: "1".to_string() },
+        ];
+
+        let result = merge(&transcript, &speakers);
+        assert_eq!(result, "Sprecher 2: I span two speakers.");
+    }
+
+    #[test]
+    fn test_merge_empty_segments() {
+        let transcript = vec![
+            Segment { start_s: 0.0, end_s: 1.0, text: "  ".to_string() },
+            Segment { start_s: 1.0, end_s: 2.0, text: " Real text.".to_string() },
+        ];
+        let speakers = vec![
+            SpeakerSpan { start_s: 0.0, end_s: 2.0, speaker: "0".to_string() },
+        ];
+
+        let result = merge(&transcript, &speakers);
+        assert_eq!(result, "Sprecher 1: Real text.");
+    }
+
+    #[test]
+    fn test_merge_unassigned() {
+        let transcript = vec![
+            Segment { start_s: 10.0, end_s: 12.0, text: " Ghost.".to_string() },
+        ];
+        let speakers = vec![
+            SpeakerSpan { start_s: 0.0, end_s: 2.0, speaker: "0".to_string() },
+        ];
+
+        let result = merge(&transcript, &speakers);
+        // Overlap is negative or 0. speaker_at returns "?"
+        assert_eq!(result, "Sprecher ?: Ghost.");
+    }
+}
