@@ -669,4 +669,16 @@ input:focus {
   .toast {
     animation: none;
   }
+  /* Honor reduced-motion for the section transition + hover/press feedback. */
+  .page-animate {
+    animation: none;
+  }
+  .card:hover,
+  .history-item:hover,
+  .history-item:active,
+  .nav-btn:active,
+  .mode-seg:active,
+  .model-row:active {
+    transform: none;
+  }
 }
