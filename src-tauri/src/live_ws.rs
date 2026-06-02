@@ -6,7 +6,7 @@
 //! continuously, and types finalized words as they arrive.
 //!
 //! Protocol (WhisperLive, behind our JWT proxy):
-//!   connect wss://…/?token=<jwt> → send {uid,language,task,model,use_vad} →
+//!   connect wss://…/ with `Authorization: Bearer <jwt>` → send {uid,language,task,model,use_vad} →
 //!   await {"message":"SERVER_READY"} → stream float32-LE binary frames →
 //!   receive {"segments":[{start,end,text}]} (evolving partials).
 //!   CRITICAL: float32, not int16 (int16 → VAD drops it all as silence).
@@ -267,13 +267,26 @@ async fn stream_session(
     } else {
         ensure_ws_path(cfg.live_ws_endpoint.trim())
     };
-    let sep = if endpoint.contains('?') { '&' } else { '?' };
-    let url = format!("{endpoint}{sep}token={token}");
+
+    // Send the JWT in the Authorization header, NOT the URL query. The proxy
+    // accepts either, but `?token=<jwt>` lands in Cloudflare/edge/proxy access
+    // logs (and any intermediary), so a header keeps the credential out of URLs.
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut request = endpoint
+        .as_str()
+        .into_client_request()
+        .map_err(|e| anyhow::anyhow!("bad live_ws endpoint {endpoint:?}: {e}"))?;
+    let bearer = format!("Bearer {token}")
+        .parse()
+        .map_err(|_| anyhow::anyhow!("access token not valid for an Authorization header"))?;
+    request
+        .headers_mut()
+        .insert(tokio_tungstenite::tungstenite::http::header::AUTHORIZATION, bearer);
 
     // Bounded connect so a black-holed network surfaces as a drop, not a hang.
     let connect = tokio::time::timeout(
         Duration::from_secs(CONNECT_TIMEOUT_SECS),
-        tokio_tungstenite::connect_async(&url),
+        tokio_tungstenite::connect_async(request),
     )
     .await;
     let (ws, _resp) = match connect {
