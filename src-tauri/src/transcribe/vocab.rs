@@ -49,19 +49,29 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
     pairs.sort_by_key(|(p, _)| std::cmp::Reverse(p.chars().count()));
 
     let mut out = text.to_string();
+    let cache = cfg.vocab_regex_cache.lock().unwrap();
+
     for (p, target) in pairs {
-        // Whole-token, case-insensitive, with boundaries CAPTURED (the regex
-        // crate has no lookaround). Handles patterns ending in punctuation
-        // ("Echo.", "M.C.P.", "T.J.") that a plain \b…\b would miss.
-        let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
-        if let Ok(re) = Regex::new(&pat) {
+        if let Some(re) = cache.get(p) {
             out = re
                 .replace_all(&out, |caps: &regex::Captures| {
                     format!("{}{}{}", &caps[1], target, &caps[2])
                 })
                 .into_owned();
+        } else {
+            // Fallback for patterns that weren't built at config time, should be rare
+            let pat = format!(r"(?i)(^|[^\w]){}([^\w]|$)", regex::escape(p));
+            #[allow(clippy::regex_creation_in_loops)]
+            if let Ok(re) = Regex::new(&pat) {
+                out = re
+                    .replace_all(&out, |caps: &regex::Captures| {
+                        format!("{}{}{}", &caps[1], target, &caps[2])
+                    })
+                    .into_owned();
+            }
         }
     }
+
     out
 }
 

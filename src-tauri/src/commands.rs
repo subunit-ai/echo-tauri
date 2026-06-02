@@ -275,6 +275,9 @@ pub fn get_config(state: State<'_, AppState>) -> Config {
 
 #[tauri::command]
 pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config) -> Result<(), String> {
+    config.vocab_regex_cache = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    config.build_vocab_regex_cache();
+
     // Preserve secret fields server-side: the frontend neither sees nor sets
     // them (get_config blanks them), so never let a round-trip clobber tokens.
     let hotkey_changed = {
