@@ -90,6 +90,57 @@ fn f32_le_bytes(samples: &[f32]) -> Vec<u8> {
     b
 }
 
+/// Guarantee a `ws(s)://host…` URL carries a path component. tokio-tungstenite
+/// writes the HTTP upgrade request-target verbatim from the URL path, so a bare
+/// authority (`wss://live-transcribe.subunit.ai`) produces an empty path and the
+/// request line becomes `GET ?token=… HTTP/1.1` (no leading `/`) — which
+/// Cloudflare rejects with 400 Bad Request *before* it reaches our proxy, i.e. a
+/// silent connect failure with an empty proxy log. Splicing in `/` after the
+/// authority makes it the well-formed `GET /?token=…`. Idempotent: a URL that
+/// already has a path is returned unchanged.
+fn ensure_ws_path(endpoint: &str) -> String {
+    let Some(scheme_end) = endpoint.find("://") else {
+        return endpoint.to_string();
+    };
+    let auth_start = scheme_end + 3;
+    // The authority ends at the first '/' (already a path) or '?' (query, no path).
+    match endpoint[auth_start..].find(|c: char| c == '/' || c == '?') {
+        Some(rel) => {
+            let i = auth_start + rel;
+            if endpoint.as_bytes()[i] == b'/' {
+                endpoint.to_string() // already has a path
+            } else {
+                format!("{}/{}", &endpoint[..i], &endpoint[i..]) // '?' with no path
+            }
+        }
+        None => format!("{endpoint}/"), // bare authority, no path/query
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_ws_path;
+
+    #[test]
+    fn adds_slash_to_bare_authority() {
+        assert_eq!(
+            ensure_ws_path("wss://live-transcribe.subunit.ai"),
+            "wss://live-transcribe.subunit.ai/"
+        );
+    }
+
+    #[test]
+    fn keeps_existing_path() {
+        assert_eq!(ensure_ws_path("wss://host/live"), "wss://host/live");
+        assert_eq!(ensure_ws_path("wss://host/"), "wss://host/");
+    }
+
+    #[test]
+    fn splices_slash_before_query() {
+        assert_eq!(ensure_ws_path("wss://host?x=1"), "wss://host/?x=1");
+    }
+}
+
 /// Concatenate the text of all segments except the last (stable prefix).
 fn stable_text(v: &serde_json::Value) -> Option<String> {
     let segs = v.get("segments")?.as_array()?;
@@ -212,20 +263,31 @@ async fn stream_session(
 ) -> anyhow::Result<Phase> {
     let token = cfg.subunit_access_token.clone();
     let endpoint = if cfg.live_ws_endpoint.trim().is_empty() {
-        "wss://live-transcribe.subunit.ai".to_string()
+        "wss://live-transcribe.subunit.ai/".to_string()
     } else {
-        cfg.live_ws_endpoint.trim().to_string()
+        ensure_ws_path(cfg.live_ws_endpoint.trim())
     };
     let sep = if endpoint.contains('?') { '&' } else { '?' };
     let url = format!("{endpoint}{sep}token={token}");
 
     // Bounded connect so a black-holed network surfaces as a drop, not a hang.
-    let (ws, _resp) = tokio::time::timeout(
+    let connect = tokio::time::timeout(
         Duration::from_secs(CONNECT_TIMEOUT_SECS),
         tokio_tungstenite::connect_async(&url),
     )
-    .await
-    .map_err(|_| anyhow::anyhow!("connect timeout"))??;
+    .await;
+    let (ws, _resp) = match connect {
+        Err(_) => anyhow::bail!("connect timeout after {CONNECT_TIMEOUT_SECS}s"),
+        // Surface the real handshake error (e.g. an HTTP 4xx from the edge). run()
+        // maps any Err to a silent reconnect, so without this log the cause is
+        // invisible in the field log — which is exactly how the missing-path 400
+        // hid for two releases.
+        Ok(Err(e)) => {
+            log::warn!("live_ws: connect failed: {e}");
+            return Err(e.into());
+        }
+        Ok(Ok(pair)) => pair,
+    };
     let (mut write, mut read) = ws.split();
 
     // Config handshake.
