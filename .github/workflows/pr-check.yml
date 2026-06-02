@@ -27,7 +27,9 @@ jobs:
       - name: Linux Tauri-Systemdeps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          # libasound2-dev: cpal/alsa-sys (audio capture). libxdo-dev: enigo (synthetic input).
+          # Both are pulled by default-feature deps, so cargo check fails without them.
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libxdo-dev
       - name: Frontend deps + build
         run: |
           npm ci
