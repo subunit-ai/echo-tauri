@@ -558,17 +558,15 @@ pub fn list_local_models() -> Vec<crate::models::ModelInfo> {
 }
 
 #[tauri::command]
-pub fn download_model(app: AppHandle, model: String) {
-    // Runs on a thread; progress streams via the echo://model-progress event.
-    std::thread::spawn(move || {
-        if let Err(e) = crate::models::download(&app, &model) {
-            use tauri::Emitter;
-            let _ = app.emit(
-                "echo://model-progress",
-                serde_json::json!({ "model": model, "error": e.to_string() }),
-            );
-        }
-    });
+pub async fn download_model(app: AppHandle, model: String) {
+    // Progress streams via the echo://model-progress event.
+    if let Err(e) = crate::models::download(&app, &model).await {
+        use tauri::Emitter;
+        let _ = app.emit(
+            "echo://model-progress",
+            serde_json::json!({ "model": model, "error": e.to_string() }),
+        );
+    }
 }
 
 #[tauri::command]
