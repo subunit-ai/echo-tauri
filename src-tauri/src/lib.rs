@@ -127,6 +127,8 @@ pub fn run() {
             commands::check_for_updates,
             commands::install_update,
             commands::start_meeting,
+            commands::start_meeting_recording,
+            commands::stop_meeting_recording,
             commands::list_local_models,
             commands::download_model,
             commands::delete_local_model,

@@ -114,7 +114,10 @@
     "detected": "{{app}} meeting detected",
     "hint": "· record it?",
     "recordNow": "Record",
-    "ignore": "Ignore"
+    "ignore": "Ignore",
+    "recording": "🔴 Recording {{app}} meeting…",
+    "stop": "Stop",
+    "saved": "Meeting transcribed + saved"
   },
   "home": {
     "title": "Push & speak",
