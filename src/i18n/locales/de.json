@@ -114,7 +114,10 @@
     "detected": "{{app}}-Meeting erkannt",
     "hint": "· aufnehmen?",
     "recordNow": "Aufnehmen",
-    "ignore": "Ignorieren"
+    "ignore": "Ignorieren",
+    "recording": "🔴 {{app}}-Meeting wird aufgenommen…",
+    "stop": "Stop",
+    "saved": "Meeting transkribiert + gespeichert"
   },
   "home": {
     "title": "Drücken & sprechen",

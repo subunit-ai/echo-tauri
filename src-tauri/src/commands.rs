@@ -24,6 +24,8 @@ pub struct AppState {
     pub streaming: Mutex<Option<Arc<AtomicU8>>>,
     /// Guards the single overlay cursor hit-test loop (see [`crate::overlay`]).
     pub hit_test_active: std::sync::atomic::AtomicBool,
+    /// Active meeting recording (mic + system loopback), None when not recording.
+    pub meeting_capture: Mutex<Option<crate::meeting_capture::MeetingCapture>>,
 }
 
 impl AppState {
@@ -34,6 +36,7 @@ impl AppState {
             target: Mutex::new(None),
             streaming: Mutex::new(None),
             hit_test_active: std::sync::atomic::AtomicBool::new(false),
+            meeting_capture: Mutex::new(None),
         }
     }
 }
@@ -580,6 +583,69 @@ pub fn start_meeting(app: AppHandle) -> Result<crate::meet::MeetingInfo, String>
     let info = crate::meet::create_meeting(&cfg).map_err(|e| e.to_string())?;
     crate::meet::open_url(&info.share_url);
     Ok(info)
+}
+
+/// Start a local dual-audio meeting recording: the mic (you) + the system loopback
+/// (the remote Teams/Zoom/Meet participants). Triggered from the meeting-detect
+/// prompt's "record". Windows-only (loopback); errors on other platforms.
+#[tauri::command]
+pub fn start_meeting_recording(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    if state.meeting_capture.lock().is_some() {
+        return Ok(()); // already recording — idempotent
+    }
+    let device = state.config.lock().mic_device_name.clone();
+    let dev = if device.trim().is_empty() { None } else { Some(device) };
+    let cap = crate::meeting_capture::MeetingCapture::start(dev)?;
+    *state.meeting_capture.lock() = Some(cap);
+    log::info!("meeting recording started (mic + system loopback)");
+    Ok(())
+}
+
+/// Stop the meeting recording, mix mic+loopback, transcribe the mixed track, and
+/// store it as a meeting. Returns the transcript text.
+#[tauri::command]
+pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
+    use tauri::Emitter;
+    let state = app.state::<AppState>();
+    let cap = state
+        .meeting_capture
+        .lock()
+        .take()
+        .ok_or_else(|| "keine Meeting-Aufnahme aktiv".to_string())?;
+    let (mixed, sr) = cap.stop_and_mix();
+    if mixed.is_empty() {
+        return Err("Meeting-Aufnahme war leer".to_string());
+    }
+    let cfg = state.config.lock().clone();
+    let duration_s = mixed.len() as f64 / sr.max(1) as f64;
+    let result =
+        transcribe::run_opts(&cfg, &mixed, sr, false).map_err(|e| format!("{e}"))?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    {
+        let mut c = state.config.lock();
+        if !result.text.trim().is_empty() {
+            c.meetings.insert(
+                0,
+                serde_json::json!({
+                    "ts": now,
+                    "text": result.text,
+                    "quality_mode": result.quality_mode,
+                    "duration_s": duration_s as i64,
+                }),
+            );
+            if c.meetings.len() > 100 {
+                c.meetings.truncate(100);
+            }
+        }
+        let _ = c.save();
+    }
+    let _ = app.emit("echo://meetings-updated", ());
+    log::info!("meeting recording stopped + transcribed ({duration_s:.0}s)");
+    Ok(result.text)
 }
 
 #[tauri::command]

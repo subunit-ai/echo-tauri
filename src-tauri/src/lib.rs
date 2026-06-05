@@ -12,7 +12,9 @@ mod hardware;
 mod hotkey;
 mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
+mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;
+mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting transcripts
 mod meeting_detect;
 mod models;
 mod synapse;
@@ -125,6 +127,8 @@ pub fn run() {
             commands::check_for_updates,
             commands::install_update,
             commands::start_meeting,
+            commands::start_meeting_recording,
+            commands::stop_meeting_recording,
             commands::list_local_models,
             commands::download_model,
             commands::delete_local_model,
