@@ -79,6 +79,11 @@ windows = { version = "0.58", features = [
   # / bare "v"). See inject.rs `win` module.
   "Win32_UI_Input_KeyboardAndMouse",
 ] }
+# System-audio loopback capture for meeting recording (the "other side" of a
+# Teams/Zoom/Meet call). The `wasapi` crate wraps the Core Audio COM dance
+# (IMMDeviceEnumerator → render endpoint → IAudioClient w/ LOOPBACK → capture)
+# far more safely than hand-rolled `windows`-crate COM. Windows-only; see loopback.rs.
+wasapi = "0.15"
 
 [features]
 default = []

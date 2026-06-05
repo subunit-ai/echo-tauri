@@ -12,6 +12,7 @@ mod hardware;
 mod hotkey;
 mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
+mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;
 mod meeting_detect;
 mod models;
