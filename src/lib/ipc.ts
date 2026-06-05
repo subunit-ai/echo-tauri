@@ -196,6 +196,12 @@ export const onUpdateAvailable = (cb: (version: string) => void): Promise<Unlist
 export const onUpdateProgress = (cb: (pct: number) => void): Promise<UnlistenFn> =>
   listen<number>("echo://update-progress", (e) => cb(e.payload));
 
+/** Allocate + open a meeting (meet.subunit.ai). Dual-audio local capture is a follow-up. */
+export const startMeeting = () => invoke("start_meeting");
+/** Emitted when a Teams/Zoom/Meet meeting is auto-detected (see meeting_detect.rs). */
+export const onMeetingDetected = (cb: (app: string) => void): Promise<UnlistenFn> =>
+  listen<{ app: string }>("echo://meeting-detected", (e) => cb(e.payload.app));
+
 // ---- Mode helpers (BigModeSwitch <-> config) ----
 export type UiMode = "local" | "cloud" | "superfast";
 

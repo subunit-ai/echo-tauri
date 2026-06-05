@@ -110,6 +110,12 @@
     "updateNow": "Jetzt aktualisieren",
     "later": "Später"
   },
+  "meeting": {
+    "detected": "{{app}}-Meeting erkannt",
+    "hint": "· aufnehmen?",
+    "recordNow": "Aufnehmen",
+    "ignore": "Ignorieren"
+  },
   "home": {
     "title": "Drücken & sprechen",
     "hotkeyLabel": "Hotkey",

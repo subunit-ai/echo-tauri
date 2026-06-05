@@ -1,0 +1,35 @@
+name: win-check
+
+# Fast Windows compile-gate. Most of Echo's OS-specific code (inject.rs, the new
+# meeting_detect.rs, future WASAPI loopback capture) lives behind `#[cfg(windows)]`,
+# which the Linux pr-check.yml SKIPS entirely — so Windows-only code could break and
+# Linux CI would stay green. This job `cargo check`s on Windows with DEFAULT features
+# (no `local-whisper` → no whisper.cpp/cmake toolchain → minutes, not the heavy
+# build-check.yml). Purpose: let us iterate Windows-only code with real validation
+# instead of merging it blind.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+      # tauri-build validates the config + expects the frontend dist to exist.
+      - name: Frontend deps + build
+        run: |
+          npm ci
+          npm run build
+      - name: cargo check (Windows, default features — compiles the cfg(windows) code)
+        working-directory: src-tauri
+        run: cargo check --locked

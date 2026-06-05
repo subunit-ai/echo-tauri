@@ -13,6 +13,7 @@ mod hotkey;
 mod inject;
 mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
 mod meet;
+mod meeting_detect;
 mod models;
 mod synapse;
 mod overlay;
@@ -160,6 +161,11 @@ pub fn run() {
                     _ => {}
                 }
             }
+
+            // Auto-meeting detection: poll for a Teams/Zoom/Meet call → prompt to
+            // record (the poller itself re-checks the config toggle each tick, so it's
+            // cheap to always spawn; no-op on non-Windows).
+            meeting_detect::spawn(app.handle().clone());
 
             // System tray
             let open = MenuItemBuilder::with_id("open", "Echo öffnen").build(app)?;
