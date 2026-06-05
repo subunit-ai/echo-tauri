@@ -10,6 +10,7 @@ import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { UpdatePrompt } from "./components/UpdatePrompt";
+import { MeetingPrompt } from "./components/MeetingPrompt";
 import { onState } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
@@ -40,6 +41,7 @@ function Shell() {
     <div className="app">
       <SoundFx />
       <UpdatePrompt />
+      <MeetingPrompt />
       <Header />
       <Sidebar active={section} onSelect={setSection} />
       <main className="content" key={section}>

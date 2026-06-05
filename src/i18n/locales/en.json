@@ -110,6 +110,12 @@
     "updateNow": "Update now",
     "later": "Later"
   },
+  "meeting": {
+    "detected": "{{app}} meeting detected",
+    "hint": "· record it?",
+    "recordNow": "Record",
+    "ignore": "Ignore"
+  },
   "home": {
     "title": "Push & speak",
     "hotkeyLabel": "Hotkey",

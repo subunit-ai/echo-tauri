@@ -167,6 +167,8 @@ pub struct Config {
     pub account_email: String,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
+    /// Auto-detect a running Teams/Zoom/Meet meeting and prompt to record it.
+    pub meeting_autodetect: bool,
     /// Launch Echo at login (OS autostart entry, applied via the autostart plugin).
     pub autostart_enabled: bool,
     /// One-time guard: flips existing installs to autostart-on ONCE (see migrate()).
@@ -267,6 +269,7 @@ impl Default for Config {
             account_email: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
+            meeting_autodetect: true,
             autostart_enabled: true,
             autostart_migrated: false,
             has_seen_onboarding: false,
