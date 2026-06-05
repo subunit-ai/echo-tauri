@@ -142,6 +142,9 @@ pub struct Config {
     pub orb_idle_pulse: bool,
     /// ping | sphere | sonar | bars | wave | classic
     pub orb_overlay_style: String,
+    /// One-time guard: sets the default orb style to "sonar" ONCE for existing
+    /// installs (see migrate()); afterwards the user's chosen style sticks.
+    pub orb_style_migrated: bool,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
 
@@ -166,6 +169,10 @@ pub struct Config {
     pub auto_update_check: bool,
     /// Launch Echo at login (OS autostart entry, applied via the autostart plugin).
     pub autostart_enabled: bool,
+    /// One-time guard: flips existing installs to autostart-on ONCE (see migrate()).
+    /// Old configs lack this field → default false → the migration runs for them;
+    /// afterwards the user's own choice sticks.
+    pub autostart_migrated: bool,
     pub has_seen_onboarding: bool,
     pub ui_language: String,
     pub ui_theme: String,
@@ -237,7 +244,8 @@ impl Default for Config {
             orb_color_theme: "cyan".to_string(),
             orb_position: "bottom-center".to_string(),
             orb_idle_pulse: true,
-            orb_overlay_style: "ping".to_string(),
+            orb_overlay_style: "sonar".to_string(),
+            orb_style_migrated: false,
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
 
@@ -259,7 +267,8 @@ impl Default for Config {
             account_email: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
-            autostart_enabled: false,
+            autostart_enabled: true,
+            autostart_migrated: false,
             has_seen_onboarding: false,
             ui_language: "de".to_string(),
             ui_theme: "dark".to_string(),
@@ -352,6 +361,8 @@ impl Config {
     fn fresh() -> Self {
         let mut c = Self::default();
         c.gpu_aware_migrated = true;
+        c.autostart_migrated = true; // fresh installs are already autostart-on by default
+        c.orb_style_migrated = true; // fresh installs already default to the "sonar" orb
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -368,6 +379,22 @@ impl Config {
         if self.cloud_quality_mode.is_empty() || self.cloud_quality_mode == "auto" {
             // v0.9.14: auto's instant/fast tiers degraded German accuracy.
             self.cloud_quality_mode = "quality".to_string();
+        }
+        // v0.4.4: Echo should launch at login by default. Existing installs saved
+        // autostart_enabled=false; flip them ON exactly once, then respect the
+        // user's choice forever after (the guard never re-runs).
+        if !self.autostart_migrated {
+            self.autostart_enabled = true;
+            self.autostart_migrated = true;
+        }
+        // v0.4.4: default orb overlay is now the "sonar" radar style. Move installs
+        // that were still on the previous default ("ping") over ONCE — but leave any
+        // deliberately-chosen style (wave/sphere/…) untouched. Runs only once.
+        if !self.orb_style_migrated {
+            if self.orb_overlay_style == "ping" {
+                self.orb_overlay_style = "sonar".to_string();
+            }
+            self.orb_style_migrated = true;
         }
         self.route_default_engine();
     }
