@@ -208,7 +208,15 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
     }
 
     if cfg.instant_live_typing {
-        type_text(text)?;
+        // Live-typing can fail on some setups (typed nothing). The text is already
+        // on the clipboard, so fall back to the proven instant paste rather than
+        // silently dropping it — the user always gets their dictation.
+        if let Err(e) = type_text(text) {
+            log::warn!("deliver: live-typing failed ({e}) — falling back to instant paste");
+            paste()?;
+            log::info!("deliver: done via instant-paste (fallback) (+{:?})", t0.elapsed());
+            return Ok(());
+        }
     } else {
         paste()?;
     }
@@ -281,19 +289,32 @@ pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::R
 }
 
 /// Modifier-free Unicode typing (streaming + the instant "live-type" option).
-/// enigo's `text()` on every platform — the path Erik confirmed clean for
-/// streaming, so we keep it. Modifiers are cleared first (native on Windows).
+///
+/// Windows uses a native `SendInput` batch of `KEYEVENTF_UNICODE` events — the
+/// SAME reasoning that drove the native paste chord: enigo's `text()` rides
+/// `SendInput` too, but it proved flaky for *typing* on some Windows machines
+/// (Erik's ARM tablet was clean, but x86_64 boxes hit "types nothing"), so we
+/// emit the codepoints ourselves exactly as a keyboard/IME would. Other
+/// platforms keep enigo's `text()` (unchanged — don't rewrite what works).
+/// Modifiers are cleared first so a still-held hotkey modifier can't corrupt it.
 pub fn type_text(text: &str) -> anyhow::Result<()> {
-    use enigo::{Enigo, Keyboard, Settings};
     let t0 = Instant::now();
     clear_modifiers();
     std::thread::sleep(std::time::Duration::from_millis(20));
-    let mut enigo =
-        Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
     log::debug!("type_text: typing {} via Unicode", text_stats(text));
-    enigo
-        .text(text)
-        .map_err(|e| anyhow::anyhow!("type: {e}"))?;
+    #[cfg(target_os = "windows")]
+    {
+        win::type_unicode(text)?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use enigo::{Enigo, Keyboard, Settings};
+        let mut enigo =
+            Enigo::new(&Settings::default()).map_err(|e| anyhow::anyhow!("enigo init: {e}"))?;
+        enigo
+            .text(text)
+            .map_err(|e| anyhow::anyhow!("type: {e}"))?;
+    }
     log::info!("type_text: done (+{:?})", t0.elapsed());
     Ok(())
 }
@@ -305,7 +326,8 @@ pub fn type_text(text: &str) -> anyhow::Result<()> {
 mod win {
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-        VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
+        KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+        VK_V,
     };
 
     /// Build one keyboard `INPUT` for a virtual-key press (`up=false`) or release.
@@ -356,5 +378,68 @@ mod win {
             vk(VK_CONTROL, true),
         ];
         send(&chord)
+    }
+
+    /// One keyboard `INPUT` carrying a UTF-16 code unit as a Unicode keystroke
+    /// (`wVk=0`, `wScan=unit`, `KEYEVENTF_UNICODE`). `up` toggles the key-release.
+    fn unicode(unit: u16, up: bool) -> INPUT {
+        let mut flags = KEYEVENTF_UNICODE;
+        if up {
+            flags |= KEYEVENTF_KEYUP;
+        }
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(0),
+                    wScan: unit,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+
+    /// Type `text` as native Unicode keystrokes. Each UTF-16 code unit becomes a
+    /// down+up pair (codepoints above the BMP ride their surrogate pair, which is
+    /// exactly how Windows expects them). Sent in chunks so one batch can't
+    /// overflow the target window's input queue; `send` verifies the OS accepted
+    /// every event so a partial/blocked injection surfaces as an error (→ the
+    /// caller falls back to an instant paste).
+    pub fn type_unicode(text: &str) -> anyhow::Result<()> {
+        let mut inputs: Vec<INPUT> = Vec::with_capacity(text.len() * 2);
+        for unit in text.encode_utf16() {
+            inputs.push(unicode(unit, false));
+            inputs.push(unicode(unit, true));
+        }
+        if inputs.is_empty() {
+            return Ok(());
+        }
+        // ONE SendInput so typing is all-or-nothing for the caller: a chunked send
+        // could land the first N chars then fail, and deliver()'s clipboard paste
+        // fallback would duplicate them on top. If the OS accepts only PART of the
+        // batch (a mid-injection block — focus change / UIPI), erase whatever landed
+        // via backspaces so the fallback paste can't double-insert, then report the
+        // failure. KEYEVENTF_UNICODE never latches key state, so nothing stays held.
+        let n = unsafe { SendInput(&inputs, core::mem::size_of::<INPUT>() as i32) } as usize;
+        if n == inputs.len() {
+            return Ok(());
+        }
+        // n events landed = n/2 code units (each char is a down+up pair). Backspace
+        // them so the target returns to its pre-typing state before the caller pastes.
+        // (A non-BMP codepoint is two code units → one glyph, so the count can be off
+        // by one at a mid-surrogate break; transcripts are effectively all BMP and this
+        // is already a rare error path, so best-effort backspacing is fine.)
+        let typed_units = n / 2;
+        if typed_units > 0 {
+            let mut undo: Vec<INPUT> = Vec::with_capacity(typed_units * 2);
+            for _ in 0..typed_units {
+                undo.push(vk(VK_BACK, false));
+                undo.push(vk(VK_BACK, true));
+            }
+            let _ = unsafe { SendInput(&undo, core::mem::size_of::<INPUT>() as i32) };
+        }
+        anyhow::bail!("SendInput injected {n}/{} events (partial — erased)", inputs.len());
     }
 }

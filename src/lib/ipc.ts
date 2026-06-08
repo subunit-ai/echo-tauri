@@ -31,6 +31,7 @@ export interface Config {
   orb_overlay_style: string;
   orb_overlay_size: number;
   orb_overlay_auto_hide: boolean;
+  orb_speed: number;
 
   diarization_enabled: boolean;
   diarization_max_speakers: number;

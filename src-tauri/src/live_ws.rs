@@ -47,18 +47,34 @@ const CONNECT_TIMEOUT_SECS: u64 = 10;
 const MAX_RECONNECTS: u32 = 3;
 const RECONNECT_BACKOFF_MS: u64 = 500;
 
-pub fn spawn(app: AppHandle, signal: Arc<AtomicU8>) {
+pub fn spawn(app: AppHandle, signal: Arc<AtomicU8>, gen: u64) {
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run(app.clone(), signal).await {
+        if let Err(e) = run(app.clone(), signal.clone()).await {
             log::warn!("live_ws: {e}");
             // run() handles its own terminal states; this is the last-resort path.
             emit_state(&app, EngineState::Error, Some("Live-Diktat fehlgeschlagen.".into()));
         }
-        // Whatever happened, leave the engine in a clean state.
         let state = app.state::<AppState>();
-        let _ = state.recorder.stop();
-        *state.target.lock() = None;
-        *state.streaming.lock() = None;
+        // Clear the streaming slot ONLY if it still holds OUR signal. do_transcribe/
+        // do_cancel may have already take()n it, and a newer do_start may have
+        // installed a DIFFERENT signal — nulling that would strand the new live
+        // session (its FINISH/CANCEL would never reach the new task). The Arc identity
+        // is the precise ownership token; the generation counter alone is a TOCTOU
+        // here. Hold the lock across the check+clear so it's race-free.
+        {
+            let mut s = state.streaming.lock();
+            if s.as_ref().map_or(false, |cur| Arc::ptr_eq(cur, &signal)) {
+                *s = None;
+            }
+        }
+        // Release the mic + captured target only if no NEWER session has taken over
+        // (a fresh do_start bumps session_gen and now owns the recorder). On a normal
+        // finish do_transcribe already took the signal, so the recorder release is
+        // driven by the generation match — NOT by signal identity (which is gone).
+        if state.session_gen.load(Ordering::SeqCst) == gen {
+            let _ = state.recorder.stop();
+            *state.target.lock() = None;
+        }
     });
 }
 

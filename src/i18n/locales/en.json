@@ -251,6 +251,8 @@
     "posTopLeft": "Top left",
     "posTopRight": "Top right",
     "orbSize": "Size",
+    "orbSpeed": "Speed",
+    "orbSpeedHint": "Animation tempo (orb & bubble). Lower = calmer/slower.",
     "idlePulse": "Idle pulse",
     "hideWhenIdle": "Hide when idle",
     "account": "Account",

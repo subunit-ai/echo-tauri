@@ -147,6 +147,11 @@ pub struct Config {
     pub orb_style_migrated: bool,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
+    /// Animation speed multiplier for the overlay (orb AND bubble): scales every
+    /// pulse/ring/wave frequency uniformly. 1.0 = the original cadence; lower =
+    /// calmer/slower. User-settable (TJ: the default frequency felt too fast).
+    /// Clamped to a sane range when applied. Default 0.6 = a calmer baseline.
+    pub orb_speed: f32,
 
     pub diarization_enabled: bool,
     pub diarization_max_speakers: i32,
@@ -250,6 +255,7 @@ impl Default for Config {
             orb_style_migrated: false,
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
+            orb_speed: 0.6,
 
             diarization_enabled: false,
             diarization_max_speakers: 8,

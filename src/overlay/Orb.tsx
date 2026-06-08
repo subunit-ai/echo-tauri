@@ -61,6 +61,7 @@ export function Orb() {
   const color = useRef(THEME.cyan);
   const idlePulse = useRef(true);
   const autoHide = useRef(false);
+  const speed = useRef(0.6);
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
 
@@ -71,6 +72,7 @@ export function Orb() {
         color.current = THEME[c.orb_color_theme as string] || THEME.cyan;
         idlePulse.current = c.orb_idle_pulse !== false;
         autoHide.current = c.orb_overlay_auto_hide === true;
+        if (typeof c.orb_speed === "number") speed.current = c.orb_speed;
       })
       .catch(() => {});
     orbQuick().then(setQuick).catch(() => {});
@@ -85,6 +87,7 @@ export function Orb() {
       color?: string;
       idlePulse?: boolean;
       autoHide?: boolean;
+      speed?: number;
       quick?: OrbQuick;
     }>("echo://orb-config", (e) => {
       const p = e.payload;
@@ -92,6 +95,7 @@ export function Orb() {
       if (p.color && THEME[p.color]) color.current = THEME[p.color];
       idlePulse.current = p.idlePulse !== false;
       autoHide.current = p.autoHide === true;
+      if (typeof p.speed === "number") speed.current = p.speed;
       if (p.quick) setQuick(p.quick);
     });
     return () => {
@@ -128,11 +132,17 @@ export function Orb() {
     }, 50);
 
     let t = 0;
+    let frame = 0;
     let raf = 0;
     const rings: { r: number; a0: number }[] = [];
 
     const loop = () => {
-      t += 1;
+      // Animation speed (TJ: the default cadence felt too fast — now adjustable).
+      // `t` (scaled) drives every continuous frequency below; `frame` (real frames)
+      // drives the discrete ping-ring spawn cadence so its modulo stays integer.
+      const sp = Math.max(0.2, Math.min(2, speed.current));
+      frame += 1;
+      t += sp;
       const w = canvas.width;
       const h = canvas.height;
       const cx = w / 2;
@@ -238,9 +248,9 @@ export function Orb() {
           // Emit far less often than before (TJ: old frequency was way too high) and let
           // each ring travel almost to the edge while easing its alpha down to nothing.
           const maxR = size * 0.47;
-          const grow = size * 0.0026 * (1 + energy * 0.6);
-          const spawnEvery = st === "recording" ? Math.max(30, 64 - lvl * 34) : 96;
-          if (t % Math.round(spawnEvery) === 0) {
+          const grow = size * 0.0026 * (1 + energy * 0.6) * sp;
+          const spawnEvery = (st === "recording" ? Math.max(30, 64 - lvl * 34) : 96) / sp;
+          if (frame % Math.max(1, Math.round(spawnEvery)) === 0) {
             rings.push({ r: dotR, a0: 0.5 + energy * 0.35 });
           }
           for (let i = rings.length - 1; i >= 0; i--) {

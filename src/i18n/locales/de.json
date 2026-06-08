@@ -251,6 +251,8 @@
     "posTopLeft": "Oben Links",
     "posTopRight": "Oben Rechts",
     "orbSize": "Größe",
+    "orbSpeed": "Geschwindigkeit",
+    "orbSpeedHint": "Tempo der Animation (Orb & Bubble). Niedriger = ruhiger/langsamer.",
     "idlePulse": "Idle-Puls",
     "hideWhenIdle": "Im Leerlauf verstecken",
     "account": "Konto",

@@ -438,6 +438,21 @@ export function Settings() {
                 ]}
               />
             </Row>
+            <Row name={t("settings.orbSpeed")} hint={t("settings.orbSpeedHint")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={2}
+                  step={0.1}
+                  value={c.orb_speed ?? 0.6}
+                  onChange={(e) => set("orb_speed", parseFloat(e.target.value))}
+                />
+                <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, fontSize: "0.8rem", opacity: 0.8 }}>
+                  {(c.orb_speed ?? 0.6).toFixed(1)}×
+                </span>
+              </div>
+            </Row>
             <Row name={t("settings.idlePulse")}>
               <Toggle checked={c.orb_idle_pulse} onChange={(v) => set("orb_idle_pulse", v)} />
             </Row>

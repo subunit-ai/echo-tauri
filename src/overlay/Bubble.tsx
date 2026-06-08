@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { onState, type EngineState } from "../lib/ipc";
@@ -31,6 +32,24 @@ export function Bubble() {
   const level = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
+  // Animation speed multiplier (shared orb_speed setting; default calmer 0.6).
+  const speed = useRef(0.6);
+
+  // Pick up the shared overlay speed (and live updates from Settings) so the
+  // bubble's idle shimmer honours the same "too fast" fix as the orb.
+  useEffect(() => {
+    invoke<Record<string, unknown>>("get_config")
+      .then((c) => {
+        if (typeof c.orb_speed === "number") speed.current = c.orb_speed as number;
+      })
+      .catch(() => {});
+    const un = listen<{ speed?: number }>("echo://orb-config", (e) => {
+      if (typeof e.payload.speed === "number") speed.current = e.payload.speed;
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
 
   useEffect(() => {
     const un = onState((p) => {
@@ -74,7 +93,7 @@ export function Bubble() {
     let raf = 0;
     let t = 0;
     const draw = () => {
-      t += 1;
+      t += Math.max(0.2, Math.min(2, speed.current));
       if (canvas && ctx) {
         const dpr = window.devicePixelRatio || 1;
         const w = (canvas.width = Math.floor(64 * dpr));
