@@ -148,6 +148,10 @@
   },
   "meetings": {
     "title": "Meetings",
+    "liveTitle": "Live-Meeting",
+    "liveDesc": "Starte ein Meeting oder tritt einem bei — automatisches Protokoll & saubere Sprecher-Trennung. Jedes Gerät nimmt seinen eigenen Ton auf.",
+    "start": "🎙 Meeting starten",
+    "recordingsHeading": "Aufnahmen",
     "subtitle": "Lange Aufnahmen (≥ {{minutes}} Min) — separat gespeichert. Klick öffnet das volle Transkript; die Buttons erzeugen Zusammenfassung / Aufgaben / Entscheidungen.",
     "empty": "Noch keine langen Aufnahmen.",
     "minutesShort": "{{minutes}} Min",

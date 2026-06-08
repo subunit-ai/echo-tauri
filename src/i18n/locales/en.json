@@ -148,6 +148,10 @@
   },
   "meetings": {
     "title": "Meetings",
+    "liveTitle": "Live meeting",
+    "liveDesc": "Start a meeting or join one — automatic minutes & clean speaker separation. Each device records its own audio.",
+    "start": "🎙 Start meeting",
+    "recordingsHeading": "Recordings",
     "subtitle": "Long recordings (≥ {{minutes}} min) — stored separately. Click to open the full transcript; the buttons generate summary / action items / decisions.",
     "empty": "No long recordings yet.",
     "minutesShort": "{{minutes}} min",

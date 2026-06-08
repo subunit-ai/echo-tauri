@@ -14,7 +14,7 @@ const ACTIONS: { style: string; labelKey: string }[] = [
   { style: "recap_email", labelKey: "meetings.actionRecapEmail" },
 ];
 
-export function Meetings() {
+export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
   const { t } = useTranslation();
   const { config, reload } = useConfig();
   const [open, setOpen] = useState<number | null>(null);
@@ -55,6 +55,38 @@ export function Meetings() {
   return (
     <div>
       <h1 className="section-title">{t("meetings.title")}</h1>
+
+      {/* Live meeting launcher → opens the native meet view (full window). */}
+      <div
+        className="card"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
+            {t("meetings.liveTitle")}
+          </div>
+          <div className="section-sub" style={{ margin: "5px 0 0", maxWidth: 520 }}>
+            {t("meetings.liveDesc")}
+          </div>
+        </div>
+        <button
+          className="sub-tab onb-primary"
+          style={{ padding: "10px 18px", fontSize: 14, whiteSpace: "nowrap" }}
+          onClick={onStartMeeting}
+        >
+          {t("meetings.start")}
+        </button>
+      </div>
+
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>
+        {t("meetings.recordingsHeading")}
+      </h2>
       <p className="section-sub">{t("meetings.subtitle", { minutes: thresholdMin })}</p>
 
       {list.length === 0 ? (

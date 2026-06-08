@@ -55,7 +55,7 @@ function Shell() {
           {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
           {section === "history" && <History />}
           {section === "settings" && <Settings />}
-          {section === "meetings" && <Meetings />}
+          {section === "meetings" && <Meetings onStartMeeting={() => setMeetLive(true)} />}
           {section === "vocabulary" && <Vocabulary />}
           {section === "help" && <Placeholder title={t("app.help")} />}
         </div>
