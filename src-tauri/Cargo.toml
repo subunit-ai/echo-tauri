@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.4.12"
+version = "0.4.13"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -17,7 +17,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+# macos-private-api: required for the transparent orb overlay window on macOS
+# (WebviewWindowBuilder::transparent is gated behind it). Uses private Apple APIs →
+# not App Store eligible, fine for internal/unsigned distribution.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-updater = "2"
