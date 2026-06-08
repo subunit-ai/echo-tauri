@@ -111,9 +111,15 @@ jobs:
         with:
           arch: arm64
 
-      - name: cmake (macOS — whisper.cpp build needs it; libclang ships with Xcode)
+      - name: macOS build env (cmake + deployment target for whisper.cpp std::filesystem)
         if: matrix.platform == 'macos-14'
-        run: brew list cmake >/dev/null 2>&1 || brew install cmake
+        run: |
+          brew list cmake >/dev/null 2>&1 || brew install cmake
+          # whisper.cpp's ggml uses std::filesystem (introduced in macOS 10.15); the default
+          # deployment target is older, so clang marks fs::path "unavailable" and the build
+          # fails. Apple Silicon is macOS 11.0+ anyway → pin 11.0 for clang + cmake.
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
