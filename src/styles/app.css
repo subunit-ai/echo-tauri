@@ -139,6 +139,13 @@ button {
   overflow-y: auto;
   padding: 26px 30px;
 }
+/* Meeting view: the embedded meet iframe fills the content pane edge-to-edge (it has its
+   own internal padding). Flex so the iframe stretches to the full pane height. */
+.content-meet {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+}
 
 .page-animate {
   animation: fade-in-up 0.25s var(--ease-out) forwards;

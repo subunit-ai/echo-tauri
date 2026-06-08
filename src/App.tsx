@@ -38,28 +38,38 @@ function Shell() {
   if (!config.has_seen_onboarding) {
     return <Onboarding />;
   }
-  // Native Meeting view takes over the whole window (meet owns body/#root → no CSS clash).
-  if (meetLive) {
-    return <MeetLive onExit={() => setMeetLive(false)} />;
-  }
-
   return (
     <div className="app">
       <SoundFx />
       <UpdatePrompt />
       <MeetingPrompt />
       <Header />
-      <Sidebar active={section} onSelect={setSection} />
-      <main className="content" key={section}>
-        <div className="page-animate">
-          {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
-          {section === "history" && <History />}
-          {section === "settings" && <Settings />}
-          {section === "meetings" && <Meetings onStartMeeting={() => setMeetLive(true)} />}
-          {section === "vocabulary" && <Vocabulary />}
-          {section === "help" && <Placeholder title={t("app.help")} />}
-        </div>
-      </main>
+      {/* Sidebar stays static even while the meeting view is open — selecting any section
+          exits the meeting and navigates there. The native meet renders in the content pane
+          (an isolated iframe), so the left nav never moves. */}
+      <Sidebar
+        active={meetLive ? "meetings" : section}
+        onSelect={(s) => {
+          setMeetLive(false);
+          setSection(s);
+        }}
+      />
+      {meetLive ? (
+        <main className="content content-meet" key="meet">
+          <MeetLive />
+        </main>
+      ) : (
+        <main className="content" key={section}>
+          <div className="page-animate">
+            {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
+            {section === "history" && <History />}
+            {section === "settings" && <Settings />}
+            {section === "meetings" && <Meetings onStartMeeting={() => setMeetLive(true)} />}
+            {section === "vocabulary" && <Vocabulary />}
+            {section === "help" && <Placeholder title={t("app.help")} />}
+          </div>
+        </main>
+      )}
     </div>
   );
 }

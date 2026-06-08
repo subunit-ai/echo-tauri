@@ -18,12 +18,15 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Two windows = two HTML entries: the main hub + the transparent orb overlay.
+  // HTML entries: main hub, the transparent orb overlay, and the embedded meet view
+  // (meet.html runs the meet.subunit.ai React app in an iframe so its CSS stays isolated
+  // from Echo's shell while the sidebar stays put).
   build: {
     rollupOptions: {
       input: {
         main: "index.html",
         overlay: "overlay.html",
+        meet: "meet.html",
       },
     },
   },

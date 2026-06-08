@@ -1,67 +1,57 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { MeetApp } from "@meet/MeetApp";
-import meetCss from "@meet/styles/meet.css?inline";
 
 /**
- * Native Meeting view — runs the meet.subunit.ai React app (the rewrite) IN Echo, sharing
- * one source. It takes over the whole window: when this is mounted the Echo Shell is not
- * rendered, so meet owns body/#root exactly as on the web (no CSS collision). meet.css is
- * injected only while this view is open and removed on exit. Auth = Echo's subunit token
- * (meet_token command) — no SSO redirect, and the token never leaves the local webview.
+ * Native Meeting view — runs the meet.subunit.ai React app (the rewrite) IN Echo via an
+ * iframe (meet.html) inside the content pane, so Echo's sidebar stays put on the left. The
+ * iframe is its own document → meet.css is fully isolated and can't touch Echo's shell, while
+ * the look stays pixel-identical to the standalone site.
+ *
+ * Auth = Echo's subunit token. The sub-frame has no Tauri IPC, so the main window fetches the
+ * token (meet_token) and hands it over via postMessage; it never leaves the local webview.
  */
-export function MeetLive({ onExit }: { onExit: () => void }) {
+export function MeetLive() {
+  const ref = useRef<HTMLIFrameElement>(null);
+
   useEffect(() => {
-    const style = document.createElement("style");
-    style.id = "meet-embed-css";
-    style.textContent = meetCss;
-    document.head.appendChild(style);
+    let alive = true;
+    const sendToken = async () => {
+      let tok: string | null = null;
+      try {
+        tok = (await invoke<string>("meet_token")) || null;
+      } catch {
+        tok = null;
+      }
+      if (alive) ref.current?.contentWindow?.postMessage({ type: "meet-token", token: tok }, "*");
+    };
+    // The iframe announces itself once its message listener is attached.
+    const onMsg = (e: MessageEvent) => {
+      if (e.data && e.data.type === "meet-ready") sendToken();
+    };
+    window.addEventListener("message", onMsg);
     return () => {
-      style.remove();
-      // Leave meet's theme class as-is is harmless, but reset so Echo's own theme resumes.
-      document.documentElement.classList.remove("dark");
+      alive = false;
+      window.removeEventListener("message", onMsg);
     };
   }, []);
 
-  const getEmbedToken = async (): Promise<string | null> => {
-    try {
-      const t = await invoke<string>("meet_token");
-      return t || null;
-    } catch {
-      return null;
-    }
-  };
-
   return (
-    <>
-      <MeetApp authMode="embed" getEmbedToken={getEmbedToken} />
-      <button
-        onClick={onExit}
-        title="Zurück zu Echo"
-        style={{
-          position: "fixed",
-          left: 16,
-          bottom: 16,
-          zIndex: 9999,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "9px 14px",
-          borderRadius: 999,
-          border: "1px solid rgba(150,180,220,.25)",
-          background: "rgba(20,38,64,.72)",
-          backdropFilter: "blur(20px) saturate(1.5)",
-          WebkitBackdropFilter: "blur(20px) saturate(1.5)",
-          color: "#e6eefb",
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          boxShadow: "0 8px 24px -10px rgba(0,0,0,.5)",
-        }}
-      >
-        ← Echo
-      </button>
-    </>
+    <iframe
+      ref={ref}
+      src="meet.html"
+      title="Meeting"
+      allow="microphone; autoplay"
+      // Fallback hand-off in case "meet-ready" fired before our listener attached.
+      onLoad={() => {
+        invoke<string>("meet_token")
+          .then((t) =>
+            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: t || null }, "*"),
+          )
+          .catch(() =>
+            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: null }, "*"),
+          );
+      }}
+      style={{ flex: 1, width: "100%", border: 0, display: "block" }}
+    />
   );
 }
