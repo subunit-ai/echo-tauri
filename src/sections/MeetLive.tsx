@@ -15,6 +15,9 @@ export function MeetLive() {
 
   useEffect(() => {
     let alive = true;
+    // Pin the token hand-off to our own origin (parent + iframe share tauri://localhost):
+    // never broadcast the subunit access token with a "*" targetOrigin.
+    const origin = window.location.origin;
     const sendToken = async () => {
       let tok: string | null = null;
       try {
@@ -22,11 +25,11 @@ export function MeetLive() {
       } catch {
         tok = null;
       }
-      if (alive) ref.current?.contentWindow?.postMessage({ type: "meet-token", token: tok }, "*");
+      if (alive) ref.current?.contentWindow?.postMessage({ type: "meet-token", token: tok }, origin);
     };
     // The iframe announces itself once its message listener is attached.
     const onMsg = (e: MessageEvent) => {
-      if (e.data && e.data.type === "meet-ready") sendToken();
+      if (e.origin === origin && e.data && e.data.type === "meet-ready") sendToken();
     };
     window.addEventListener("message", onMsg);
     return () => {
@@ -43,12 +46,13 @@ export function MeetLive() {
       allow="microphone; autoplay"
       // Fallback hand-off in case "meet-ready" fired before our listener attached.
       onLoad={() => {
+        const origin = window.location.origin;
         invoke<string>("meet_token")
           .then((t) =>
-            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: t || null }, "*"),
+            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: t || null }, origin),
           )
           .catch(() =>
-            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: null }, "*"),
+            ref.current?.contentWindow?.postMessage({ type: "meet-token", token: null }, origin),
           );
       }}
       style={{ flex: 1, width: "100%", border: 0, display: "block" }}

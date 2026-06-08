@@ -21,12 +21,15 @@ let resolveToken: (t: string | null) => void = () => {};
 const tokenPromise = new Promise<string | null>((r) => {
   resolveToken = r;
 });
+// Only accept the token from our own origin (parent + iframe share tauri://localhost).
 window.addEventListener("message", (e) => {
-  if (e.data && e.data.type === "meet-token") resolveToken(e.data.token ?? null);
+  if (e.origin === window.location.origin && e.data && e.data.type === "meet-token") {
+    resolveToken(e.data.token ?? null);
+  }
 });
-// Tell the parent we're ready to receive the token.
+// Tell the parent we're ready to receive the token (pinned to our origin).
 try {
-  parent.postMessage({ type: "meet-ready" }, "*");
+  parent.postMessage({ type: "meet-ready" }, window.location.origin);
 } catch {
   /* ignore */
 }
