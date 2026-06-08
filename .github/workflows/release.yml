@@ -27,7 +27,13 @@ jobs:
             args: "--features local-whisper-gpu"
           - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper (ARM64 libclang)
             args: "--features local-whisper"
-          # macOS = Phase 2 (needs Apple signing/notarization to distribute) — re-add then.
+          - platform: macos-14            # macOS Apple Silicon (M1) — CPU local whisper
+            # Unsigned / un-notarized: internal use only. tauri-action skips Apple signing
+            # when no APPLE_* secrets are present; Gatekeeper is cleared manually (right-click →
+            # Open, or `xattr -dr com.apple.quarantine /Applications/echo.app`). The Tauri
+            # updater bundle is still minisign-signed (TAURI_SIGNING_PRIVATE_KEY), so the
+            # in-app auto-update path works on macOS too.
+            args: "--target aarch64-apple-darwin --features local-whisper"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -104,6 +110,10 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: arm64
+
+      - name: cmake (macOS — whisper.cpp build needs it; libclang ships with Xcode)
+        if: matrix.platform == 'macos-14'
+        run: brew list cmake >/dev/null 2>&1 || brew install cmake
 
       - uses: actions/setup-node@v4
         with:
