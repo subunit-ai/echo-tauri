@@ -127,6 +127,7 @@ pub fn run() {
             commands::check_for_updates,
             commands::install_update,
             commands::start_meeting,
+            commands::meet_token,
             commands::start_meeting_recording,
             commands::stop_meeting_recording,
             commands::list_local_models,
