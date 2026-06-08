@@ -585,6 +585,16 @@ pub fn start_meeting(app: AppHandle) -> Result<crate::meet::MeetingInfo, String>
     Ok(info)
 }
 
+/// Fresh subunit access token for the embedded meet UI (the native "Meeting" view runs
+/// the meet.subunit.ai React app in-app; it authenticates with this token instead of the
+/// web SSO redirect). Refreshes first so the embed never gets a stale token. The token
+/// stays inside Echo's own local webview — it is never sent to a remote origin.
+#[tauri::command]
+pub fn meet_token(app: AppHandle) -> String {
+    crate::auth::ensure_fresh(&app);
+    app.state::<AppState>().config.lock().subunit_access_token.clone()
+}
+
 /// Start a local dual-audio meeting recording: the mic (you) + the system loopback
 /// (the remote Teams/Zoom/Meet participants). Triggered from the meeting-detect
 /// prompt's "record". Windows-only (loopback); errors on other platforms.
