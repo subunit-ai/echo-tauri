@@ -217,11 +217,12 @@ export function Orb() {
           for (let i = 0; i < n; i++) {
             const k = Math.abs(i - (n - 1) / 2);
             const amp = energy * (1 - k * 0.18) + 0.08;
-            // At rest with idle animation OFF, render a flat row of short, equal
-            // bars (an equaliser at silence) rather than freezing mid-animation in
-            // whatever jagged formation it happened to be in.
+            // At rest with idle animation OFF, collapse each bar to a small DOT
+            // (height == width → the roundRect's bw/2 radius makes it a circle), so
+            // the orb shows a calm row of dots instead of standing bars or a frozen
+            // mid-animation frame.
             const bh = idleStill
-              ? size * 0.11
+              ? bw
               : size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i)));
             const x = cx - total / 2 + i * (bw + gap);
             ctx.fillStyle = hexA(base, 0.9);
