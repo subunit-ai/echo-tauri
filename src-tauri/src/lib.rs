@@ -11,7 +11,6 @@ mod events;
 mod hardware;
 mod hotkey;
 mod inject;
-mod live_ws; // LIVE dictation (WS stream → WhisperLive); replaced the old batch streaming.rs
 mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;
 mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting transcripts
@@ -64,8 +63,6 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .level_for("echo_lib", log::LevelFilter::Debug)
                 .level_for("reqwest", log::LevelFilter::Warn)
-                .level_for("tokio_tungstenite", log::LevelFilter::Warn)
-                .level_for("tungstenite", log::LevelFilter::Warn)
                 .max_file_size(5_000_000)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .targets([

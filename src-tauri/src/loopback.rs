@@ -32,8 +32,7 @@ pub struct SystemLoopback {
 }
 
 impl SystemLoopback {
-    /// Snapshot the audio captured so far WITHOUT stopping (the mixer polls this,
-    /// like `recorder.snapshot()`).
+    /// Snapshot the audio captured so far WITHOUT stopping (the mixer polls this).
     pub fn snapshot(&self) -> LoopbackCapture {
         LoopbackCapture {
             samples: self.buf.lock().clone(),

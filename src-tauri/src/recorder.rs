@@ -35,8 +35,6 @@ enum Cmd {
         reply: Sender<Result<(), String>>,
     },
     Stop(Sender<Capture>),
-    /// Non-draining clone of the buffer so far (for live streaming).
-    Snapshot(Sender<Capture>),
 }
 
 pub struct Recorder {
@@ -103,17 +101,6 @@ impl Recorder {
         }
     }
 
-    /// Clone the buffer captured so far WITHOUT stopping (live streaming reads
-    /// this repeatedly and segments on speech pauses).
-    pub fn snapshot(&self) -> Option<Capture> {
-        let (rtx, rrx) = channel();
-        if self.tx.lock().send(Cmd::Snapshot(rtx)).is_ok() {
-            rrx.recv().ok()
-        } else {
-            None
-        }
-    }
-
     pub fn level(&self) -> f32 {
         f32::from_bits(self.level.load(Ordering::Relaxed))
     }
@@ -160,19 +147,6 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                         let _ = reply.send(Err(friendly_mic_error(&e)));
                     }
                 }
-            }
-            Cmd::Snapshot(reply) => {
-                let cap = match active.as_ref() {
-                    Some((_, buf, sr)) => Capture {
-                        samples: buf.lock().clone(),
-                        sample_rate: *sr,
-                    },
-                    None => Capture {
-                        samples: Vec::new(),
-                        sample_rate: 16_000,
-                    },
-                };
-                let _ = reply.send(cap);
             }
             Cmd::Stop(reply) => {
                 recording.store(false, Ordering::Relaxed);

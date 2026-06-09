@@ -237,8 +237,6 @@
     "cloudQualityFast": "Schnell",
     "cloudQualityInstant": "Instant",
     "cloudQualityAuto": "Auto",
-    "liveMode": "Live-Modus (Streaming)",
-    "liveModeHint": "An: WhisperLive-Stream — Text erscheint live beim Sprechen (immer Live-Typing). Aus: Instant — ganzer Text erst am Ende.",
     "instantLiveTyping": "Instant: Live-Tippen",
     "instantLiveTypingHint": "Nur im Instant-Modus: das fertige Ergebnis progressiv reintippen statt auf einmal einfügen. Aus = Instant-Paste (Ctrl+V, atomar, zuverlässig — empfohlen auf Windows).",
     "dachFormat": "DACH-Formatierung",

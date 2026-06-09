@@ -115,11 +115,9 @@ pub struct Config {
     pub target_lock: bool,
     pub show_bubble: bool,
 
-    /// CHUNK-API (instant) path only: type the final transcript in progressively
-    /// ("live typing") instead of an instant clipboard+Ctrl+V paste. The streaming
-    /// path (`live_type`) ALWAYS live-types per segment regardless of this — there
-    /// the choice doesn't exist. Default false = instant paste (atomic, native, no
-    /// per-char spam). Both axes are independent + user-settable in Settings.
+    /// Type the final transcript in progressively ("live typing") instead of an
+    /// instant clipboard+Ctrl+V paste. Default false = instant paste (atomic,
+    /// native, no per-char spam). User-settable in Settings.
     pub instant_live_typing: bool,
 
     /// Empty = system default. Otherwise device name (resolved to index at startup).
@@ -206,10 +204,7 @@ pub struct Config {
     /// "auto" | "instant" | "fast" | "quality"
     pub cloud_quality_mode: String,
     pub gpu_aware_migrated: bool,
-    pub live_type: bool,
     pub cloud_superfast: bool,
-    /// LIVE mode WS endpoint (WhisperLive proxy). Empty → wss://live-transcribe.subunit.ai
-    pub live_ws_endpoint: String,
 
     pub sound_enabled: bool,
     pub sound_volume: f32,
@@ -318,9 +313,7 @@ impl Default for Config {
 
             cloud_quality_mode: "quality".to_string(),
             gpu_aware_migrated: false,
-            live_type: false,
             cloud_superfast: false,
-            live_ws_endpoint: "wss://live-transcribe.subunit.ai".to_string(),
 
             sound_enabled: true,
             sound_volume: 0.6,

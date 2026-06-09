@@ -20,7 +20,7 @@ use crate::recorder::Recorder;
 
 const SR: u32 = 16_000;
 
-/// Linear-resample mono f32 from `from_sr` to 16 kHz. (Same approach as live_ws.)
+/// Linear-resample mono f32 from `from_sr` to 16 kHz.
 pub fn resample_to_16k(samples: &[f32], from_sr: u32) -> Vec<f32> {
     if from_sr == SR || samples.is_empty() {
         return samples.to_vec();

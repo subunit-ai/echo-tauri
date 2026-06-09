@@ -71,7 +71,6 @@ export interface Config {
 
   cloud_quality_mode: string;
   gpu_aware_migrated: boolean;
-  live_type: boolean;
   instant_live_typing: boolean;
   cloud_superfast: boolean;
 

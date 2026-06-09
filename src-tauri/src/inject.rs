@@ -5,13 +5,9 @@
 //! in-app record button). For the global-hotkey flow the target already has
 //! focus, so this is belt-and-suspenders there.
 //!
-//! Two independent axes (mirrors the user's mental model):
-//!  * **Streaming / live mode** (`live_type`): WhisperLive WS → `type_live()` types
-//!    each segment in as you speak. ALWAYS live typing — no choice (it can't paste).
-//!  * **Chunk / instant mode** (`live_type` off): one full transcript at the end,
-//!    delivered by `deliver()` either as an **instant paste** (clipboard + Ctrl/Cmd+V,
-//!    the default) or — when `instant_live_typing` is on — **live-typed** in via
-//!    Unicode keystrokes. Independent of the streaming toggle.
+//! Delivery: one full transcript at the end, delivered by `deliver()` either as an
+//! **instant paste** (clipboard + Ctrl/Cmd+V, the default) or — when
+//! `instant_live_typing` is on — **live-typed** in via Unicode keystrokes.
 //!
 //! ## Windows: native SendInput on the paste chord (no enigo there)
 //! enigo 0.2's `key(Key::Unicode('v'), Click)` emits the Ctrl+V chord as THREE
@@ -433,33 +429,7 @@ fn paste() -> anyhow::Result<()> {
     }
 }
 
-/// Focus the captured target (when target_lock is on) and type a live-dictation
-/// segment with modifier-free Unicode typing — appends without touching the
-/// clipboard, so it can fire repeatedly while the user keeps speaking.
-pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
-    if text.trim().is_empty() {
-        return Ok(());
-    }
-    log::debug!("type_live: {} target_lock={}", text_stats(text), cfg.target_lock);
-    // macOS: type on the main thread (enigo is not thread-safe here). No Cmd+V fallback —
-    // streaming appends without touching the clipboard, so a paste would insert stale text.
-    #[cfg(target_os = "macos")]
-    {
-        macos_inject(text.to_string(), true, cfg.target_lock, target.cloned(), false);
-        return Ok(());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        if cfg.target_lock {
-            if let Some(t) = target {
-                focus(t);
-            }
-        }
-        type_text(text)
-    }
-}
-
-/// Modifier-free Unicode typing (streaming + the instant "live-type" option).
+/// Modifier-free Unicode typing (the instant "live-type" option).
 ///
 /// Windows uses a native `SendInput` batch of `KEYEVENTF_UNICODE` events — the
 /// SAME reasoning that drove the native paste chord: enigo's `text()` rides

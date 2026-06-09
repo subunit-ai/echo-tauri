@@ -379,9 +379,6 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name={t("settings.liveMode")} hint={t("settings.liveModeHint")}>
-              <Toggle checked={c.live_type} onChange={(v) => set("live_type", v)} />
-            </Row>
             <Row name={t("settings.instantLiveTyping")} hint={t("settings.instantLiveTypingHint")}>
               <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />
             </Row>

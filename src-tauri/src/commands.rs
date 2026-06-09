@@ -9,8 +9,7 @@ use crate::inject::Target;
 use crate::recorder::Recorder;
 use crate::transcribe::{self, EngineError, TranscriptResult};
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, State};
 
 /// App-wide managed state.
@@ -19,25 +18,14 @@ pub struct AppState {
     pub recorder: Recorder,
     /// Window captured at record-start, focused again before paste-back.
     pub target: Mutex<Option<Target>>,
-    /// Live-dictation control signal while streaming (None = not streaming).
-    /// See [`crate::live_ws`]: RUN / FINISH / CANCEL.
-    pub streaming: Mutex<Option<Arc<AtomicU8>>>,
     /// Guards the single overlay cursor hit-test loop (see [`crate::overlay`]).
     pub hit_test_active: std::sync::atomic::AtomicBool,
     /// Active meeting recording (mic + system loopback), None when not recording.
     pub meeting_capture: Mutex<Option<crate::meeting_capture::MeetingCapture>>,
-    /// Monotonic id bumped on every [`do_start`]. A live-dictation task captures
-    /// the id at spawn and only tears down shared state (recorder/target/streaming)
-    /// on exit if it's STILL current — so a superseded session (user started a new
-    /// recording) can't have an old task's cleanup stomp the new one, and a
-    /// crashed/leaked task can't strand `streaming = Some` (which would make every
-    /// later transcribe short-circuit and deliver nothing — "nothing works anymore").
-    pub session_gen: AtomicU64,
     /// True while a record session is in progress. Set in [`do_start`], cleared
     /// SYNCHRONOUSLY in do_transcribe/do_cancel the instant the user finishes. The
-    /// re-entry guard gates on THIS (not `recorder.is_recording()`) because a live
-    /// session's mic teardown is deferred to the async task — gating on the recorder
-    /// flag would drop the user's next press for up to the drain window.
+    /// re-entry guard gates on THIS (not `recorder.is_recording()`) so a held hotkey
+    /// (auto-repeat fires Pressed repeatedly) can't re-enter do_start mid-session.
     pub session_active: AtomicBool,
 }
 
@@ -47,10 +35,8 @@ impl AppState {
             config: Mutex::new(config),
             recorder: Recorder::new(),
             target: Mutex::new(None),
-            streaming: Mutex::new(None),
             hit_test_active: std::sync::atomic::AtomicBool::new(false),
             meeting_capture: Mutex::new(None),
-            session_gen: AtomicU64::new(0),
             session_active: AtomicBool::new(false),
         }
     }
@@ -72,41 +58,19 @@ pub fn do_start(app: &AppHandle) {
 
     // Already in a session? Then this is a re-entrant call — hold-mode fires Pressed
     // repeatedly on key auto-repeat. Leave the running recording untouched; without
-    // this a held key would re-capture the target and, in live mode, spawn a second
-    // WhisperLive task on every repeat. We gate on session_active (set/cleared on the
-    // user's start/finish) rather than recorder.is_recording(), because a live
-    // session's mic stop is deferred to the async task — gating on the recorder flag
-    // would silently drop the user's NEXT press during that drain window.
+    // this a held key would re-capture the target on every repeat. We gate on
+    // session_active (set/cleared on the user's start/finish) rather than
+    // recorder.is_recording() so the guard is set the instant the user presses.
     if state.session_active.swap(true, Ordering::SeqCst) {
         return;
     }
 
-    // Fresh start → begin from a known-clean slate. Cancel + clear any leftover
-    // live-dictation signal from a previous session: a task that was superseded or
-    // crashed could otherwise leave `streaming = Some`, which makes the next
-    // do_transcribe short-circuit and deliver NOTHING — exactly the "went back to
-    // plain instant-paste and now nothing works" report.
-    if let Some(old) = state.streaming.lock().take() {
-        old.store(crate::live_ws::CANCEL, Ordering::Relaxed);
-    }
-    // This recording's identity (bumped BEFORE we start the mic so a just-cancelled
-    // old task can't have its teardown stomp the session we're starting).
-    let gen = state
-        .session_gen
-        .fetch_add(1, Ordering::SeqCst)
-        .wrapping_add(1);
-
-    let (dev, lock, live) = {
+    let (dev, lock) = {
         let c = state.config.lock();
-        (c.mic_device_name.clone(), c.target_lock, c.live_type)
+        (c.mic_device_name.clone(), c.target_lock)
     };
-    log::info!(
-        "do_start: gen={gen} mode={} target_lock={lock}",
-        if live { "live-stream" } else { "instant" }
-    );
-    // Live dictation always needs the target so segments type into the right
-    // window, even if target_lock is off.
-    if lock || live {
+    log::info!("do_start: target_lock={lock}");
+    if lock {
         *state.target.lock() = Some(crate::inject::capture_active_window());
     }
     // Wait for the recorder to actually open the mic. A failure here (no device /
@@ -123,24 +87,12 @@ pub fn do_start(app: &AppHandle) {
         return;
     }
     emit_state(app, EngineState::Recording, None);
-
-    if live {
-        let sig = Arc::new(AtomicU8::new(crate::live_ws::RUN));
-        *state.streaming.lock() = Some(sig.clone());
-        crate::live_ws::spawn(app.clone(), sig, gen);
-    }
 }
 
 pub fn do_cancel(app: &AppHandle) {
     let state = app.state::<AppState>();
-    // The session is over — clear the re-entry guard synchronously so the next
-    // press is accepted immediately (live teardown is async).
+    // The session is over — clear the re-entry guard so the next press is accepted.
     state.session_active.store(false, Ordering::SeqCst);
-    // Live: tell the controller to discard + stop (it clears target + emits Idle).
-    if let Some(sig) = state.streaming.lock().take() {
-        sig.store(crate::live_ws::CANCEL, Ordering::Relaxed);
-        return;
-    }
     let _ = state.recorder.stop();
     *state.target.lock() = None;
     emit_state(app, EngineState::Idle, None);
@@ -150,20 +102,8 @@ pub fn do_cancel(app: &AppHandle) {
 /// calls this on a spawned thread; the IPC command calls it directly.
 pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let state = app.state::<AppState>();
-    // The session is over — clear the re-entry guard synchronously so the next
-    // press is accepted immediately (a live session's mic teardown is async).
+    // The session is over — clear the re-entry guard so the next press is accepted.
     state.session_active.store(false, Ordering::SeqCst);
-    // Live dictation: segments were already typed as you spoke. Just tell the
-    // controller to flush the final segment + stop (it emits Done) — don't
-    // stop()/transcribe() here or we'd race its non-draining snapshots.
-    if let Some(sig) = state.streaming.lock().take() {
-        sig.store(crate::live_ws::FINISH, Ordering::Relaxed);
-        return Ok(TranscriptResult {
-            text: String::new(),
-            quality_mode: "live".to_string(),
-            segments: Vec::new(),
-        });
-    }
     let cap = match state.recorder.stop() {
         Some(c) => c,
         None => return Err(EngineError::new("no_recording", "keine aktive Aufnahme")),
