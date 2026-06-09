@@ -621,6 +621,7 @@ pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
     c.subunit_token_expires_in = 0;
     c.subunit_workspace_id.clear();
     c.account_email.clear();
+    c.plan = "free".to_string(); // signed out → no entitlement
     c.save().map_err(|e| e.to_string())
 }
 

@@ -103,6 +103,10 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                     let _ = c.save();
                 }
 
+                // Pull the real workspace tier → config.plan so the UI doesn't keep
+                // showing "free" after a successful sign-in.
+                refresh_plan(app);
+
                 let _ = write_html(
                     &mut stream,
                     "Echo — angemeldet ✓",
@@ -220,6 +224,68 @@ fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
         j.get("refresh_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
         j.get("expires_in").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
     ))
+}
+
+/// Fetch the ACTIVE workspace tier from auth.subunit.ai and store it as
+/// `config.plan` so the UI shows the real plan (free/basic/pro/enterprise/pilot/ops)
+/// instead of the local default — Echo previously never queried it, so the account
+/// always read "free" no matter the tier. Best-effort (refreshes the token first).
+/// NOTE: this mirrors exactly what the transcribe server gates on — the *active*
+/// workspace (JWT `ws` claim, else the personal workspace). A team member whose
+/// token has no `ws` claim sees their personal workspace's tier here.
+pub fn refresh_plan(app: &AppHandle) {
+    ensure_fresh(app);
+    let token = {
+        let st = app.state::<AppState>();
+        let c = st.config.lock();
+        c.subunit_access_token.clone()
+    };
+    if token.is_empty() {
+        return;
+    }
+    let tier = match fetch_active_tier(&token) {
+        Ok(t) if !t.is_empty() => t,
+        Ok(_) => return,
+        Err(e) => {
+            log::debug!("plan fetch: {e}");
+            return;
+        }
+    };
+    let changed = {
+        let st = app.state::<AppState>();
+        let mut c = st.config.lock();
+        if c.plan != tier {
+            c.plan = tier;
+            let _ = c.save();
+            true
+        } else {
+            false
+        }
+    };
+    if changed {
+        use tauri::Emitter;
+        // Nudge the main window to reload so the Account tab shows the new plan.
+        let _ = app.emit("echo://config-changed", ());
+    }
+}
+
+fn fetch_active_tier(token: &str) -> anyhow::Result<String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .build()?;
+    let resp = client
+        .get(format!("{AUTH_BASE}/me/workspace/active"))
+        .bearer_auth(token)
+        .send()?;
+    if !resp.status().is_success() {
+        anyhow::bail!("active workspace {}", resp.status());
+    }
+    let j: serde_json::Value = resp.json()?;
+    Ok(j.get("workspace")
+        .and_then(|w| w.get("tier"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string())
 }
 
 fn read_request_line(stream: &TcpStream) -> anyhow::Result<String> {

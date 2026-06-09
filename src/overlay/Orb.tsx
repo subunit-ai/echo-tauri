@@ -217,7 +217,12 @@ export function Orb() {
           for (let i = 0; i < n; i++) {
             const k = Math.abs(i - (n - 1) / 2);
             const amp = energy * (1 - k * 0.18) + 0.08;
-            const bh = size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i)));
+            // At rest with idle animation OFF, render a flat row of short, equal
+            // bars (an equaliser at silence) rather than freezing mid-animation in
+            // whatever jagged formation it happened to be in.
+            const bh = idleStill
+              ? size * 0.11
+              : size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i)));
             const x = cx - total / 2 + i * (bw + gap);
             ctx.fillStyle = hexA(base, 0.9);
             const y = cy - bh / 2;
@@ -228,7 +233,8 @@ export function Orb() {
           break;
         }
         case "wave": {
-          const amp = size * 0.18 * (0.15 + energy);
+          // Flat, calm line at rest (idle animation off) instead of a frozen wave.
+          const amp = idleStill ? size * 0.015 : size * 0.18 * (0.15 + energy);
           ctx.lineWidth = Math.max(2, size * 0.02);
           ctx.strokeStyle = hexA(base, 0.9);
           ctx.beginPath();

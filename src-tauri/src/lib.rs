@@ -244,6 +244,21 @@ pub fn run() {
                 });
             }
 
+            // Refresh the displayed plan from the active workspace tier on startup —
+            // config.plan was never fetched in older builds, so it kept showing the
+            // local default ("free") regardless of the account's real tier.
+            {
+                let logged_in = {
+                    let st = app.state::<AppState>();
+                    let c = st.config.lock();
+                    !c.subunit_access_token.is_empty() || !c.subunit_refresh_token.is_empty()
+                };
+                if logged_in {
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || crate::auth::refresh_plan(&handle));
+                }
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
