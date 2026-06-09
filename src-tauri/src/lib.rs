@@ -144,6 +144,12 @@ pub fn run() {
                 std::env::consts::ARCH,
             );
 
+            // macOS: the paste-back path must reach the main thread (enigo crashes
+            // off-thread). Stash the handle for inject::macos_inject, then trigger the
+            // Accessibility prompt — synthetic Cmd+V silently no-ops without it.
+            crate::inject::set_app_handle(app.handle().clone());
+            crate::inject::prime_accessibility();
+
             // Global hotkey
             if let Err(e) = hotkey::register_from_config(app.handle()) {
                 log::warn!("hotkey: {e}");

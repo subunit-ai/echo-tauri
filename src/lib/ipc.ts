@@ -218,6 +218,12 @@ export const stopMeetingRecording = () => invoke<string>("stop_meeting_recording
 export const onMeetingDetected = (cb: (app: string) => void): Promise<UnlistenFn> =>
   listen<{ app: string }>("echo://meeting-detected", (e) => cb(e.payload.app));
 
+/** macOS only: emitted when auto-paste was blocked because the app lacks the
+ *  Accessibility permission (synthetic Cmd+V silently no-ops without it). The
+ *  text is already on the clipboard, so a manual paste still works. */
+export const onNeedsAccessibility = (cb: () => void): Promise<UnlistenFn> =>
+  listen("echo://needs-accessibility", () => cb());
+
 // ---- Mode helpers (BigModeSwitch <-> config) ----
 export type UiMode = "local" | "cloud" | "superfast";
 

@@ -12,7 +12,7 @@ import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { MeetingPrompt } from "./components/MeetingPrompt";
-import { onState } from "./lib/ipc";
+import { onState, onNeedsAccessibility } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
@@ -78,14 +78,19 @@ function Shell() {
 // toast from anywhere in the app — not just when the record panel is on screen.
 function EngineErrorToasts() {
   const toast = useToast();
+  const { t } = useTranslation();
   useEffect(() => {
     const sub = onState((p) => {
       if (p.state === "error" && p.detail) toast(p.detail, "error");
     });
+    // macOS: auto-paste was blocked for lack of Accessibility permission. Text is on
+    // the clipboard; nudge the user to grant it so future pastes land automatically.
+    const ax = onNeedsAccessibility(() => toast(t("perm.needsAccessibility"), "error"));
     return () => {
       sub.then((un) => un());
+      ax.then((un) => un());
     };
-  }, [toast]);
+  }, [toast, t]);
   return null;
 }
 

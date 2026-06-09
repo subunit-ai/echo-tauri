@@ -1,4 +1,7 @@
 {
+  "perm": {
+    "needsAccessibility": "Auto-Einfügen braucht „Bedienungshilfen\"-Zugriff. Text liegt in der Zwischenablage — aktiviere Echo unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen."
+  },
   "onb": {
     "welcomeTitle": "Willkommen bei Echo",
     "welcomeBody": "Drücken, sprechen, fertig — den Rest übernehmen wir.",

@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.4.21"
+version = "0.4.22"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -87,6 +87,9 @@ windows = { version = "0.58", features = [
 # (IMMDeviceEnumerator → render endpoint → IAudioClient w/ LOOPBACK → capture)
 # far more safely than hand-rolled `windows`-crate COM. Windows-only; see loopback.rs.
 wasapi = "0.15"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
 
 [features]
 default = []

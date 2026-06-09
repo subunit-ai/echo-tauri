@@ -35,6 +35,71 @@
 use crate::config::Config;
 use std::time::Instant;
 
+#[cfg(target_os = "macos")]
+use once_cell::sync::OnceCell;
+
+// macOS: synthetic keyboard input (enigo → CoreGraphics/AppKit) is NOT thread-safe
+// and MUST run on the main thread — calling it from a Tauri worker thread (where the
+// transcribe command runs) hard-crashes the app (EXC_BAD_ACCESS deep in AppKit). We
+// stash the AppHandle so the paste path can marshal itself onto the main run loop via
+// `run_on_main_thread`. See `macos_inject`. (No-op storage on other platforms.)
+#[cfg(target_os = "macos")]
+static APP_HANDLE: OnceCell<tauri::AppHandle> = OnceCell::new();
+
+/// Remember the AppHandle for the macOS main-thread paste marshalling (no-op elsewhere).
+pub fn set_app_handle(_app: tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = APP_HANDLE.set(_app);
+    }
+}
+
+/// macOS: trigger the Accessibility (System Settings → Privacy → Accessibility) prompt
+/// once at startup. Synthetic Cmd+V via CGEventPost is gated by this TCC permission —
+/// without it the paste is a SILENT no-op (text lands on the clipboard but never pastes).
+/// Unlike the microphone, macOS never auto-prompts for it on first use, so we must ask.
+/// No-op + no prompt when already trusted, and a no-op on other platforms.
+pub fn prime_accessibility() {
+    #[cfg(target_os = "macos")]
+    {
+        let trusted = mac::is_trusted(true);
+        log::info!("macos accessibility: trusted={trusted} (prompted if false)");
+    }
+}
+
+/// macOS Accessibility (AX) trust check + optional system prompt. The symbols live in
+/// the ApplicationServices umbrella framework (HIServices); we bind them directly so we
+/// don't depend on a crate exposing them. `kAXTrustedCheckOptionPrompt`=true shows the
+/// standard "enable in System Settings" dialog when the process isn't yet trusted.
+#[cfg(target_os = "macos")]
+mod mac {
+    use core_foundation::base::TCFType;
+    use core_foundation::boolean::CFBoolean;
+    use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> u8;
+        static kAXTrustedCheckOptionPrompt: CFStringRef;
+    }
+
+    /// Returns true if this process is trusted for Accessibility. When `prompt` is true
+    /// and it is NOT trusted, macOS shows the standard prompt (once per app launch).
+    pub fn is_trusted(prompt: bool) -> bool {
+        unsafe {
+            let key = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
+            let val = if prompt {
+                CFBoolean::true_value()
+            } else {
+                CFBoolean::false_value()
+            };
+            let opts = CFDictionary::from_CFType_pairs(&[(key.as_CFType(), val.as_CFType())]);
+            AXIsProcessTrustedWithOptions(opts.as_concrete_TypeRef()) != 0
+        }
+    }
+}
+
 /// A captured target window. Platform-encoded in `id` (empty = none) so the
 /// struct stays `Send` for the shared state without per-OS enum variants.
 #[derive(Clone, Debug, Default)]
@@ -57,6 +122,7 @@ fn text_stats(text: &str) -> String {
 }
 
 /// Truncate a window title for logging (titles can carry document names).
+#[cfg_attr(target_os = "macos", allow(dead_code))] // macOS capture is a follow-up
 fn short_title(title: &str) -> String {
     let t: String = title.chars().take(80).collect();
     if title.chars().count() > 80 {
@@ -200,27 +266,121 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
         return Ok(());
     }
 
-    if cfg.target_lock {
-        match target {
-            Some(t) => focus(t),
-            None => log::debug!("deliver: target_lock on but no captured target"),
-        }
+    // macOS: marshal the whole injection onto the main thread (synthetic input crashes
+    // off-thread) and let it gate on Accessibility there. The clipboard is already set,
+    // so a denied permission still leaves a working manual paste. Fire-and-forget — the
+    // main-thread closure logs its own outcome; we don't block "Done" on it.
+    #[cfg(target_os = "macos")]
+    {
+        macos_inject(text.to_string(), cfg.instant_live_typing, cfg.target_lock, target.cloned(), true);
+        log::info!("deliver: macOS inject dispatched to main thread (+{:?})", t0.elapsed());
+        return Ok(());
     }
 
-    if cfg.instant_live_typing {
-        // Live-typing can fail on some setups (typed nothing). The text is already
-        // on the clipboard, so fall back to the proven instant paste rather than
-        // silently dropping it — the user always gets their dictation.
-        if let Err(e) = type_text(text) {
-            log::warn!("deliver: live-typing failed ({e}) — falling back to instant paste");
-            paste()?;
-            log::info!("deliver: done via instant-paste (fallback) (+{:?})", t0.elapsed());
-            return Ok(());
+    #[cfg(not(target_os = "macos"))]
+    {
+        if cfg.target_lock {
+            match target {
+                Some(t) => focus(t),
+                None => log::debug!("deliver: target_lock on but no captured target"),
+            }
         }
-    } else {
-        paste()?;
+
+        if cfg.instant_live_typing {
+            // Live-typing can fail on some setups (typed nothing). The text is already
+            // on the clipboard, so fall back to the proven instant paste rather than
+            // silently dropping it — the user always gets their dictation.
+            if let Err(e) = type_text(text) {
+                log::warn!("deliver: live-typing failed ({e}) — falling back to instant paste");
+                paste()?;
+                log::info!("deliver: done via instant-paste (fallback) (+{:?})", t0.elapsed());
+                return Ok(());
+            }
+        } else {
+            paste()?;
+        }
+        log::info!("deliver: done via {method} (+{:?})", t0.elapsed());
+        Ok(())
     }
-    log::info!("deliver: done via {method} (+{:?})", t0.elapsed());
+}
+
+/// macOS-only: run the synthetic injection on the main thread (enigo is not thread-safe
+/// on macOS — off-thread use is the "crashes after every transcription" bug). Gates on
+/// Accessibility first (silent no-op without it → bail to clipboard-only + tell the UI).
+/// `prefer_typing` types the text via Unicode keystrokes; otherwise (and as a typing
+/// fallback when `allow_paste_fallback`) it sends a Cmd+V chord against the clipboard.
+#[cfg(target_os = "macos")]
+fn macos_inject(
+    text: String,
+    prefer_typing: bool,
+    target_lock: bool,
+    target: Option<Target>,
+    allow_paste_fallback: bool,
+) {
+    use tauri::Emitter;
+    let Some(app) = APP_HANDLE.get() else {
+        log::error!("macos inject: app handle not set — cannot reach main thread");
+        return;
+    };
+    let app2 = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        // CGEventPost is gated by the Accessibility (AX) TCC permission. Prompt once if
+        // missing; without it the paste silently does nothing, so bail to clipboard-only
+        // and signal the UI so it can nudge the user to grant it.
+        if !mac::is_trusted(true) {
+            log::warn!("macos inject: no Accessibility permission — clipboard only (user prompted)");
+            let _ = app2.emit("echo://needs-accessibility", ());
+            return;
+        }
+        if target_lock {
+            if let Some(t) = &target {
+                focus(t);
+            }
+        }
+        let mut enigo = match Enigo::new(&Settings::default()) {
+            Ok(e) => e,
+            Err(e) => {
+                log::error!("macos inject: enigo init: {e}");
+                return;
+            }
+        };
+        // Release any still-held hotkey modifier so it can't corrupt typing / the chord.
+        for k in [Key::Control, Key::Shift, Key::Alt, Key::Meta] {
+            let _ = enigo.key(k, Direction::Release);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        if prefer_typing {
+            if let Err(e) = enigo.text(&text) {
+                if allow_paste_fallback {
+                    log::warn!("macos inject: typing failed ({e}) — Cmd+V fallback");
+                    let _ = mac_cmd_v(&mut enigo);
+                } else {
+                    log::warn!("macos inject: typing failed ({e})");
+                }
+            }
+        } else if let Err(e) = mac_cmd_v(&mut enigo) {
+            log::warn!("macos inject: Cmd+V failed ({e})");
+        }
+        log::info!("macos inject: done on main thread");
+    }) {
+        log::error!("macos inject: run_on_main_thread failed: {e}");
+    }
+}
+
+/// macOS Cmd+V chord via enigo. MUST be called on the main thread (see `macos_inject`).
+#[cfg(target_os = "macos")]
+fn mac_cmd_v(enigo: &mut enigo::Enigo) -> anyhow::Result<()> {
+    use enigo::{Direction, Key, Keyboard};
+    enigo
+        .key(Key::Meta, Direction::Press)
+        .map_err(|e| anyhow::anyhow!("cmd press: {e}"))?;
+    enigo
+        .key(Key::Unicode('v'), Direction::Click)
+        .map_err(|e| anyhow::anyhow!("v: {e}"))?;
+    enigo
+        .key(Key::Meta, Direction::Release)
+        .map_err(|e| anyhow::anyhow!("cmd release: {e}"))?;
     Ok(())
 }
 
@@ -239,6 +399,7 @@ pub fn set_clipboard(text: &str) -> anyhow::Result<()> {
 /// Clipboard + platform paste chord (Ctrl/Cmd+V). Atomic — no per-char spam.
 /// Windows uses a native single-batch `SendInput` (see [`win::paste`]); other
 /// platforms use enigo's chord.
+#[cfg_attr(target_os = "macos", allow(dead_code))] // macOS pastes via macos_inject (main thread)
 fn paste() -> anyhow::Result<()> {
     let t0 = Instant::now();
     #[cfg(target_os = "windows")]
@@ -280,12 +441,22 @@ pub fn type_live(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::R
         return Ok(());
     }
     log::debug!("type_live: {} target_lock={}", text_stats(text), cfg.target_lock);
-    if cfg.target_lock {
-        if let Some(t) = target {
-            focus(t);
-        }
+    // macOS: type on the main thread (enigo is not thread-safe here). No Cmd+V fallback —
+    // streaming appends without touching the clipboard, so a paste would insert stale text.
+    #[cfg(target_os = "macos")]
+    {
+        macos_inject(text.to_string(), true, cfg.target_lock, target.cloned(), false);
+        return Ok(());
     }
-    type_text(text)
+    #[cfg(not(target_os = "macos"))]
+    {
+        if cfg.target_lock {
+            if let Some(t) = target {
+                focus(t);
+            }
+        }
+        type_text(text)
+    }
 }
 
 /// Modifier-free Unicode typing (streaming + the instant "live-type" option).
