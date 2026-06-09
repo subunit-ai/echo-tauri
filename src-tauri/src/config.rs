@@ -70,14 +70,13 @@ fn default_vocabulary() -> Vec<VocabEntry> {
         aliases: a.iter().map(|x| x.to_string()).collect(),
         category: c.to_string(),
     };
+    // Generic AI / tech / German terms Whisper consistently mangles. Deliberately
+    // NO company-internal brands or people (Subunit/Synapse/SNI/Syncore/Citron/
+    // OpenClaw/Higgsfield/Claude Code/Erik/TJ/… were removed) so FRESH installs look
+    // clean and neutral for new users (TJ). This list only seeds first-run installs;
+    // existing users keep whatever they were already seeded with (the seed + version
+    // guards never re-run for them), so internal teams keep their full vocabulary.
     vec![
-        // Brand / product names
-        v("Echo", "Echo", &["Eko", "Ecko", "Echo."], "Company"),
-        v("Sub-Unit", "Subunit", &["Subunit.", "Sub unit", "Subnit", "Subunit AI", "Sabjunit", "Sub Unit", "Zunder"], "Company"),
-        v("Synaps", "Synapse", &["Synaps."], "Company"),
-        v("Es-Enn-I", "SNI", &["S N I"], "Tech"),
-        v("Higgs Field", "Higgsfield", &["Higs Field", "Higsfield"], "Company"),
-        // Tech terms Whisper consistently mangles in German
         v("Instant", "Instant", &["Inzin", "Insent", "Instent", "Instand"], "Tech"),
         v("transkrivieren", "transkribieren", &["transkriebieren", "transkrieben", "transkrivieren"], "Tech"),
         v("transkriviert", "transkribiert", &["transkrieviert", "transkriebiert"], "Tech"),
@@ -87,18 +86,9 @@ fn default_vocabulary() -> Vec<VocabEntry> {
         v("Open-AI", "OpenAI", &["Open A I", "Openei"], "Company"),
         v("Em-Ce-Pe", "MCP", &["M C P", "M.C.P."], "Tech"),
         v("DSGVO", "DSGVO", &["D S G V O", "D.S.G.V.O."], "Tech"),
-        // People recurring in workflow
-        v("Erik", "Erik", &["Eric", "Erich"], "Person"),
-        v("Te-Je", "TJ", &["T J", "T.J.", "Tee Jay"], "Person"),
-        // subunit stack, tools + recurring terms (TJ-curated 2026-05-28)
-        v("Synkor", "Syncore", &["Cincore", "Syncor"], "Company"),
-        v("Zitron", "Citron", &["Sitron"], "Company"),
-        v("Klod Koud", "Claude Code", &["Cloud Code", "Glode Code"], "Tech"),
-        v("Open Claw", "OpenClaw", &["Open Klo", "Openclor"], "Tech"),
         v("Olama", "Ollama", &["Oh Lama"], "Tech"),
         v("Körser", "Cursor", &["Curser"], "Tech"),
         v("Ju-Buntu", "Ubuntu", &["Ubunu"], "Tech"),
-        v("Gründungsschuss", "Gründungszuschuss", &[], "Other"),
     ]
 }
 

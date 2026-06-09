@@ -3,8 +3,10 @@
 //! flow in the old `main.py` — `finished`/`failed`/`auto_mode_picked`).
 #![allow(dead_code)]
 
+use std::time::Duration;
+
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 pub const EVT_STATE: &str = "echo://state";
 pub const EVT_LEVEL: &str = "echo://mic-level";
@@ -49,6 +51,22 @@ pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Op
             _ => "Echo",
         };
         let _ = tray.set_tooltip(Some(tip));
+    }
+
+    // Done and Error are TRANSIENT: settle back to Idle after a beat so the overlay's
+    // idle behaviour (calm idle colour, dim/hide) re-engages. Without this the state
+    // stuck on Error forever after a failed transcription → the orb sat at the fixed
+    // error-amber and the user's configurable colours looked broken (they only apply
+    // to idle/working/done, never to error). Skip if a recording resumed meanwhile.
+    if matches!(state, EngineState::Done | EngineState::Error) {
+        let app = app.clone();
+        let delay_ms = if matches!(state, EngineState::Error) { 2500 } else { 1600 };
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(delay_ms));
+            if !app.state::<crate::commands::AppState>().recorder.is_recording() {
+                emit_state(&app, EngineState::Idle, None);
+            }
+        });
     }
 }
 
