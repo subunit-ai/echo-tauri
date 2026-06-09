@@ -59,7 +59,7 @@ export function Orb() {
   const colorWorking = useRef(DEFAULT_WORKING);
   const colorDone = useRef(DEFAULT_DONE);
   const idlePulse = useRef(true);
-  const autoHide = useRef(false);
+  const idleMode = useRef<"normal" | "dim" | "hide">("normal");
   const speed = useRef(0.6);
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
@@ -72,7 +72,8 @@ export function Orb() {
         if (typeof c.orb_color_working === "string" && c.orb_color_working) colorWorking.current = c.orb_color_working;
         if (typeof c.orb_color_done === "string" && c.orb_color_done) colorDone.current = c.orb_color_done;
         idlePulse.current = c.orb_idle_pulse !== false;
-        autoHide.current = c.orb_overlay_auto_hide === true;
+        if (c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide") idleMode.current = c.orb_idle_mode;
+        else idleMode.current = "normal";
         if (typeof c.orb_speed === "number") speed.current = c.orb_speed;
       })
       .catch(() => {});
@@ -89,7 +90,7 @@ export function Orb() {
       colorWorking?: string;
       colorDone?: string;
       idlePulse?: boolean;
-      autoHide?: boolean;
+      idleMode?: "normal" | "dim" | "hide";
       speed?: number;
       quick?: OrbQuick;
     }>("echo://orb-config", (e) => {
@@ -99,7 +100,7 @@ export function Orb() {
       if (p.colorWorking) colorWorking.current = p.colorWorking;
       if (p.colorDone) colorDone.current = p.colorDone;
       idlePulse.current = p.idlePulse !== false;
-      autoHide.current = p.autoHide === true;
+      if (p.idleMode) idleMode.current = p.idleMode;
       if (typeof p.speed === "number") speed.current = p.speed;
       if (p.quick) setQuick(p.quick);
     });
@@ -166,14 +167,23 @@ export function Orb() {
               ? ERROR_COLOR
               : colorIdle.current;
       const dotR = size * 0.1;
+      // When idle animation is OFF, freeze every style's time-based motion so the
+      // orb truly rests — the audio-track styles (bars/wave) then react ONLY to
+      // real speech while recording, not to a constant idle shimmer. `ph` is the
+      // frozen phase fed to the per-style oscillators.
+      const idleStill = st === "idle" && !idlePulse.current;
+      const ph = idleStill ? 0 : t;
 
       ctx.clearRect(0, 0, w, h);
 
-      // Auto-hide: render nothing while idle (canvas already cleared).
-      if (autoHide.current && st === "idle") {
+      // Idle behaviour: "hide" → render nothing (canvas already cleared); "dim" →
+      // draw at reduced opacity (a calm, semi-transparent resting orb instead of
+      // vanishing); "normal" → full strength.
+      if (st === "idle" && idleMode.current === "hide") {
         raf = requestAnimationFrame(loop);
         return;
       }
+      ctx.globalAlpha = st === "idle" && idleMode.current === "dim" ? 0.32 : 1;
 
       // breathing factor for idle / transcribing
       const breathe =
@@ -207,7 +217,7 @@ export function Orb() {
           for (let i = 0; i < n; i++) {
             const k = Math.abs(i - (n - 1) / 2);
             const amp = energy * (1 - k * 0.18) + 0.08;
-            const bh = size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(t * 0.2 + i)));
+            const bh = size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i)));
             const x = cx - total / 2 + i * (bw + gap);
             ctx.fillStyle = hexA(base, 0.9);
             const y = cy - bh / 2;
@@ -223,7 +233,7 @@ export function Orb() {
           ctx.strokeStyle = hexA(base, 0.9);
           ctx.beginPath();
           for (let x = -size * 0.4; x <= size * 0.4; x += 2) {
-            const y = Math.sin(x * 0.05 + t * 0.2) * amp * Math.cos(x * 0.012);
+            const y = Math.sin(x * 0.05 + ph * 0.2) * amp * Math.cos(x * 0.012);
             const px = cx + x;
             const py = cy + y;
             x === -size * 0.4 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
@@ -233,7 +243,7 @@ export function Orb() {
         }
         case "sonar": {
           for (let i = 0; i < 3; i++) {
-            const phase = (t * 0.03 + i / 3) % 1;
+            const phase = (ph * 0.03 + i / 3) % 1;
             const r = dotR + phase * size * 0.42;
             ctx.strokeStyle = hexA(base, (1 - phase) * 0.6 * (0.4 + energy));
             ctx.lineWidth = Math.max(1.5, size * 0.012);
@@ -264,7 +274,9 @@ export function Orb() {
           const maxR = size * 0.47;
           const grow = size * 0.0026 * (1 + energy * 0.6) * sp;
           const spawnEvery = (st === "recording" ? Math.max(30, 64 - lvl * 34) : 96) / sp;
-          if (frame % Math.max(1, Math.round(spawnEvery)) === 0) {
+          // No new echo rings while resting with idle animation off — let the
+          // in-flight ones fade out, leaving just the calm centre dot.
+          if (!idleStill && frame % Math.max(1, Math.round(spawnEvery)) === 0) {
             rings.push({ r: dotR, a0: 0.5 + energy * 0.35 });
           }
           for (let i = rings.length - 1; i >= 0; i--) {
@@ -290,6 +302,7 @@ export function Orb() {
         }
       }
 
+      ctx.globalAlpha = 1; // reset after a dimmed idle frame
       raf = requestAnimationFrame(loop);
     };
     loop();

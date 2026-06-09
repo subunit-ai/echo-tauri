@@ -280,10 +280,10 @@ export function Settings() {
             <Row name={t("settings.autostart")} hint={t("settings.autostartHint")}>
               <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
             </Row>
-            <Row name={t("settings.sounds")}>
+            <Row name={t("settings.sounds")} hint={t("settings.soundsHint")}>
               <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />
             </Row>
-            <Row name={t("settings.volume")}>
+            <Row name={t("settings.volume")} hint={t("settings.volumeHint")}>
               <input
                 type="range"
                 min={0}
@@ -514,11 +514,19 @@ export function Settings() {
                 </span>
               </div>
             </Row>
-            <Row name={t("settings.idlePulse")}>
-              <Toggle checked={c.orb_idle_pulse} onChange={(v) => set("orb_idle_pulse", v)} />
+            <Row name={t("settings.idleMode")} hint={t("settings.idleModeHint")}>
+              <Sel
+                value={c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide" ? c.orb_idle_mode : "normal"}
+                onChange={(v) => set("orb_idle_mode", v)}
+                options={[
+                  ["normal", t("settings.idleNormal")],
+                  ["dim", t("settings.idleDim")],
+                  ["hide", t("settings.idleHide")],
+                ]}
+              />
             </Row>
-            <Row name={t("settings.hideWhenIdle")}>
-              <Toggle checked={c.orb_overlay_auto_hide} onChange={(v) => set("orb_overlay_auto_hide", v)} />
+            <Row name={t("settings.idleAnimation")} hint={t("settings.idleAnimationHint")}>
+              <Toggle checked={c.orb_idle_pulse} onChange={(v) => set("orb_idle_pulse", v)} />
             </Row>
           </>
         )}

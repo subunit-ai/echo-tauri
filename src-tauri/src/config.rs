@@ -147,6 +147,13 @@ pub struct Config {
     pub orb_style_migrated: bool,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
+    /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
+    /// vanishing) | "hide". Supersedes the boolean `orb_overlay_auto_hide`, which
+    /// is kept only for deserialize compat and seeded into this once via
+    /// `orb_idle_migrated`.
+    pub orb_idle_mode: String,
+    /// One-time guard: seed `orb_idle_mode` from the legacy auto-hide bool once.
+    pub orb_idle_migrated: bool,
     /// Animation speed multiplier for the overlay (orb AND bubble): scales every
     /// pulse/ring/wave frequency uniformly. 1.0 = the original cadence; lower =
     /// calmer/slower. User-settable (TJ: the default frequency felt too fast).
@@ -268,6 +275,8 @@ impl Default for Config {
             orb_style_migrated: false,
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
+            orb_idle_mode: "normal".to_string(),
+            orb_idle_migrated: false,
             orb_speed: 0.6,
             orb_color_idle: "#22d3ee".to_string(),
             orb_color_working: "#ff5c5c".to_string(),
@@ -390,6 +399,7 @@ impl Config {
         c.autostart_migrated = true; // fresh installs are already autostart-on by default
         c.orb_style_migrated = true; // fresh installs already default to the "sonar" orb
         c.orb_colors_migrated = true; // fresh installs already use the per-state color defaults
+        c.orb_idle_migrated = true; // fresh installs default to the "normal" idle mode
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -435,6 +445,12 @@ impl Config {
             }
             .to_string();
             self.orb_colors_migrated = true;
+        }
+        // v0.4.16: idle behaviour moved from a bool to a 3-way mode. Seed it from
+        // the legacy auto-hide flag once: auto_hide=true → "hide", else "normal".
+        if !self.orb_idle_migrated {
+            self.orb_idle_mode = if self.orb_overlay_auto_hide { "hide" } else { "normal" }.to_string();
+            self.orb_idle_migrated = true;
         }
         self.route_default_engine();
     }

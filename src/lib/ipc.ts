@@ -31,6 +31,8 @@ export interface Config {
   orb_overlay_style: string;
   orb_overlay_size: number;
   orb_overlay_auto_hide: boolean;
+  /** Idle behaviour: "normal" | "dim" | "hide". */
+  orb_idle_mode: string;
   orb_speed: number;
   /** Per-state orb colors (hex). working = recording + transcribing. */
   orb_color_idle: string;

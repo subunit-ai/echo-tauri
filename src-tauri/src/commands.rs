@@ -333,6 +333,19 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     emit_transcript(app, result.text.clone(), result.quality_mode.clone());
     emit_state(app, EngineState::Done, None);
+    // Settle back to Idle shortly after Done. Without this the state stuck at
+    // "Done" forever once the first transcription finished, so the overlay's idle
+    // behaviour (dim / hide) and the calmer idle animation NEVER kicked in — the
+    // orb just sat there permanently. Skip if a new recording already started.
+    {
+        let app2 = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1600));
+            if !app2.state::<AppState>().recorder.is_recording() {
+                emit_state(&app2, EngineState::Idle, None);
+            }
+        });
+    }
     Ok(result)
 }
 
