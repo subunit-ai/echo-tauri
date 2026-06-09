@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Embedded into the ad-hoc code signature on macOS (bundle.macOS.entitlements).
+	  Tauri's ad-hoc signing enables the Hardened Runtime on Apple Silicon, which
+	  blocks microphone access AT THE KERNEL — before TCC ever consults the
+	  Info.plist usage string — unless this entitlement grants the attempt. Without
+	  it the app gets no prompt and never appears under Privacy → Microphone.
+	  Info.plist (NSMicrophoneUsageDescription) explains WHY to the user; this
+	  entitlement PERMITS the attempt. Both are required. No App Sandbox (internal,
+	  un-notarized distribution).
+	-->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
