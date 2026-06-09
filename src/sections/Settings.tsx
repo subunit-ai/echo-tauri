@@ -61,6 +61,46 @@ function Sel({
   );
 }
 
+/** A color swatch that opens the native picker. Shows the live hex + a soft glow
+ *  in the chosen color so it reads premium rather than like a raw form control. */
+function ColorSwatch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 9, cursor: "pointer" }}>
+      <span
+        style={{
+          width: 26,
+          height: 26,
+          borderRadius: 8,
+          background: value,
+          border: "1px solid rgba(255,255,255,0.2)",
+          boxShadow: `0 0 12px -3px ${value}`,
+          flexShrink: 0,
+        }}
+      />
+      <span style={{ fontVariantNumeric: "tabular-nums", fontSize: "0.8rem", opacity: 0.75, textTransform: "uppercase" }}>
+        {value}
+      </span>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+      />
+    </label>
+  );
+}
+
+/** Curated, good-looking orb palettes (idle / working / done). "working" covers
+ *  recording + transcribing. Picking one fills all three; the user can still tweak
+ *  each color individually afterwards (→ the preset shows as "Eigene"). */
+const ORB_PRESETS: { key: string; label: string; idle: string; working: string; done: string }[] = [
+  { key: "klassik", label: "Klassik", idle: "#22d3ee", working: "#ff5c5c", done: "#50dc82" },
+  { key: "aurora", label: "Aurora", idle: "#22d3ee", working: "#a855f7", done: "#34d399" },
+  { key: "mono", label: "Mono Cyan", idle: "#38bdf8", working: "#22d3ee", done: "#67e8f9" },
+  { key: "sunset", label: "Sonnenuntergang", idle: "#f59e0b", working: "#fb7185", done: "#c084fc" },
+  { key: "smaragd", label: "Smaragd", idle: "#2dd4bf", working: "#10b981", done: "#a3e635" },
+];
+
 export function Settings() {
   const { t } = useTranslation();
   const { config, patch, reload, save, savedTick } = useConfig();
@@ -97,6 +137,19 @@ export function Settings() {
   if (!config) return null;
   const c = config;
   const set = <K extends keyof Config>(k: K, v: Config[K]) => patch({ [k]: v } as Partial<Config>);
+
+  // Which preset (if any) the current per-state colors match — else "custom".
+  const currentPreset =
+    ORB_PRESETS.find(
+      (p) =>
+        p.idle.toLowerCase() === (c.orb_color_idle || "").toLowerCase() &&
+        p.working.toLowerCase() === (c.orb_color_working || "").toLowerCase() &&
+        p.done.toLowerCase() === (c.orb_color_done || "").toLowerCase(),
+    )?.key ?? "custom";
+  const applyPreset = (key: string) => {
+    const p = ORB_PRESETS.find((x) => x.key === key);
+    if (p) patch({ orb_color_idle: p.idle, orb_color_working: p.working, orb_color_done: p.done });
+  };
 
   // Rebuild the overrides map from the editable list and persist (auto-saves).
   const writeOvr = (next: [string, string][]) => {
@@ -400,16 +453,24 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name={t("settings.orbColor")}>
+            <Row name={t("settings.orbPreset")} hint={t("settings.orbPresetHint")}>
               <Sel
-                value={c.orb_color_theme}
-                onChange={(v) => set("orb_color_theme", v)}
+                value={currentPreset}
+                onChange={applyPreset}
                 options={[
-                  ["cyan", "Cyan"],
-                  ["violet", "Violet"],
-                  ["mint", "Mint"],
+                  ...ORB_PRESETS.map((p): [string, string] => [p.key, p.label]),
+                  ["custom", t("settings.orbPresetCustom")],
                 ]}
               />
+            </Row>
+            <Row name={t("settings.orbColorIdle")} hint={t("settings.orbColorIdleHint")}>
+              <ColorSwatch value={c.orb_color_idle} onChange={(v) => set("orb_color_idle", v)} />
+            </Row>
+            <Row name={t("settings.orbColorWorking")} hint={t("settings.orbColorWorkingHint")}>
+              <ColorSwatch value={c.orb_color_working} onChange={(v) => set("orb_color_working", v)} />
+            </Row>
+            <Row name={t("settings.orbColorDone")} hint={t("settings.orbColorDoneHint")}>
+              <ColorSwatch value={c.orb_color_done} onChange={(v) => set("orb_color_done", v)} />
             </Row>
             <Row name={t("settings.orbPosition")}>
               <Sel

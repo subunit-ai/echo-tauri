@@ -12,17 +12,14 @@ import {
   type OrbQuick,
 } from "../lib/ipc";
 
-const THEME: Record<string, string> = {
-  cyan: "#22d3ee",
-  violet: "#aa6eff",
-  mint: "#6ee6be",
-};
-// State overrides the theme color.
-const STATE_COLOR: Partial<Record<EngineState, string>> = {
-  recording: "#ff5c5c",
-  done: "#50dc82",
-  error: "#ffc450",
-};
+// Per-state orb colors are user-configurable in Settings (idle / working / done).
+// `working` covers both recording AND transcribing (the "busy" states). The error
+// state keeps a fixed warning amber — it signals a problem and shouldn't blend into
+// the chosen palette. Defaults mirror the previous hardcoded look.
+const DEFAULT_IDLE = "#22d3ee";
+const DEFAULT_WORKING = "#ff5c5c";
+const DEFAULT_DONE = "#50dc82";
+const ERROR_COLOR = "#ffc450";
 
 function hexA(hex: string, a: number): string {
   const h = hex.replace("#", "");
@@ -58,7 +55,9 @@ export function Orb() {
   const state = useRef<EngineState>("idle");
   const level = useRef(0);
   const style = useRef("ping");
-  const color = useRef(THEME.cyan);
+  const colorIdle = useRef(DEFAULT_IDLE);
+  const colorWorking = useRef(DEFAULT_WORKING);
+  const colorDone = useRef(DEFAULT_DONE);
   const idlePulse = useRef(true);
   const autoHide = useRef(false);
   const speed = useRef(0.6);
@@ -69,7 +68,9 @@ export function Orb() {
     invoke<Record<string, unknown>>("get_config")
       .then((c) => {
         style.current = (c.orb_overlay_style as string) || "ping";
-        color.current = THEME[c.orb_color_theme as string] || THEME.cyan;
+        if (typeof c.orb_color_idle === "string" && c.orb_color_idle) colorIdle.current = c.orb_color_idle;
+        if (typeof c.orb_color_working === "string" && c.orb_color_working) colorWorking.current = c.orb_color_working;
+        if (typeof c.orb_color_done === "string" && c.orb_color_done) colorDone.current = c.orb_color_done;
         idlePulse.current = c.orb_idle_pulse !== false;
         autoHide.current = c.orb_overlay_auto_hide === true;
         if (typeof c.orb_speed === "number") speed.current = c.orb_speed;
@@ -84,7 +85,9 @@ export function Orb() {
     // change made in the main window shows on the orb too.
     const unCfg = listen<{
       style?: string;
-      color?: string;
+      colorIdle?: string;
+      colorWorking?: string;
+      colorDone?: string;
       idlePulse?: boolean;
       autoHide?: boolean;
       speed?: number;
@@ -92,7 +95,9 @@ export function Orb() {
     }>("echo://orb-config", (e) => {
       const p = e.payload;
       if (typeof p.style === "string") style.current = p.style;
-      if (p.color && THEME[p.color]) color.current = THEME[p.color];
+      if (p.colorIdle) colorIdle.current = p.colorIdle;
+      if (p.colorWorking) colorWorking.current = p.colorWorking;
+      if (p.colorDone) colorDone.current = p.colorDone;
       idlePulse.current = p.idlePulse !== false;
       autoHide.current = p.autoHide === true;
       if (typeof p.speed === "number") speed.current = p.speed;
@@ -150,7 +155,16 @@ export function Orb() {
       const size = Math.min(w, h);
       const lvl = Math.min(1, level.current);
       const st = state.current;
-      const base = STATE_COLOR[st] ?? color.current;
+      // idle → colorIdle · recording/transcribing → colorWorking · done → colorDone
+      // · error → fixed warning amber.
+      const base =
+        st === "recording" || st === "transcribing"
+          ? colorWorking.current
+          : st === "done"
+            ? colorDone.current
+            : st === "error"
+              ? ERROR_COLOR
+              : colorIdle.current;
       const dotR = size * 0.1;
 
       ctx.clearRect(0, 0, w, h);

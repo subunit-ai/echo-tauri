@@ -32,6 +32,10 @@ export interface Config {
   orb_overlay_size: number;
   orb_overlay_auto_hide: boolean;
   orb_speed: number;
+  /** Per-state orb colors (hex). working = recording + transcribing. */
+  orb_color_idle: string;
+  orb_color_working: string;
+  orb_color_done: string;
 
   diarization_enabled: boolean;
   diarization_max_speakers: number;

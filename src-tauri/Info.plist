@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Merged into the generated Info.plist by the Tauri CLI on macOS.
+	  Without NSMicrophoneUsageDescription macOS TCC silently kills the process
+	  the instant it touches the audio input (cpal/CoreAudio) — so the app
+	  "doesn't work" and never shows the permission prompt. This string is the
+	  text macOS shows in that prompt. Process-wide, so it also covers the
+	  embedded meet's WKWebView getUserMedia.
+	-->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Echo benötigt Mikrofonzugriff, um deine Sprache zu diktieren und Meetings aufzunehmen.</string>
+</dict>
+</plist>

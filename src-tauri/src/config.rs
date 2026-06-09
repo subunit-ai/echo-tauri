@@ -152,6 +152,19 @@ pub struct Config {
     /// calmer/slower. User-settable (TJ: the default frequency felt too fast).
     /// Clamped to a sane range when applied. Default 0.6 = a calmer baseline.
     pub orb_speed: f32,
+    /// Per-state orb colors (hex). `idle` = resting, `working` = recording AND
+    /// transcribing (the "busy" states), `done` = finished. These supersede the
+    /// legacy single `orb_color_theme` dropdown — that field is kept only so old
+    /// configs deserialize; its value is folded into `orb_color_idle` once via the
+    /// `orb_colors_migrated` guard. The `error` state keeps a fixed warning tint
+    /// (not user-themable — it signals a problem, shouldn't blend with the palette).
+    pub orb_color_idle: String,
+    pub orb_color_working: String,
+    pub orb_color_done: String,
+    /// One-time guard: seed the per-state colors from the legacy `orb_color_theme`
+    /// ONCE for existing installs (so their chosen tint carries over), then the
+    /// user's colors stick. Old configs lack this field → default false → migrates.
+    pub orb_colors_migrated: bool,
 
     pub diarization_enabled: bool,
     pub diarization_max_speakers: i32,
@@ -256,6 +269,10 @@ impl Default for Config {
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_speed: 0.6,
+            orb_color_idle: "#22d3ee".to_string(),
+            orb_color_working: "#ff5c5c".to_string(),
+            orb_color_done: "#50dc82".to_string(),
+            orb_colors_migrated: false,
 
             diarization_enabled: false,
             diarization_max_speakers: 8,
@@ -372,6 +389,7 @@ impl Config {
         c.gpu_aware_migrated = true;
         c.autostart_migrated = true; // fresh installs are already autostart-on by default
         c.orb_style_migrated = true; // fresh installs already default to the "sonar" orb
+        c.orb_colors_migrated = true; // fresh installs already use the per-state color defaults
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -404,6 +422,19 @@ impl Config {
                 self.orb_overlay_style = "sonar".to_string();
             }
             self.orb_style_migrated = true;
+        }
+        // v0.4.15: per-state orb colors replace the single theme dropdown. Seed the
+        // idle color from the user's previous theme (cyan/violet/mint) ONCE so their
+        // look carries over; working/done take the classic record-red / done-green
+        // (the previous hardcoded STATE_COLOR values). Runs only once.
+        if !self.orb_colors_migrated {
+            self.orb_color_idle = match self.orb_color_theme.as_str() {
+                "violet" => "#aa6eff",
+                "mint" => "#6ee6be",
+                _ => "#22d3ee",
+            }
+            .to_string();
+            self.orb_colors_migrated = true;
         }
         self.route_default_engine();
     }
