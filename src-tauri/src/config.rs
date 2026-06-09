@@ -223,6 +223,15 @@ pub struct Config {
 
     pub sound_enabled: bool,
     pub sound_volume: f32,
+    /// Independent on/off for the two cues + which preset tone each plays. These
+    /// supersede the single `sound_enabled` (kept only for deserialize compat),
+    /// seeded from it once via `sound_split_migrated`. Tone ids → src/lib/sounds.ts.
+    pub sound_start_enabled: bool,
+    pub sound_paste_enabled: bool,
+    pub sound_start_id: String,
+    pub sound_paste_id: String,
+    /// One-time guard: seed the two new toggles from the legacy `sound_enabled` once.
+    pub sound_split_migrated: bool,
 
     pub vocabulary: Vec<VocabEntry>,
     #[serde(skip)]
@@ -325,6 +334,11 @@ impl Default for Config {
 
             sound_enabled: true,
             sound_volume: 0.6,
+            sound_start_enabled: true,
+            sound_paste_enabled: true,
+            sound_start_id: "standard".to_string(),
+            sound_paste_id: "standard".to_string(),
+            sound_split_migrated: false,
 
             vocabulary: Vec::new(),
             vocab_regex_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
@@ -400,6 +414,7 @@ impl Config {
         c.orb_style_migrated = true; // fresh installs already default to the "sonar" orb
         c.orb_colors_migrated = true; // fresh installs already use the per-state color defaults
         c.orb_idle_migrated = true; // fresh installs default to the "normal" idle mode
+        c.sound_split_migrated = true; // fresh installs already have the split toggles
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -451,6 +466,13 @@ impl Config {
         if !self.orb_idle_migrated {
             self.orb_idle_mode = if self.orb_overlay_auto_hide { "hide" } else { "normal" }.to_string();
             self.orb_idle_migrated = true;
+        }
+        // v0.4.18: the single sound toggle split into two (activation + paste).
+        // Seed both from the old flag once so a user who'd muted sounds stays muted.
+        if !self.sound_split_migrated {
+            self.sound_start_enabled = self.sound_enabled;
+            self.sound_paste_enabled = self.sound_enabled;
+            self.sound_split_migrated = true;
         }
         self.route_default_engine();
     }

@@ -18,6 +18,7 @@ import {
   type Config,
 } from "../lib/ipc";
 import { LANGUAGES } from "../lib/languages";
+import { SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
@@ -280,8 +281,39 @@ export function Settings() {
             <Row name={t("settings.autostart")} hint={t("settings.autostartHint")}>
               <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
             </Row>
-            <Row name={t("settings.sounds")} hint={t("settings.soundsHint")}>
-              <Toggle checked={c.sound_enabled} onChange={(v) => set("sound_enabled", v)} />
+            <Row name={t("settings.soundStart")} hint={t("settings.soundStartHint")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Toggle checked={c.sound_start_enabled} onChange={(v) => set("sound_start_enabled", v)} />
+                <Sel
+                  value={c.sound_start_id || "standard"}
+                  onChange={(v) => set("sound_start_id", v)}
+                  options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                />
+                <button
+                  className="sub-tab"
+                  title={t("settings.soundPreview")}
+                  onClick={() => playSound(c.sound_start_id || "standard", "start", c.sound_volume)}
+                >
+                  ▶
+                </button>
+              </div>
+            </Row>
+            <Row name={t("settings.soundPaste")} hint={t("settings.soundPasteHint")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Toggle checked={c.sound_paste_enabled} onChange={(v) => set("sound_paste_enabled", v)} />
+                <Sel
+                  value={c.sound_paste_id || "standard"}
+                  onChange={(v) => set("sound_paste_id", v)}
+                  options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                />
+                <button
+                  className="sub-tab"
+                  title={t("settings.soundPreview")}
+                  onClick={() => playSound(c.sound_paste_id || "standard", "paste", c.sound_volume)}
+                >
+                  ▶
+                </button>
+              </div>
             </Row>
             <Row name={t("settings.volume")} hint={t("settings.volumeHint")}>
               <input

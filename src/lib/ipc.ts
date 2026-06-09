@@ -77,6 +77,11 @@ export interface Config {
 
   sound_enabled: boolean;
   sound_volume: number;
+  /** Independent cues + selectable tone per cue (ids → lib/sounds.ts). */
+  sound_start_enabled: boolean;
+  sound_paste_enabled: boolean;
+  sound_start_id: string;
+  sound_paste_id: string;
 
   vocabulary: VocabEntry[];
   vocabulary_default_seeded: boolean;
