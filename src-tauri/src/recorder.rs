@@ -179,8 +179,16 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                 level.store(0, Ordering::Relaxed);
                 match active.take() {
                     Some((stream, buf, sr)) => {
-                        drop(stream); // halt capture
+                        drop(stream); // halt capture + release the mic (coreaudio
+                        // uninitialize/dispose runs in the Stream's Drop → the macOS
+                        // mic indicator turns off). Logged so a field log proves the
+                        // mic was released after a session (diagnose a lingering dot).
                         let samples = std::mem::take(&mut *buf.lock());
+                        log::info!(
+                            "recorder: stopped — input stream dropped, mic released ({} samples @ {} Hz)",
+                            samples.len(),
+                            sr
+                        );
                         let _ = reply.send(Capture {
                             samples,
                             sample_rate: sr,

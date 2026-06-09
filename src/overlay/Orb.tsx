@@ -124,11 +124,14 @@ export function Orb() {
     resize();
     window.addEventListener("resize", resize);
 
-    // Mic level: poll while recording, decay otherwise.
+    // Mic level: poll while recording, decay otherwise. VU-style smoothing — jump UP
+    // instantly on a louder sample (so bars pop the moment you speak) but ease DOWN
+    // gently, so the orb tracks the voice instead of just shimmering on its own.
     const poll = window.setInterval(async () => {
       if (state.current === "recording") {
         try {
-          level.current = await invoke<number>("mic_level");
+          const raw = await invoke<number>("mic_level");
+          level.current = raw > level.current ? raw : level.current * 0.82 + raw * 0.18;
         } catch {
           /* ignore */
         }
@@ -194,7 +197,10 @@ export function Orb() {
               ? 0.55 + 0.45 * Math.sin(t * 0.05)
               : 0.7
             : 1;
-      const energy = st === "recording" ? 0.25 + lvl * 0.75 : breathe * 0.6;
+      // While recording, energy is voice-dominated with only a small floor, so every
+      // style visibly reacts to how loud you speak (not a constant idle shimmer).
+      const energy = st === "recording" ? 0.12 + lvl * 0.88 : breathe * 0.6;
+      const speaking = st === "recording";
 
       switch (style.current) {
         case "sphere": {
@@ -216,14 +222,21 @@ export function Orb() {
           const total = n * bw + (n - 1) * gap;
           for (let i = 0; i < n; i++) {
             const k = Math.abs(i - (n - 1) / 2);
-            const amp = energy * (1 - k * 0.18) + 0.08;
-            // At rest with idle animation OFF, collapse each bar to a small DOT
-            // (height == width → the roundRect's bw/2 radius makes it a circle), so
-            // the orb shows a calm row of dots instead of standing bars or a frozen
-            // mid-animation frame.
-            const bh = idleStill
-              ? bw
-              : size * 0.5 * amp * (0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i)));
+            const center = 1 - k * 0.22; // center-weighted profile (tallest in the middle)
+            // While recording, the bar HEIGHT is the real mic level (center-weighted) —
+            // small dots when silent, springing up as you speak — with only a tiny per-bar
+            // shimmer so it reads as a live VU meter, not a self-running animation.
+            // Otherwise (idle/transcribing) keep the gentle breathing.
+            const amp = speaking
+              ? Math.min(1, 0.05 + lvl * center * 1.2)
+              : energy * center + 0.08;
+            const shimmer = speaking
+              ? 0.9 + 0.1 * Math.sin(ph * 0.5 + i)
+              : 0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i));
+            // At rest with idle animation OFF (and silent while recording), collapse each
+            // bar to a small DOT (height == width → the roundRect's bw/2 radius makes it a
+            // circle) instead of a standing bar or a frozen mid-animation frame.
+            const bh = idleStill ? bw : Math.max(bw, size * 0.5 * amp * shimmer);
             const x = cx - total / 2 + i * (bw + gap);
             ctx.fillStyle = hexA(base, 0.9);
             const y = cy - bh / 2;
@@ -234,8 +247,14 @@ export function Orb() {
           break;
         }
         case "wave": {
-          // Flat, calm line at rest (idle animation off) instead of a frozen wave.
-          const amp = idleStill ? size * 0.015 : size * 0.18 * (0.15 + energy);
+          // Flat, calm line at rest (idle animation off). While recording the wave
+          // HEIGHT tracks the real mic level (near-flat when silent, swelling as you
+          // speak); otherwise it breathes gently.
+          const amp = idleStill
+            ? size * 0.015
+            : speaking
+              ? size * (0.02 + lvl * 0.3)
+              : size * 0.18 * (0.15 + energy);
           ctx.lineWidth = Math.max(2, size * 0.02);
           ctx.strokeStyle = hexA(base, 0.9);
           ctx.beginPath();
