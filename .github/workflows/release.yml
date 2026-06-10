@@ -28,11 +28,12 @@ jobs:
           - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper (ARM64 libclang)
             args: "--features local-whisper"
           - platform: macos-14            # macOS Apple Silicon (M1) — CPU local whisper
-            # Unsigned / un-notarized: internal use only. tauri-action skips Apple signing
-            # when no APPLE_* secrets are present; Gatekeeper is cleared manually (right-click →
-            # Open, or `xattr -dr com.apple.quarantine /Applications/echo.app`). The Tauri
-            # updater bundle is still minisign-signed (TAURI_SIGNING_PRIVATE_KEY), so the
-            # in-app auto-update path works on macOS too.
+            # Signed with a STABLE self-signed certificate (APPLE_* secrets) — not notarized.
+            # Stable identity keeps TCC grants (Accessibility/Bedienungshilfen) across updates;
+            # ad-hoc ("-") changed identity every build and broke them. Gatekeeper still needs
+            # right-click → Open on first launch (no Apple Developer ID / notarization yet).
+            # APPLE_SIGNING_IDENTITY env overrides tauri.conf.json signingIdentity ("-" stays
+            # as local fallback). Updater bundle remains minisign-signed (TAURI_SIGNING_PRIVATE_KEY).
             args: "--target aarch64-apple-darwin --features local-whisper"
 
     runs-on: ${{ matrix.platform }}
@@ -144,6 +145,12 @@ jobs:
           # Crash reporting DSNs (no-op if unset).
           ECHO_SENTRY_DSN: ${{ secrets.ECHO_SENTRY_DSN }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          # macOS code signing (self-signed cert, stable identity → TCC grants survive
+          # updates). tauri-action imports the base64 .p12 into a temp keychain on
+          # macOS runners; no-op on Linux/Windows.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           # Windows Authenticode via Azure Trusted Signing — configure in
           # tauri.conf.json bundle.windows + add the Azure secrets here.
         with:
