@@ -44,6 +44,27 @@ pub fn run(
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
+
+    // Anti-hallucination / anti-repetition. The classic whisper.cpp failure mode:
+    // at the tail of a clip (trailing silence/noise) it gets stuck repeating the last
+    // phrase, then degenerates into multilingual gibberish (Erik hit exactly this).
+    // We transcribe ONE complete recording per call, so:
+    //  - no_context: do NOT seed the next internal 30 s window with the previously
+    //    decoded text — that carry-over feedback loop is the #1 cause of the repeat
+    //    spiral. (Independent utterances gain nothing from cross-window context.)
+    //  - temperature fallback (inc 0.2): when a window decodes degenerate (trips the
+    //    entropy/logprob guards below) whisper RE-decodes it hotter instead of locking
+    //    into the loop. With inc=0 there is no fallback and a bad window just repeats.
+    //  - no_speech_thold: trailing silence is dropped as no-speech, not hallucinated
+    //    into text. suppress_blank/nst kill blank + non-speech ("[Musik]") tokens.
+    params.set_no_context(true);
+    params.set_temperature(0.0);
+    params.set_temperature_inc(0.2);
+    params.set_entropy_thold(2.4);
+    params.set_logprob_thold(-1.0);
+    params.set_no_speech_thold(0.6);
+    params.set_suppress_blank(true);
+    params.set_suppress_nst(true);
     let lang = if cfg.language == "auto" || cfg.language.is_empty() {
         None
     } else {
