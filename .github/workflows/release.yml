@@ -28,12 +28,12 @@ jobs:
           - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper (ARM64 libclang)
             args: "--features local-whisper"
           - platform: macos-14            # macOS Apple Silicon (M1) — CPU local whisper
-            # Signed with a STABLE self-signed certificate (APPLE_* secrets) — not notarized.
-            # Stable identity keeps TCC grants (Accessibility/Bedienungshilfen) across updates;
-            # ad-hoc ("-") changed identity every build and broke them. Gatekeeper still needs
-            # right-click → Open on first launch (no Apple Developer ID / notarization yet).
-            # APPLE_SIGNING_IDENTITY env overrides tauri.conf.json signingIdentity ("-" stays
-            # as local fallback). Updater bundle remains minisign-signed (TAURI_SIGNING_PRIVATE_KEY).
+            # Ad-hoc signed ("-" from tauri.conf.json) — the known-good path that builds.
+            # The stable self-signed cert (APPLE_* secrets) is disabled in the env block
+            # below: its identity didn't resolve and blocked the macOS build since v0.4.24.
+            # Trade-off until re-enabled: macOS re-prompts for Mic + Accessibility once per
+            # update (ad-hoc identity changes each build). Gatekeeper still needs
+            # right-click → Open on first launch. Updater bundle stays minisign-signed.
             args: "--target aarch64-apple-darwin --features local-whisper"
 
     runs-on: ${{ matrix.platform }}
@@ -145,12 +145,18 @@ jobs:
           # Crash reporting DSNs (no-op if unset).
           ECHO_SENTRY_DSN: ${{ secrets.ECHO_SENTRY_DSN }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          # macOS code signing (self-signed cert, stable identity → TCC grants survive
-          # updates). tauri-action imports the base64 .p12 into a temp keychain on
-          # macOS runners; no-op on Linux/Windows.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # macOS code signing: TEMPORARILY DISABLED — back to ad-hoc ("-" from
+          # tauri.conf.json), which is what builds successfully (v0.4.22/0.4.23).
+          # The stable self-signed cert attempt failed at codesign with "failed to
+          # resolve signing identity": APPLE_SIGNING_IDENTITY did not match the imported
+          # APPLE_CERTIFICATE's Common Name, so the macOS build (and macOS auto-update)
+          # was blocked on EVERY release since v0.4.24.
+          # RE-ENABLE later: uncomment the three APPLE_* lines AND set the
+          # APPLE_SIGNING_IDENTITY secret to the EXACT CN of the .p12 cert (confirm on a
+          # mac after import via `security find-identity -v -p codesigning`).
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           # Windows Authenticode via Azure Trusted Signing — configure in
           # tauri.conf.json bundle.windows + add the Azure secrets here.
         with:
