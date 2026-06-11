@@ -20,6 +20,7 @@ export interface CreateMeetingBody {
   expected_speakers: number | null;
   speaker_names: string[];
   language: string;
+  scheduled_at?: string | null;
 }
 
 /** Host: allocate a meeting (Bearer = subunit access token). */
@@ -127,6 +128,22 @@ export async function enrollMark(code: string, hostToken: string, token: string,
     /* ignore */
   }
 }
+/** Guided auto-enrollment: POST a short voice clip (host records via the Jabra) so the
+ *  server hears the spoken code + stores the voiceprint anchor. */
+export async function enrollClip(code: string, hostToken: string, token: string, blob: Blob): Promise<Json> {
+  try {
+    const fd = new FormData();
+    fd.append("file", blob, "enroll.webm");
+    const r = await fetch(`${API}/v1/meetings/${code}/enroll/clip/${token}`, {
+      method: "POST",
+      headers: { "X-Host-Token": hostToken },
+      body: fd,
+    });
+    return await asJson(r); // { matched, voiceprint, ... }
+  } catch {
+    return { matched: false };
+  }
+}
 
 // ---- Results ----
 export async function transcript(code: string, token: string): Promise<Json | null> {
@@ -166,4 +183,17 @@ export async function intel(code: string, action: string, jwt: string, hostToken
     headers: { authorization: "Bearer " + (jwt || ""), "X-Host-Token": hostToken || "" },
   });
   return { ok: r.ok, status: r.status };
+}
+
+// ---- Account history (Verlauf) ----
+/** The caller's own meetings, newest first (Bearer = subunit access token). */
+export async function myMeetings(jwt: string): Promise<Json[]> {
+  try {
+    const r = await fetch(`${API}/v1/meetings/mine`, { headers: { authorization: "Bearer " + jwt } });
+    if (!r.ok) return [];
+    const d = await asJson(r);
+    return Array.isArray(d) ? d : d.meetings || [];
+  } catch {
+    return [];
+  }
 }

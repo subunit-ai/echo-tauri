@@ -12,8 +12,6 @@ export function Host() {
   const m = useMeeting();
   const [err, setErr] = useState("");
   const [codeCopied, setCodeCopied] = useState(false);
-  const [schedTime, setSchedTime] = useState(() => new Date().toTimeString().slice(0, 5));
-  const [schedInfo, setSchedInfo] = useState("");
   const [starting, setStarting] = useState(false);
 
   const single = m.deviceMode === "single";
@@ -42,19 +40,6 @@ export function Host() {
       setErr(r.error || "");
       setStarting(false);
     }
-  };
-  const schedule = () => {
-    if (!schedTime) {
-      setErr("Bitte eine Uhrzeit wählen.");
-      return;
-    }
-    const [hh, mm] = schedTime.split(":").map(Number);
-    const now = new Date();
-    const at = new Date();
-    at.setHours(hh, mm, 0, 0);
-    if (at <= now) at.setDate(at.getDate() + 1);
-    m.scheduleStart(at.getTime() - now.getTime());
-    setSchedInfo("⏰ Startet automatisch um " + schedTime + " Uhr — Tab offen lassen, oder jederzeit manuell starten.");
   };
 
   return (
@@ -134,24 +119,11 @@ export function Host() {
 
       {m.deviceMode === "pod" && <HostEnroll />}
 
-      {!m.recOn && (
+      {!m.recOn && !m.enrolling && (
         <>
           <button className="btn btn-primary" id="host-startbtn" disabled={starting} onClick={start}>
             {starting ? "Starte…" : m.resumeRecording ? "🔴 Aufnahme fortsetzen" : "🔴 Aufnahme starten"}
           </button>
-          {!schedInfo && (
-            <div className="share" id="host-sched" style={{ marginTop: 12 }}>
-              <input id="host-schedtime" className="fld" type="time" style={{ flex: 1 }} aria-label="Startzeit" value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
-              <button className="btn btn-ghost minibtn" style={{ flex: 1 }} onClick={schedule}>
-                ⏰ Zeit festlegen
-              </button>
-            </div>
-          )}
-          {schedInfo && (
-            <div className="hint" id="host-schedinfo">
-              {schedInfo}
-            </div>
-          )}
         </>
       )}
       {m.recOn && (
@@ -166,30 +138,55 @@ export function Host() {
   );
 }
 
-/** Pod voice check-in roster (host) — 1:1 port of `#host-enroll` + renderEnrollRoster. */
+/** Pod voice check-in roster (host) — guided auto-enrollment (TJ 2026-06-10): the host's
+ *  "Aufnahme starten" drives it; clips are captured automatically via the Jabra, and the
+ *  "✓ erkannt" button stays as a fallback if a number isn't heard. */
 function HostEnroll() {
   const { t } = useI18n();
   const m = useMeeting();
   const st = m.hostEnroll;
+  const you = (st && st.you) || {};
   return (
     <div id="host-enroll">
       <div className="sect">{t("Stimm-Check-In")}</div>
       <div className="hint" style={{ marginBottom: 2 }}>
         {t("Jeder liest seine Zahl vor — der Pod erkennt die Stimme und ordnet den Namen automatisch zu.")}
       </div>
-      {!st ? (
-        <button className="btn btn-primary" id="host-enrollbtn" onClick={m.hostEnrollStart}>
-          🎙️ {t("Stimm-Check-In starten")}
-        </button>
-      ) : (
+      {/* Host sits at the pod and reads a number too — show it prominently on their turn. */}
+      {you.status === "active" && (
+        <div id="host-enrollme" className="enr-active" style={{ margin: "8px 0" }}>
+          <div className="enr-prompt">
+            🎙️ {t("Du bist dran")} — {t("Lies deine Zahl laut vor:")}
+          </div>
+          <div className="enr-code">
+            {String(you.code || "")
+              .split("")
+              .map((d, i) => (
+                <span className="enr-digit" key={i}>
+                  {d}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+      {you.status === "done" && (
+        <div id="host-enrollme" style={{ color: "var(--ok)", fontWeight: 600, margin: "8px 0" }}>
+          ✓ Deine Stimme ist erfasst.
+        </div>
+      )}
+      {st ? (
         <ul className="plist" id="host-enrolllist">
           {(st.roster || []).map((p: any, i: number) => (
             <li key={p.token || i} className={"enr-row" + (p.status === "active" ? " cur" : "")}>
-              <span className="enr-rn">{p.name}</span>
+              <span className="enr-rn">{p.self ? p.name + " (" + t("du") + ")" : p.name}</span>
               {(p.status === "active" || p.status === "waiting") && <span className="enr-rc">{p.code}</span>}
               {p.status === "done" && <span className="enr-st d">✓</span>}
               {p.status === "active" && (
                 <>
+                  <span className="enr-listen" style={{ marginRight: 6 }}>
+                    <span className="dot"></span>
+                    {t("Der Pod hört zu…")}
+                  </span>
                   <button className="btn ok minibtn" title={t("Test-Trigger (bis das echte Jabra die Zahl hört)")} onClick={() => m.hostEnrollMark(p.token, "done")}>
                     {t("✓ erkannt")}
                   </button>
@@ -204,6 +201,10 @@ function HostEnroll() {
           ))}
           {st.finished && <li className="enr-fin">{t("Alle eingecheckt ✓ — Aufnahme starten")}</li>}
         </ul>
+      ) : (
+        <div className="hint" style={{ marginTop: 4 }}>
+          Sobald du unten auf „🔴 Aufnahme starten" tippst, läuft der Stimm-Check-In automatisch — danach startet die Aufnahme von selbst.
+        </div>
       )}
     </div>
   );

@@ -146,6 +146,7 @@ export function Ended() {
 
   return (
     <div className="wrap" id="s-ended">
+      <button className="ended-back" onClick={home}>← {t("Zurück")}</button>
       <h1 className="ptitle" id="end-title">
         {m.endTitle}
       </h1>

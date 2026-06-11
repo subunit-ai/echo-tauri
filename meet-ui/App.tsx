@@ -10,7 +10,7 @@ import { Guest } from "./screens/Guest";
 import { Enroll } from "./screens/Enroll";
 import { Ended } from "./screens/Ended";
 import { useMeeting } from "./store";
-import { handleSsoCallback, identityFromToken } from "./lib/auth";
+import { handleSsoCallback, identityFromToken, decodeJwt } from "./lib/auth";
 import { meetingInfo } from "./lib/api";
 import type { AuthMode } from "./MeetApp";
 
@@ -43,6 +43,13 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       // Recap deep-link: /<code>?t=<token> → view-only results.
       if (path && recapT) {
         m.openRecapView(path[1], recapT);
+        // 🔒 H4-Fix (2026-06-10): Token aus der Adresszeile entfernen, sobald er im Speicher ist
+        // (spiegelt handleSsoCallback). Verhindert Leak via History/Bookmark/Referer/Screenshare.
+        try {
+          history.replaceState({}, "", "/" + path[1]);
+        } catch {
+          /* ignore */
+        }
         return;
       }
 
@@ -60,7 +67,16 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
         v = null;
       }
       if (v && v.code && v.role) {
-        const info = await meetingInfo(v.code);
+        // Abgelaufener JWT → tote Session, NICHT wiederherstellen (sonst Token-Expired-Hang
+        // + Reload-Loop, Bug 2026-06-11).
+        let jwtDead = false;
+        try {
+          const exp = v.jwt ? Number(decodeJwt(v.jwt).exp) || 0 : 0;
+          jwtDead = exp > 0 && exp * 1000 < Date.now();
+        } catch {
+          jwtDead = false;
+        }
+        const info = jwtDead ? null : await meetingInfo(v.code);
         if (info && info.status !== "ended" && info.status !== "purged") {
           if (v.jwt) m.setIdentity({ jwt: v.jwt, email: v.email || "", name: v.name || "" });
           if (v.role === "host") m.resumeHost(info, v);

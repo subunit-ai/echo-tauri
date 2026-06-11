@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import { toggleTheme } from "../lib/theme";
 import { useI18n, type Lang } from "../lib/i18n";
 import { useMeeting } from "../store";
+import { fmtDate } from "../lib/format";
 
 const LANGS: { l: Lang; label: string }[] = [
   { l: "de", label: "🇩🇪 Deutsch" },
@@ -13,14 +15,27 @@ const LANGS: { l: Lang; label: string }[] = [
 ];
 
 /**
- * Fixed page chrome: language chip (top-left), account chip + theme toggle (top-right),
- * and the centered Subunit·Meet brand with the sonar-ping Echo logo. Markup + classes
- * are a 1:1 port of the live meet.subunit.ai so the CSS renders identically.
+ * Fixed page chrome: language chip (top-left), account chip + history + theme toggle
+ * (top-right), and the centered Subunit·Meet brand with the sonar-ping Echo logo. Markup +
+ * classes are a 1:1 port of the live meet.subunit.ai so the CSS renders identically.
  */
+// Geplanter Termin (scheduled_at ISO) → "12.06. 17:00" für den Verlauf.
+function fmtSched(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}. ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function Chrome() {
   const { lang, setLang } = useI18n();
-  const { identity } = useMeeting();
+  const { identity, loadMyMeetings, openHistoryMeeting, screen, leave } = useMeeting();
   const [langOpen, setLangOpen] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
+  const [histList, setHistList] = useState<any[] | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  // Meeting-Verlassen-X nur in aktiven Meeting-Screens (nicht Setup/Landing/Join/Ended).
+  const inMeeting = screen === "host" || screen === "waiting" || screen === "guest" || screen === "enroll";
 
   // Close the language menu on any outside click (vanilla document click listener).
   useEffect(() => {
@@ -30,10 +45,28 @@ export function Chrome() {
     return () => document.removeEventListener("click", close);
   }, [langOpen]);
 
+  const openHistory = async () => {
+    setHistOpen(true);
+    setHistList(null);
+    setHistList(await loadMyMeetings());
+  };
+  const pickHistory = (mtg: any) => {
+    setHistOpen(false);
+    openHistoryMeeting(mtg.code, mtg.host_token || "");
+  };
+
   return (
     <>
-      {/* Sprach-Umschalter oben links */}
-      <div id="uilang-sw" className={`lang${langOpen ? " open" : ""}`}>
+      {/* Meeting verlassen (X) — oben links, nur im aktiven Meeting */}
+      {inMeeting && (
+        <button type="button" className="cancelbtn" onClick={() => setCancelOpen(true)} aria-label="Meeting verlassen" title="Meeting verlassen">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      )}
+      {/* Sprach-Umschalter oben links (im Meeting ausgeblendet — der X nimmt den Platz) */}
+      <div id="uilang-sw" className={`lang${langOpen ? " open" : ""}`} hidden={inMeeting}>
         <button
           type="button"
           className="lang"
@@ -77,7 +110,7 @@ export function Chrome() {
       <a
         id="acctchip"
         className="acctchip"
-        href="https://auth.subunit.ai/account"
+        href={"https://auth.subunit.ai/account?return=" + encodeURIComponent(window.location.origin + window.location.pathname)}
         title="Konto & Abmelden"
         style={identity?.email ? { display: "flex" } : undefined}
       >
@@ -88,6 +121,23 @@ export function Chrome() {
           {identity?.email || ""}
         </span>
       </a>
+
+      {/* Verlauf-Icon oben rechts — neben dem Hell/Dunkel-Schalter, nur für eingeloggte Hosts */}
+      {identity?.jwt && (
+        <button
+          type="button"
+          id="histtog"
+          className="themetog histtog"
+          onClick={openHistory}
+          aria-label="Verlauf"
+          title="Verlauf"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        </button>
+      )}
 
       {/* Hell/Dunkel-Umschalter oben rechts */}
       <button
@@ -127,6 +177,86 @@ export function Chrome() {
         </span>
         <span className="meet">Meet</span>
       </div>
+
+      {cancelOpen && (
+        <div className="ddm center">
+          <div className="ddm-bg" onClick={() => setCancelOpen(false)}></div>
+          <div className="ddm-card cancel-card" role="dialog" aria-modal="true">
+            <div className="ddm-title">Meeting verlassen?</div>
+            <p className="cancel-sub">Willst du das Meeting wirklich verlassen?</p>
+            <div className="cancel-actions">
+              <button className="btn btn-ghost" onClick={() => setCancelOpen(false)}>Zurück</button>
+              <button className="btn btn-danger" onClick={() => { setCancelOpen(false); leave(); }}>Verlassen</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {histOpen && <HistoryModal list={histList} onClose={() => setHistOpen(false)} onPick={pickHistory} />}
     </>
+  );
+}
+
+/** Verlauf — the caller's own meetings, newest first; click re-opens the protocol. */
+function HistoryModal({
+  list,
+  onClose,
+  onPick,
+}: {
+  list: any[] | null;
+  onClose: () => void;
+  onPick: (m: any) => void;
+}) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  return (
+    <div className="ddm hist-modal">
+      <div className="ddm-bg" onClick={onClose}></div>
+      <div className="ddm-card hist-card" role="dialog" aria-modal="true">
+        <button className="ddm-x" onClick={onClose} aria-label="Schließen">
+          ✕
+        </button>
+        <div className="ddm-title">Deine Meetings</div>
+        {list === null ? (
+          <div className="hist-empty">Lade…</div>
+        ) : list.length === 0 ? (
+          <div className="hist-empty">Noch keine Meetings.</div>
+        ) : (
+          <ul className="hist-list">
+            {list.map((mtg) => (
+              <li
+                key={mtg.code}
+                className="hist-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => onPick(mtg)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") onPick(mtg);
+                }}
+              >
+                <span className="hist-tt">{mtg.title || "Meeting #" + mtg.code}</span>
+                <span className={"hist-meta" + (mtg.scheduled_at ? " sched" : "")}>
+                  {mtg.scheduled_at
+                    ? "📅 geplant für " + fmtSched(mtg.scheduled_at)
+                    : mtg.created_at
+                      ? fmtDate(mtg.created_at)
+                      : ""}
+                  {mtg.participants ? " · " + mtg.participants + " dabei" : ""}
+                  {mtg.status && mtg.status !== "ended" && mtg.status !== "purged" ? " · läuft" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }

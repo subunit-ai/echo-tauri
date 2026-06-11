@@ -2,26 +2,36 @@ import { useEffect, useState } from "react";
 import { useI18n } from "../lib/i18n";
 import { useMeeting } from "../store";
 
-type Mode = "dsgvo" | "blitz";
 type Device = "multi" | "pod" | "single";
 
-const CHECK = (
-  <span className="ck">
-    <svg viewBox="0 0 24 24">
-      <path d="M5 12l5 5 9-9" />
-    </svg>
-  </span>
-);
+// Erfassungs-Kacheln: Titel, Kurzbeschreibung (unter der Kachel) + ausführliche Info (?-Overlay).
+const DEVS: Device[] = ["multi", "pod", "single"];
+const DEV_TT: Record<Device, string> = { multi: "Mehrere Geräte", pod: "Konferenzmikrofon", single: "Ein Gerät" };
+const DEV_DS: Record<Device, string> = { multi: "Jeder auf seinem Gerät", pod: "Host + Gäste per QR", single: "Alle teilen 1 Gerät" };
+const DEV_INFO: Record<Device, string> = {
+  multi: "Jeder Teilnehmer nimmt auf seinem eigenen Gerät (Handy/Laptop) auf. Das gibt die sauberste Sprecher-Trennung — jede Stimme hat ihre eigene Tonspur.",
+  pod: "Es gibt einen Host mit einem zentralen Konferenzmikrofon. Gäste loggen sich per QR-Code ein (nur zum Einchecken + Namen). Aufnahme und Transkription laufen komplett über das eine Mikrofon — die Sprecher werden danach automatisch getrennt.",
+  single: "Alle sitzen an EINEM Gerät (ein Handy, Laptop oder PC) und teilen es. Es nimmt für alle gemeinsam auf — ideal, wenn ihr zusammen in einem Raum vor einem Gerät sitzt.",
+};
 
 /**
- * HOST LOGIN / SETUP — 1:1 port of `#s-hostlogin`. Tile selection (mode/device), speaker
- * count + names, then `createMeeting` (store). Mirrors the vanilla setMode/setDevice/setSpk.
+ * HOST LOGIN / SETUP — Reihenfolge: Erfassung zuerst → optionaler Name → Sprache → Details.
+ * Tile-Auswahl (device) mit ?-Info je Kachel, Sprecher-Zahl/Namen (single), dann createMeeting.
  */
+// Nächster freier 15-Min-Slot ab jetzt (16:45 → 17:00) als {date:"YYYY-MM-DD", time:"HH:MM"}.
+function nextQuarterSlot(): { date: string; time: string } {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setMinutes(d.getMinutes() + (15 - (d.getMinutes() % 15))); // immer der nächste Slot
+  const p = (n: number) => String(n).padStart(2, "0");
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+}
+
 export function HostLogin({ onBack }: { onBack: () => void }) {
   const { t } = useI18n();
   const m = useMeeting();
-  const [mode, setMode] = useState<Mode>("dsgvo");
   const [device, setDevice] = useState<Device>("multi");
+  const [infoOpen, setInfoOpen] = useState<Device | "">("");
   const [spk, setSpk] = useState(2);
   const [title, setTitle] = useState("");
   const [lang, setLang] = useState("auto");
@@ -30,6 +40,9 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
   const [micId, setMicId] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [plan, setPlan] = useState(false); // "Meeting planen"-Modal offen
+  const [planDate, setPlanDate] = useState(() => nextQuarterSlot().date);
+  const [planTime, setPlanTime] = useState(() => nextQuarterSlot().time);
 
   // Enumerate microphones once a central-mic mode (pod/single) is picked — mirrors the
   // vanilla loadMics(): permission probe, then list audioinput devices.
@@ -60,21 +73,31 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
       return next;
     });
 
-  const submit = async () => {
+  const submit = async (scheduledAt?: string) => {
     setBusy(true);
     setErr("");
     const r = await m.createMeeting({
       title: title.trim(),
-      mode,
+      mode: "dsgvo", // immer DSGVO/DE-Server — kein US-Cloud-Toggle mehr (TJ 2026-06-11)
       device,
       spk,
       names: device === "single" ? names.map((n) => (n || "").trim()).filter(Boolean) : [],
       language: lang,
+      scheduledAt: scheduledAt || null,
     });
     if (!r.ok) {
       if (r.error) setErr(r.error);
       setBusy(false);
     }
+  };
+  // "Meeting planen": Tag + Uhrzeit → ISO-Termin → Meeting wird terminiert erstellt (Verlauf "geplant für X").
+  const confirmPlan = () => {
+    if (!planDate || !planTime) {
+      setErr("Bitte Tag und Uhrzeit wählen.");
+      return;
+    }
+    setPlan(false);
+    submit(`${planDate}T${planTime}:00`);
   };
 
   return (
@@ -91,6 +114,45 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         </div>
       </div>
 
+      {/* 1. Erfassung ZUERST — mit ?-Info je Kachel */}
+      <div className="sect">{t("Erfassung")}</div>
+      <div className="tiles" id="devslider">
+        {DEVS.map((dv) => (
+          <button key={dv} type="button" className={`tile${device === dv ? " sel" : ""}`} id={`dev-${dv}`} onClick={() => setDevice(dv)}>
+            <span
+              className="tile-help"
+              role="button"
+              tabIndex={0}
+              aria-label={t("Mehr Infos")}
+              onClick={(e) => {
+                e.stopPropagation();
+                setInfoOpen((o) => (o === dv ? "" : dv));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setInfoOpen((o) => (o === dv ? "" : dv));
+                }
+              }}
+            >
+              ?
+            </span>
+            <span className="ic">
+              <span className={`ic-img ${dv}`} aria-hidden="true" />
+            </span>
+            <div className="tt">{t(DEV_TT[dv])}</div>
+            <div className="ds">{t(DEV_DS[dv])}</div>
+          </button>
+        ))}
+      </div>
+      {infoOpen && (
+        <div className="tile-infobar" role="status">
+          <b>{t(DEV_TT[infoOpen])}:</b> {t(DEV_INFO[infoOpen])}
+        </div>
+      )}
+
+      {/* 2. Meeting-Name (optional) — nach der Erfassung */}
       <div className="sect">
         {t("Meeting-Name")} <span className="opt">{t("· optional")}</span>
       </div>
@@ -106,69 +168,7 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         }}
       />
 
-      <div className="sect">{t("Transkription")}</div>
-      <div className="tiles" id="modeslider">
-        <button type="button" className={`tile${mode === "dsgvo" ? " sel" : ""}`} id="mode-dsgvo" onClick={() => setMode("dsgvo")}>
-          {CHECK}
-          <span className="ic">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" />
-            </svg>
-          </span>
-          <div className="tt">{t("DSGVO")}</div>
-          <div className="ds">{t("DE-Server · sicher")}</div>
-        </button>
-        <button type="button" className={`tile${mode === "blitz" ? " sel" : ""}`} id="mode-blitz" onClick={() => setMode("blitz")}>
-          {CHECK}
-          <span className="ic">
-            <svg viewBox="0 0 24 24">
-              <path d="M13 2L4 14h7l-1 8 10-12h-9z" />
-            </svg>
-          </span>
-          <div className="tt">{t("Superfast")}</div>
-          <div className="ds">{t("schnellste")}</div>
-        </button>
-      </div>
-
-      <div className="sect">{t("Erfassung")}</div>
-      <div className="tiles" id="devslider">
-        <button type="button" className={`tile${device === "multi" ? " sel" : ""}`} id="dev-multi" onClick={() => setDevice("multi")}>
-          {CHECK}
-          <span className="ic">
-            <svg viewBox="0 0 24 24">
-              <rect x="4" y="3" width="7" height="13" rx="1.6" />
-              <rect x="14" y="8" width="6" height="13" rx="1.6" />
-            </svg>
-          </span>
-          <div className="tt">{t("Mehrere Geräte")}</div>
-          <div className="ds">{t("jeder sein Handy")}</div>
-        </button>
-        <button type="button" className={`tile${device === "pod" ? " sel" : ""}`} id="dev-pod" onClick={() => setDevice("pod")}>
-          {CHECK}
-          <span className="ic">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none" />
-              <circle cx="12" cy="12" r="6" />
-              <circle cx="12" cy="12" r="9.6" opacity=".5" />
-            </svg>
-          </span>
-          <div className="tt">{t("Pod-Mikro")}</div>
-          <div className="ds">{t("zentral + QR")}</div>
-        </button>
-        <button type="button" className={`tile${device === "single" ? " sel" : ""}`} id="dev-single" onClick={() => setDevice("single")}>
-          {CHECK}
-          <span className="ic">
-            <svg viewBox="0 0 24 24">
-              <rect x="9" y="2" width="6" height="11" rx="3" />
-              <path d="M5 10a7 7 0 0 0 14 0" />
-              <path d="M12 17v4" />
-            </svg>
-          </span>
-          <div className="tt">{t("Ein Gerät")}</div>
-          <div className="ds">{t("ein Mik für alle")}</div>
-        </button>
-      </div>
-
+      {/* 3. Sprache */}
       <div className="sect">{t("Sprache")}</div>
       <select id="h-lang" className="fld" value={lang} onChange={(e) => setLang(e.target.value)}>
         <option value="auto">{t("🌐 Automatisch erkennen")}</option>
@@ -202,12 +202,6 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {device === "pod" && (
-        <div className="hint pod" id="pod-note">
-          {t("Pod-Modus: Gäste scannen den QR nur zum Einchecken (Name) — nur das gewählte Mikro nimmt auf. Sprecher werden danach automatisch getrennt.")}
-        </div>
-      )}
-
       {device === "single" && (
         <div id="single-setup">
           <div className="sect">{t("Wie viele sprechen?")}</div>
@@ -229,13 +223,34 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
+      {/* DSGVO-Trust-Zeile (kein Kasten) — überall präsent */}
+      <div className="dsgvo-trust">
+        <span className="dsgvo-trust-ic" aria-hidden="true" />
+        <span className="dsgvo-trust-txt">100&nbsp;% DSGVO-konform</span>
+        <span className="dsgvo-help" tabIndex={0} role="button" aria-label="Was bedeutet DSGVO-konform?">
+          ?
+          <span className="dsgvo-tip" role="tooltip">
+            Dein Meeting wird ausschließlich auf unseren Servern in Deutschland verarbeitet — DSGVO-konform.
+            Keine Weitergabe an Dritte, keine US-Cloud. Audio und Transkript werden nach der Auswertung
+            automatisch gelöscht. Höchste Datensicherheit ist unser Standard.
+          </span>
+        </span>
+      </div>
+
       <div className="cta">
-        <button className="btn btn-primary" id="h-btn" disabled={busy} onClick={submit}>
+        <button className="btn btn-primary" id="h-btn" disabled={busy} onClick={() => submit()}>
           <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="9" />
             <circle cx="12" cy="12" r="3.2" fill="#fff" stroke="none" />
           </svg>
-          {busy ? t("Meeting wird erstellt…") : t("Meeting starten")}
+          {busy ? t("Meeting wird gestartet…") : t("Meeting starten")}
+        </button>
+        <button className="btn btn-plan" id="h-plan" disabled={busy} onClick={() => { setErr(""); setPlan(true); }}>
+          <svg viewBox="0 0 24 24">
+            <rect x="3.5" y="5" width="17" height="16" rx="2.5" />
+            <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+          </svg>
+          {t("Meeting planen")}
         </button>
       </div>
       <div className="err" id="h-err">
@@ -244,6 +259,24 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
       <button className="btn btn-ghost" onClick={onBack}>
         {t("Zurück")}
       </button>
+
+      {plan && (
+        <div className="ddm center">
+          <div className="ddm-bg" onClick={() => setPlan(false)}></div>
+          <div className="ddm-card plan-card" role="dialog" aria-modal="true">
+            <div className="ddm-title">{t("Meeting planen")}</div>
+            <p className="plan-sub">{t("Wähle Tag und Uhrzeit — das Meeting landet als Termin in deinem Verlauf, Link gibt's sofort.")}</p>
+            <label className="plan-lbl">{t("Tag")}</label>
+            <input className="fld" type="date" value={planDate} min={nextQuarterSlot().date} onChange={(e) => setPlanDate(e.target.value)} />
+            <label className="plan-lbl">{t("Uhrzeit")}</label>
+            <input className="fld" type="time" step={900} value={planTime} onChange={(e) => setPlanTime(e.target.value)} />
+            <div className="plan-actions">
+              <button className="btn btn-ghost" onClick={() => setPlan(false)}>{t("Abbrechen")}</button>
+              <button className="btn btn-primary" disabled={busy} onClick={confirmPlan}>{t("Termin festlegen")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
