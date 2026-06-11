@@ -1,0 +1,383 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { getConfig, setConfig } from "../lib/ipc";
+import { setLanguage } from "../i18n";
+
+/**
+ * The Prompt Console — a floating Liquid-Glass window for drafting and
+ * engineering prompts anywhere on the desktop (own Tauri window "prompt",
+ * native vibrancy behind this view).
+ *
+ * Iron rule: NOTHING is ever lost. Every edit auto-saves (debounced) to
+ * prompts.json via the `prompts_save` IPC; hiding the window only hides it;
+ * deleting a non-empty draft archives it into the library instead of
+ * destroying it; dictated transcripts ("Konsole als Ziel") ride a Rust-side
+ * pending queue that survives the webview's first boot.
+ */
+
+interface Draft {
+  id: string;
+  title: string;
+  text: string;
+  updatedAt: number;
+}
+
+interface PromptData {
+  version: 1;
+  activeId: string;
+  drafts: Draft[];
+  library: Draft[];
+}
+
+const newDraft = (text = ""): Draft => ({
+  id: crypto.randomUUID(),
+  title: "",
+  text,
+  updatedAt: Date.now(),
+});
+
+const emptyData = (): PromptData => {
+  const d = newDraft();
+  return { version: 1, activeId: d.id, drafts: [d], library: [] };
+};
+
+function parseData(raw: string): PromptData {
+  try {
+    const p = JSON.parse(raw) as PromptData;
+    if (!Array.isArray(p.drafts) || p.drafts.length === 0) return emptyData();
+    if (!Array.isArray(p.library)) p.library = [];
+    if (!p.drafts.some((d) => d.id === p.activeId)) p.activeId = p.drafts[0].id;
+    return { ...p, version: 1 };
+  } catch {
+    return raw.trim() ? { ...emptyData(), drafts: [newDraft(raw)] } : emptyData();
+  }
+}
+
+/** Tab label: explicit title > first words of the text > untitled. */
+const tabLabel = (d: Draft, untitled: string) =>
+  d.title.trim() || d.text.trim().slice(0, 16).trim() || untitled;
+
+export function PromptConsole() {
+  const { t } = useTranslation();
+  const [data, setData] = useState<PromptData | null>(null);
+  const [libOpen, setLibOpen] = useState(false);
+  const [pinned, setPinned] = useState(true);
+  const [asTarget, setAsTarget] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+
+  // ---- Persistence: debounce every change; flush on blur/hide. ----
+  const latest = useRef<PromptData | null>(null);
+  const dirty = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+  latest.current = data;
+
+  const flushNow = () => {
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = undefined;
+    if (dirty.current && latest.current) {
+      dirty.current = false;
+      invoke("prompts_save", { data: JSON.stringify(latest.current) }).catch(() => {
+        dirty.current = true; // retry on the next change/flush
+      });
+    }
+  };
+
+  const update = (fn: (d: PromptData) => PromptData) => {
+    setData((d) => {
+      if (!d) return d;
+      const next = fn(d);
+      dirty.current = true;
+      if (timer.current) window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(flushNow, 400);
+      return next;
+    });
+  };
+
+  // ---- "Konsole als Ziel": drain the Rust-side transcript queue. ----
+  const drainPending = () =>
+    invoke<string[]>("prompt_take_pending")
+      .then((pending) => {
+        if (!pending.length) return;
+        update((d) => ({
+          ...d,
+          drafts: d.drafts.map((dr) =>
+            dr.id === d.activeId
+              ? {
+                  ...dr,
+                  text: (dr.text.trim() ? dr.text.replace(/\s+$/, "") + "\n\n" : "") + pending.join("\n\n"),
+                  updatedAt: Date.now(),
+                }
+              : dr,
+          ),
+        }));
+        setFlash(true);
+        window.setTimeout(() => setFlash(false), 900);
+      })
+      .catch(() => {});
+
+  useEffect(() => {
+    invoke<string>("prompts_load")
+      .then((raw) => setData(parseData(raw)))
+      .catch(() => setData(emptyData()));
+    getConfig()
+      .then((c) => {
+        setLanguage(c.ui_language || "de");
+        setAsTarget(!!c.prompt_console_as_target);
+      })
+      .catch(() => {});
+
+    const unTranscript = listen("echo://prompt-transcript", drainPending);
+    drainPending(); // anything queued while this webview was booting
+
+    // ESC hides (never destroys) the console; flush the draft first.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        flushNow();
+        invoke("prompt_console_toggle").catch(() => {});
+      }
+    };
+    const onBlurOrHide = () => flushNow();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onBlurOrHide);
+    document.addEventListener("visibilitychange", onBlurOrHide);
+    return () => {
+      unTranscript.then((f) => f());
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onBlurOrHide);
+      document.removeEventListener("visibilitychange", onBlurOrHide);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!data) return null;
+  const active = data.drafts.find((d) => d.id === data.activeId) ?? data.drafts[0];
+  const chars = active.text.length;
+  const words = active.text.trim() ? active.text.trim().split(/\s+/).length : 0;
+  const tokens = Math.ceil(chars / 4);
+
+  // ---- Actions ----
+  const setText = (text: string) =>
+    update((d) => ({
+      ...d,
+      drafts: d.drafts.map((dr) => (dr.id === d.activeId ? { ...dr, text, updatedAt: Date.now() } : dr)),
+    }));
+
+  const addTab = () =>
+    update((d) => {
+      const dr = newDraft();
+      return { ...d, activeId: dr.id, drafts: [...d.drafts, dr] };
+    });
+
+  /** Close a tab. A non-empty draft is ARCHIVED into the library (never lost). */
+  const closeTab = (id: string) =>
+    update((d) => {
+      const dr = d.drafts.find((x) => x.id === id);
+      const drafts = d.drafts.filter((x) => x.id !== id);
+      const library =
+        dr && dr.text.trim() ? [{ ...dr, title: tabLabel(dr, t("prompt.tabUntitled")), updatedAt: Date.now() }, ...d.library] : d.library;
+      if (drafts.length === 0) drafts.push(newDraft());
+      const activeId = d.activeId === id ? drafts[drafts.length - 1].id : d.activeId;
+      return { ...d, activeId, drafts, library };
+    });
+
+  const rename = (id: string, title: string) =>
+    update((d) => ({
+      ...d,
+      drafts: d.drafts.map((dr) => (dr.id === id ? { ...dr, title } : dr)),
+    }));
+
+  const copy = () => {
+    if (!active.text) return;
+    invoke("copy_text", { text: active.text })
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      })
+      .catch(() => {});
+  };
+
+  const insert = () => {
+    if (!active.text.trim()) return;
+    flushNow();
+    invoke("prompt_insert", { text: active.text }).catch(() => {});
+  };
+
+  const saveToLibrary = () => {
+    if (!active.text.trim()) return;
+    update((d) => ({
+      ...d,
+      library: [
+        { ...active, id: crypto.randomUUID(), title: tabLabel(active, t("prompt.tabUntitled")), updatedAt: Date.now() },
+        ...d.library,
+      ],
+    }));
+  };
+
+  const loadFromLibrary = (entry: Draft) =>
+    update((d) => {
+      const dr = { ...entry, id: crypto.randomUUID(), updatedAt: Date.now() };
+      return { ...d, activeId: dr.id, drafts: [...d.drafts, dr] };
+    });
+
+  const deleteFromLibrary = (id: string) =>
+    update((d) => ({ ...d, library: d.library.filter((e) => e.id !== id) }));
+
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    getCurrentWindow().setAlwaysOnTop(next).catch(() => {});
+  };
+
+  const toggleTarget = () => {
+    const next = !asTarget;
+    setAsTarget(next);
+    getConfig()
+      .then((c) => setConfig({ ...c, prompt_console_as_target: next }))
+      .catch(() => setAsTarget(!next));
+  };
+
+  const hide = () => {
+    flushNow();
+    invoke("prompt_console_toggle").catch(() => {});
+  };
+
+  return (
+    <div className="pc-shell">
+      <header className="pc-head" data-tauri-drag-region>
+        <span className="pc-glyph" data-tauri-drag-region>✦</span>
+        <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
+        <div className="pc-head-actions">
+          <button
+            className={`pc-icon ${asTarget ? "on" : ""}`}
+            title={t("prompt.targetHint")}
+            onClick={toggleTarget}
+          >
+            🎙
+          </button>
+          <button className={`pc-icon ${pinned ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
+            ⌖
+          </button>
+          <button className="pc-icon" title={t("prompt.close")} onClick={hide}>
+            ✕
+          </button>
+        </div>
+      </header>
+
+      <div className="pc-tabs">
+        {data.drafts.map((dr) => (
+          <div
+            key={dr.id}
+            className={`pc-tab ${dr.id === data.activeId ? "active" : ""}`}
+            onClick={() => update((d) => ({ ...d, activeId: dr.id }))}
+            onDoubleClick={() => setRenaming(dr.id)}
+            title={t("prompt.tabHint")}
+          >
+            {renaming === dr.id ? (
+              <input
+                className="pc-rename"
+                autoFocus
+                defaultValue={dr.title}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  rename(dr.id, e.target.value);
+                  setRenaming(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setRenaming(null);
+                  e.stopPropagation();
+                }}
+              />
+            ) : (
+              <>
+                <span className="pc-tab-label">{tabLabel(dr, t("prompt.tabUntitled"))}</span>
+                {data.drafts.length > 0 && (
+                  <span
+                    className="pc-tab-x"
+                    title={dr.text.trim() ? t("prompt.tabArchive") : t("prompt.tabClose")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeTab(dr.id);
+                    }}
+                  >
+                    ×
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+        <button className="pc-tab-add" title={t("prompt.newTab")} onClick={addTab}>
+          +
+        </button>
+      </div>
+
+      <div className="pc-body">
+        <textarea
+          ref={editorRef}
+          className={`pc-editor ${flash ? "pc-flash" : ""}`}
+          value={active.text}
+          placeholder={t("prompt.placeholder")}
+          spellCheck={false}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {libOpen && (
+          <div className="pc-lib">
+            <div className="pc-lib-head">
+              <span>{t("prompt.library")}</span>
+              <button className="pc-btn" onClick={saveToLibrary} disabled={!active.text.trim()}>
+                {t("prompt.saveToLibrary")}
+              </button>
+            </div>
+            <div className="pc-lib-list">
+              {data.library.length === 0 && <div className="pc-lib-empty">{t("prompt.libraryEmpty")}</div>}
+              {data.library.map((e) => (
+                <div key={e.id} className="pc-lib-row" onClick={() => loadFromLibrary(e)} title={e.text.slice(0, 400)}>
+                  <div className="pc-lib-meta">
+                    <span className="pc-lib-title">{e.title || t("prompt.tabUntitled")}</span>
+                    <span className="pc-lib-sub">
+                      {e.text.length} · {new Date(e.updatedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <button
+                    className="pc-icon"
+                    title={t("prompt.libraryDelete")}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      deleteFromLibrary(e.id);
+                    }}
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <footer className="pc-foot">
+        <span className="pc-count">
+          {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
+        </span>
+        <div className="pc-foot-actions">
+          <button className={`pc-btn ${libOpen ? "on" : ""}`} title={t("prompt.library")} onClick={() => setLibOpen(!libOpen)}>
+            ⛁
+          </button>
+          <button className="pc-btn" onClick={copy} disabled={!active.text}>
+            {copied ? t("prompt.copied") : t("prompt.copy")}
+          </button>
+          <button className="pc-btn primary" onClick={insert} disabled={!active.text.trim()} title={t("prompt.insertHint")}>
+            {t("prompt.insert")}
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+}

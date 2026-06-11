@@ -23,7 +23,8 @@
     "transcribing": "Transkribiere",
     "tooltipMode": "Modus: {{value}}",
     "tooltipLanguage": "Sprache: {{value}}",
-    "tooltipCleanup": "Cleanup: {{value}}"
+    "tooltipCleanup": "Cleanup: {{value}}",
+    "tooltipPrompt": "Prompt-Konsole öffnen"
   },
   "common": {
     "save": "Speichern",
@@ -317,7 +318,11 @@
     "openFolder": "Ordner öffnen",
     "sourceCode": "Quellcode / Releases",
     "github": "GitHub →",
-    "autoSaveNote": "Änderungen werden automatisch gespeichert"
+    "autoSaveNote": "Änderungen werden automatisch gespeichert",
+    "promptHotkey": "Prompt-Konsole Hotkey",
+    "promptHotkeyHint": "Globale Tastenkombi, die die schwebende Prompt-Konsole öffnet/versteckt",
+    "promptAsTarget": "Konsole als Diktat-Ziel",
+    "promptAsTargetHint": "Jede Transkription landet in der Prompt-Konsole statt in der aktiven App"
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",
@@ -346,5 +351,27 @@
     "checkinFailed": "Zahl von {{name}} nicht erkannt — einfach nochmal auf Check-In klicken.",
     "stop": "⏹ Meeting beenden",
     "processingHint": "Restliche Aufnahme wird transkribiert und den Sprechern zugeordnet. Das kann je nach Länge ein paar Minuten dauern — alles lokal."
+  },
+  "prompt": {
+    "title": "Prompt-Konsole",
+    "placeholder": "Schreib oder diktiere deinen Prompt …",
+    "copy": "Kopieren",
+    "copied": "✓ Kopiert",
+    "insert": "Einfügen",
+    "insertHint": "In die App dahinter einfügen",
+    "newTab": "Neuer Entwurf",
+    "library": "Bibliothek",
+    "saveToLibrary": "Aktuellen speichern",
+    "libraryEmpty": "Noch keine gespeicherten Prompts — speichere deinen ersten Entwurf.",
+    "libraryDelete": "Löschen",
+    "words": "Wörter",
+    "tokens": "Tokens",
+    "tabUntitled": "Ohne Titel",
+    "tabHint": "Doppelklick zum Umbenennen",
+    "tabArchive": "Schließen (wird in die Bibliothek archiviert)",
+    "tabClose": "Schließen",
+    "pin": "Immer im Vordergrund",
+    "close": "Ausblenden (Inhalt bleibt erhalten)",
+    "targetHint": "Konsole als Ziel: Diktate landen hier statt in der App"
   }
 }

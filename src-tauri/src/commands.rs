@@ -27,6 +27,10 @@ pub struct AppState {
     /// re-entry guard gates on THIS (not `recorder.is_recording()`) so a held hotkey
     /// (auto-repeat fires Pressed repeatedly) can't re-enter do_start mid-session.
     pub session_active: AtomicBool,
+    /// "Konsole als Ziel"-Transkripte, die auf die Prompt-Konsole warten — die
+    /// Webview bootet beim ersten Mal noch; sie drained die Queue beim Mount
+    /// und auf jedes `echo://prompt-transcript`-Signal (nichts geht verloren).
+    pub prompt_pending: Mutex<Vec<String>>,
     /// Aktives lokales Meeting (Pro-Feature, Cargo-Feature `local-meet`).
     #[cfg(feature = "local-meet")]
     pub meet_local: Mutex<Option<crate::meet_local::engine::EngineHandle>>,
@@ -41,6 +45,7 @@ impl AppState {
             hit_test_active: std::sync::atomic::AtomicBool::new(false),
             meeting_capture: Mutex::new(None),
             session_active: AtomicBool::new(false),
+            prompt_pending: Mutex::new(Vec::new()),
             #[cfg(feature = "local-meet")]
             meet_local: Mutex::new(None),
         }
@@ -196,8 +201,15 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         return Ok(result);
     }
 
-    // Paste-back into the captured target window (clipboard + paste per config).
-    if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
+    // "Konsole als Ziel": the transcript belongs to the Prompt Console, not the
+    // app behind. Still copy it so a manual paste works everywhere. Otherwise:
+    // paste-back into the captured target window (clipboard + paste per config).
+    if cfg.prompt_console_as_target {
+        if let Err(e) = crate::inject::set_clipboard(&result.text) {
+            log::warn!("clipboard failed: {e}");
+        }
+        crate::prompt_console::receive_transcript(app, &result.text);
+    } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
         log::warn!("inject failed: {e}");
     }
 
@@ -310,6 +322,7 @@ pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config
         // sonst wäre das Pro-Gating lokal umgehbar.
         config.plan = cur.plan.clone();
         cur.hotkey != config.hotkey
+            || cur.prompt_console_hotkey != config.prompt_console_hotkey
     };
     config.save().map_err(|e| e.to_string())?;
     *state.config.lock() = config;

@@ -1,0 +1,369 @@
+/* Prompt Console — dark Liquid Glass HUD. The Tauri window is transparent +
+   undecorated; on macOS a native HudWindow vibrancy layer blurs the DESKTOP
+   behind us (CSS backdrop-filter can't reach outside the webview), so the
+   shell only needs the translucent glass tint, edge, and rim on top. Always
+   dark, independent of Echo's theme — it's a console. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.pc-shell {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: 20px;
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+  overflow: hidden;
+}
+
+/* ---- Header (drag region) ---- */
+.pc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px 14px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  cursor: default;
+}
+
+.pc-glyph {
+  color: var(--cyan);
+  font-size: 14px;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.55);
+}
+
+.pc-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink2);
+}
+
+.pc-head-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pc-icon {
+  width: 26px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: 8px;
+  color: var(--ink2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pc-icon:hover {
+  color: var(--ink);
+  border-color: var(--glass-edge2);
+  background: var(--fill-ghost-hover);
+}
+
+.pc-icon.on {
+  color: var(--cyan);
+  border-color: rgba(34, 211, 238, 0.45);
+  box-shadow: 0 0 10px -2px rgba(34, 211, 238, 0.35), inset 0 1px 0 var(--rim-soft);
+}
+
+/* ---- Draft tabs ---- */
+.pc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0 12px;
+  overflow-x: auto;
+  flex: none;
+  scrollbar-width: none;
+}
+
+.pc-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.pc-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 150px;
+  padding: 4px 8px 4px 10px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: 9px;
+  color: var(--ink3);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex: none;
+}
+
+.pc-tab:hover {
+  color: var(--ink2);
+}
+
+.pc-tab.active {
+  color: var(--ink);
+  border-color: rgba(34, 211, 238, 0.4);
+  box-shadow: inset 0 1px 0 var(--rim-soft);
+}
+
+.pc-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-tab-x {
+  color: var(--ink3);
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.pc-tab-x:hover {
+  color: var(--ink);
+}
+
+.pc-rename {
+  width: 110px;
+  background: var(--fill-focus);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.pc-tab-add {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px dashed var(--glass-edge2);
+  border-radius: 8px;
+  color: var(--ink3);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pc-tab-add:hover {
+  color: var(--cyan);
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+/* ---- Editor ---- */
+.pc-body {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.pc-editor {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px 14px;
+  color: var(--ink);
+  caret-color: var(--cyan);
+  font-family:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  user-select: text;
+  border-radius: 0 0 0 0;
+  transition: box-shadow 0.3s ease;
+}
+
+.pc-editor::placeholder {
+  color: var(--ink3);
+}
+
+/* Dictation landed ("Konsole als Ziel") — a brief cyan breath. */
+.pc-flash {
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.55), inset 0 0 28px -10px rgba(34, 211, 238, 0.5);
+}
+
+/* ---- Library drawer ---- */
+.pc-lib {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--menu-bg);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  animation: pc-rise 0.18s ease;
+}
+
+@keyframes pc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pc-lib-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink2);
+  flex: none;
+}
+
+.pc-lib-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.pc-lib-empty {
+  color: var(--ink3);
+  font-size: 12px;
+  text-align: center;
+  padding: 26px 12px;
+}
+
+.pc-lib-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.pc-lib-row:hover {
+  background: var(--fill-weak);
+  border-color: var(--glass-edge);
+}
+
+.pc-lib-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pc-lib-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-lib-sub {
+  font-size: 10.5px;
+  color: var(--ink3);
+}
+
+/* ---- Footer ---- */
+.pc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px 10px 14px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+
+.pc-count {
+  font-size: 10.5px;
+  color: var(--ink3);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.pc-foot-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pc-btn {
+  padding: 5px 11px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: 9px;
+  color: var(--ink2);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pc-btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--glass-edge2);
+  background: var(--fill-ghost-hover);
+}
+
+.pc-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pc-btn.on {
+  color: var(--cyan);
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.pc-btn.primary {
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.32), rgba(8, 145, 178, 0.38));
+  border-color: rgba(34, 211, 238, 0.5);
+  color: #d9f6fd;
+  box-shadow: 0 6px 16px -8px rgba(34, 211, 238, 0.45), inset 0 1px 0 var(--rim-cta);
+}
+
+.pc-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.42), rgba(8, 145, 178, 0.48));
+}

@@ -436,6 +436,17 @@ export function Orb() {
           >
             {CLEANUP_LABEL[quick.cleanup] ?? quick.cleanup.slice(0, 2).toUpperCase()}
           </button>
+          {/* S — Prompt Console (floating Liquid-Glass prompt window) */}
+          <button
+            title={t("overlay.tooltipPrompt")}
+            onClick={(e) => {
+              e.stopPropagation();
+              invoke("prompt_console_toggle").catch(() => {});
+            }}
+            style={{ ...satBase, bottom: 0, left: "50%", transform: "translateX(-50%)" }}
+          >
+            ✦
+          </button>
         </>
       )}
     </div>

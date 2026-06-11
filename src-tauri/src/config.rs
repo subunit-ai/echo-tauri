@@ -174,6 +174,13 @@ pub struct Config {
 
     pub synapse_save_enabled: bool,
 
+    /// Global hotkey toggling the floating Prompt Console (empty = disabled).
+    pub prompt_console_hotkey: String,
+    /// "Konsole als Ziel": route every finished transcript into the Prompt
+    /// Console instead of pasting it into the app behind. Toggled from the
+    /// console header and in Settings.
+    pub prompt_console_as_target: bool,
+
     /// toggle | hold (push-to-talk, default)
     pub recording_mode: String,
 
@@ -289,6 +296,9 @@ impl Default for Config {
             long_form_cleanup_style: "raw".to_string(),
 
             synapse_save_enabled: false,
+
+            prompt_console_hotkey: "<ctrl>+<shift>+p".to_string(),
+            prompt_console_as_target: false,
 
             recording_mode: "hold".to_string(),
 

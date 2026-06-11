@@ -23,7 +23,8 @@
     "transcribing": "Transcribing",
     "tooltipMode": "Mode: {{value}}",
     "tooltipLanguage": "Language: {{value}}",
-    "tooltipCleanup": "Cleanup: {{value}}"
+    "tooltipCleanup": "Cleanup: {{value}}",
+    "tooltipPrompt": "Open Prompt Console"
   },
   "common": {
     "save": "Save",
@@ -317,7 +318,11 @@
     "openFolder": "Open folder",
     "sourceCode": "Source / Releases",
     "github": "GitHub →",
-    "autoSaveNote": "Changes are saved automatically"
+    "autoSaveNote": "Changes are saved automatically",
+    "promptHotkey": "Prompt Console hotkey",
+    "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Console",
+    "promptAsTarget": "Console as dictation target",
+    "promptAsTargetHint": "Every transcription lands in the Prompt Console instead of the active app"
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
@@ -346,5 +351,27 @@
     "checkinFailed": "Couldn't recognize {{name}}'s number — just click check-in again.",
     "stop": "⏹ End meeting",
     "processingHint": "The remaining audio is being transcribed and assigned to speakers. Depending on length this can take a few minutes — all locally."
+  },
+  "prompt": {
+    "title": "Prompt Console",
+    "placeholder": "Write or dictate your prompt …",
+    "copy": "Copy",
+    "copied": "✓ Copied",
+    "insert": "Insert",
+    "insertHint": "Paste into the app behind",
+    "newTab": "New draft",
+    "library": "Library",
+    "saveToLibrary": "Save current",
+    "libraryEmpty": "No saved prompts yet — save your first draft.",
+    "libraryDelete": "Delete",
+    "words": "words",
+    "tokens": "tokens",
+    "tabUntitled": "Untitled",
+    "tabHint": "Double-click to rename",
+    "tabArchive": "Close (archived to the library)",
+    "tabClose": "Close",
+    "pin": "Always on top",
+    "close": "Hide (content is kept)",
+    "targetHint": "Console as target: dictations land here instead of the app"
   }
 }

@@ -432,6 +432,24 @@ pub fn set_clipboard(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Paste text that's already on the clipboard into whatever window has focus —
+/// the Prompt Console's "Einfügen" (no target capture, no live typing; the
+/// console hides itself first so the underlying app is frontmost again).
+pub fn paste_clipboard_into_focused(text: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        // Same main-thread marshalling + Accessibility gate as the normal flow.
+        macos_inject(text.to_string(), false, false, None, true);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = text;
+        if let Err(e) = paste() {
+            log::warn!("prompt insert: paste failed ({e}) — clipboard only");
+        }
+    }
+}
+
 /// Clipboard + platform paste chord (Ctrl/Cmd+V). Atomic — no per-char spam.
 /// Windows uses a native single-batch `SendInput` (see [`win::paste`]); other
 /// platforms use enigo's chord.

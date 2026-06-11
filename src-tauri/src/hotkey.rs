@@ -17,6 +17,8 @@ use crate::commands::AppState;
 // Debounce toggle presses — the OS can emit repeated Pressed (key auto-repeat),
 // which would otherwise start+immediately-stop a recording.
 static LAST_TOGGLE_MS: AtomicU64 = AtomicU64::new(0);
+// Same debounce for the Prompt-Console hotkey (auto-repeat would open+close it).
+static LAST_PROMPT_MS: AtomicU64 = AtomicU64::new(0);
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -26,8 +28,30 @@ fn now_ms() -> u64 {
 }
 
 pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
-    let combo = app.state::<AppState>().config.lock().hotkey.clone();
+    let (combo, prompt_combo) = {
+        let state = app.state::<AppState>();
+        let c = state.config.lock();
+        (c.hotkey.clone(), c.prompt_console_hotkey.clone())
+    };
     let _ = app.global_shortcut().unregister_all();
+
+    // Prompt-Console hotkey first, best-effort: a bad or conflicting combo must
+    // never take the RECORD hotkey down with it. Skipped when it duplicates the
+    // record combo (record wins — see on_event's dispatch).
+    if !prompt_combo.trim().is_empty() {
+        match parse_shortcut(&prompt_combo) {
+            Some(sc) if parse_shortcut(&combo) == Some(sc) => {
+                log::warn!("prompt-console hotkey equals record hotkey — skipping it");
+            }
+            Some(sc) => {
+                if let Err(e) = app.global_shortcut().register(sc) {
+                    log::warn!("prompt-console hotkey register {prompt_combo}: {e}");
+                }
+            }
+            None => log::warn!("could not parse prompt-console hotkey: {prompt_combo}"),
+        }
+    }
+
     match parse_shortcut(&combo) {
         Some(sc) => app
             .global_shortcut()
@@ -43,9 +67,33 @@ pub fn reregister_from_config(app: &AppHandle) {
     }
 }
 
-pub fn on_event(app: &AppHandle, _shortcut: &Shortcut, event: ShortcutEvent) {
+pub fn on_event(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
     let state = app.state::<AppState>();
-    let toggle = state.config.lock().recording_mode == "toggle";
+    let (toggle, record_combo, prompt_combo) = {
+        let c = state.config.lock();
+        (
+            c.recording_mode == "toggle",
+            c.hotkey.clone(),
+            c.prompt_console_hotkey.clone(),
+        )
+    };
+
+    // Both global shortcuts arrive through this one handler — dispatch by combo.
+    // The record hotkey wins on a duplicate config (mirrors register_from_config).
+    if !prompt_combo.trim().is_empty() {
+        let prompt_sc = parse_shortcut(&prompt_combo);
+        if prompt_sc.is_some() && prompt_sc == Some(*shortcut) && parse_shortcut(&record_combo) != prompt_sc {
+            if matches!(event.state(), ShortcutState::Pressed) {
+                let now = now_ms();
+                if now.saturating_sub(LAST_PROMPT_MS.load(Ordering::Relaxed)) < 300 {
+                    return; // debounce auto-repeat
+                }
+                LAST_PROMPT_MS.store(now, Ordering::Relaxed);
+                crate::prompt_console::toggle(app);
+            }
+            return;
+        }
+    }
     match event.state() {
         ShortcutState::Pressed => {
             if toggle {

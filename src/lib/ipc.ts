@@ -51,6 +51,10 @@ export interface Config {
   long_form_cleanup_style: string;
 
   synapse_save_enabled: boolean;
+  /** Global hotkey toggling the floating Prompt Console (empty = disabled). */
+  prompt_console_hotkey: string;
+  /** "Konsole als Ziel": transcripts go into the Prompt Console, not the app. */
+  prompt_console_as_target: boolean;
   recording_mode: string; // toggle | hold
   account_email: string;
   last_cloud_mode: string;

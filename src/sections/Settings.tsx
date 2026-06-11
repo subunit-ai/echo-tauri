@@ -262,6 +262,12 @@ export function Settings() {
             <Row name={t("settings.hotkey")} hint={t("settings.hotkeyHint")}>
               <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
             </Row>
+            <Row name={t("settings.promptHotkey")} hint={t("settings.promptHotkeyHint")}>
+              <HotkeyCapture value={c.prompt_console_hotkey} onChange={(v) => set("prompt_console_hotkey", v)} />
+            </Row>
+            <Row name={t("settings.promptAsTarget")} hint={t("settings.promptAsTargetHint")}>
+              <Toggle checked={c.prompt_console_as_target} onChange={(v) => set("prompt_console_as_target", v)} />
+            </Row>
             <Row name={t("settings.microphone")}>
               <Sel
                 value={c.mic_device_name || ""}

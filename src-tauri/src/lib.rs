@@ -17,6 +17,7 @@ mod meet_local; // lokales Meet-Backend (Pro): geteilte Diarisierung aus crates/
 mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting transcripts
 mod meeting_detect;
 mod models;
+mod prompt_console;
 mod synapse;
 mod overlay;
 mod recorder;
@@ -90,10 +91,12 @@ pub fn run() {
         .manage(AppState::new(cfg))
         // Closing the main window hides it to the tray instead of quitting — Echo
         // is a background hotkey daemon; an accidental X must not kill the hotkey.
-        // Real quit is the tray's "Beenden" (app.exit). Only the main window; the
-        // overlay manages its own lifecycle.
+        // Real quit is the tray's "Beenden" (app.exit). The Prompt Console hides
+        // too (iron rule: a dismissed console never loses its draft — the webview
+        // keeps running). The overlay manages its own lifecycle.
         .on_window_event(|window, event| {
-            if window.label() == "main" {
+            let label = window.label();
+            if label == "main" || label == crate::prompt_console::LABEL {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
@@ -112,6 +115,11 @@ pub fn run() {
             commands::set_orb_position,
             commands::orb_quick,
             commands::orb_cycle,
+            prompt_console::prompt_console_toggle,
+            prompt_console::prompts_load,
+            prompt_console::prompts_save,
+            prompt_console::prompt_take_pending,
+            prompt_console::prompt_insert,
             commands::list_audio_devices,
             commands::hardware_info,
             commands::process_meeting,
