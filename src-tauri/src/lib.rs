@@ -131,6 +131,15 @@ pub fn run() {
             commands::list_local_models,
             commands::download_model,
             commands::delete_local_model,
+            commands::meet_local_available,
+            commands::meet_local_start,
+            commands::meet_local_add_participant,
+            commands::meet_local_checkin,
+            commands::meet_local_status,
+            commands::meet_local_stop,
+            commands::meet_local_dismiss,
+            commands::meet_local_list,
+            commands::meet_local_get,
         ])
         .setup(|app| {
             // Version/platform banner — first line in every log, mirrors the old

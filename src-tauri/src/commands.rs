@@ -27,6 +27,9 @@ pub struct AppState {
     /// re-entry guard gates on THIS (not `recorder.is_recording()`) so a held hotkey
     /// (auto-repeat fires Pressed repeatedly) can't re-enter do_start mid-session.
     pub session_active: AtomicBool,
+    /// Aktives lokales Meeting (Pro-Feature, Cargo-Feature `local-meet`).
+    #[cfg(feature = "local-meet")]
+    pub meet_local: Mutex<Option<crate::meet_local::engine::EngineHandle>>,
 }
 
 impl AppState {
@@ -38,6 +41,8 @@ impl AppState {
             hit_test_active: std::sync::atomic::AtomicBool::new(false),
             meeting_capture: Mutex::new(None),
             session_active: AtomicBool::new(false),
+            #[cfg(feature = "local-meet")]
+            meet_local: Mutex::new(None),
         }
     }
 }
@@ -715,3 +720,186 @@ pub async fn install_update(app: AppHandle) -> Result<bool, String> {
     // Files are in place — relaunch into the new version (never returns).
     app.restart();
 }
+
+// ---- Lokales Meet-Backend (Pro-Feature, Cargo-Feature `local-meet`) ----
+// Die Commands existieren in JEDEM Build (stabile IPC-Oberfläche für die UI);
+// ohne das Feature antworten sie mit built=false bzw. einem klaren Fehler.
+
+#[derive(serde::Serialize)]
+pub struct MeetLocalAvailability {
+    /// Binary enthält die lokale Pipeline (Cargo-Feature `local-meet`).
+    pub built: bool,
+    /// Workspace-Tier erlaubt das Pro-Feature.
+    pub plan_ok: bool,
+    /// Gerät ist stark genug (Apple Silicon oder ≥ 16 GB RAM).
+    pub hw_ok: bool,
+    /// Voiceprint-Modell schon heruntergeladen.
+    pub speaker_model: bool,
+    /// Es läuft gerade ein lokales Meeting.
+    pub active: bool,
+}
+
+fn meet_local_plan_ok(plan: &str) -> bool {
+    matches!(plan, "pro" | "enterprise" | "ops" | "pilot")
+}
+
+#[tauri::command]
+pub fn meet_local_available(state: State<AppState>) -> MeetLocalAvailability {
+    let plan_ok = meet_local_plan_ok(&state.config.lock().plan);
+    let hw = crate::hardware::detect();
+    let hw_ok = (cfg!(target_os = "macos") && cfg!(target_arch = "aarch64")) || hw.ram_gb >= 15.0;
+    #[cfg(feature = "local-meet")]
+    {
+        MeetLocalAvailability {
+            built: true,
+            plan_ok,
+            hw_ok,
+            speaker_model: crate::meet_local::model_fetch::speaker_model_downloaded(),
+            active: state.meet_local.lock().is_some(),
+        }
+    }
+    #[cfg(not(feature = "local-meet"))]
+    {
+        MeetLocalAvailability { built: false, plan_ok, hw_ok, speaker_model: false, active: false }
+    }
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_start(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let (plan, mic, model, language) = {
+        let c = state.config.lock();
+        let lang = if c.language == "auto" || c.language.is_empty() {
+            None
+        } else {
+            Some(c.language.clone())
+        };
+        (c.plan.clone(), c.mic_device_name.clone(), c.local_model.clone(), lang)
+    };
+    if !meet_local_plan_ok(&plan) {
+        return Err("Lokale Meeting-Verarbeitung ist ein Pro-Feature.".into());
+    }
+    let mut slot = state.meet_local.lock();
+    if let Some(h) = slot.as_ref() {
+        if !h.is_finished() {
+            return Err("Es läuft schon ein lokales Meeting.".into());
+        }
+    }
+    let mic = if mic.is_empty() { None } else { Some(mic) };
+    *slot = Some(crate::meet_local::engine::start(app, mic, model, language)?);
+    Ok(())
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_add_participant(state: State<AppState>, name: String) -> Result<String, String> {
+    state.meet_local.lock().as_ref().ok_or("Kein lokales Meeting aktiv")?.add_participant(name)
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_checkin(state: State<AppState>, name: String) -> Result<(), String> {
+    state.meet_local.lock().as_ref().ok_or("Kein lokales Meeting aktiv")?.start_checkin(name)
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_status(
+    state: State<AppState>,
+) -> Option<crate::meet_local::engine::Snapshot> {
+    state.meet_local.lock().as_ref().map(|h| h.snapshot())
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_stop(state: State<AppState>) -> Result<(), String> {
+    state.meet_local.lock().as_ref().ok_or("Kein lokales Meeting aktiv")?.stop();
+    Ok(())
+}
+
+/// Fertiges/abgebrochenes Meeting aus dem Slot räumen (UI: „Schließen").
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_dismiss(state: State<AppState>) {
+    let mut slot = state.meet_local.lock();
+    if slot.as_ref().map(|h| h.is_finished()).unwrap_or(false) {
+        *slot = None;
+    }
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_list() -> Vec<serde_json::Value> {
+    let dir = crate::meet_local::engine::meetings_dir();
+    let mut out = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            if let Ok(raw) = std::fs::read(e.path().join("meeting.json")) {
+                if let Ok(mut v) = serde_json::from_slice::<serde_json::Value>(&raw) {
+                    if let Some(o) = v.as_object_mut() {
+                        o.remove("segments"); // Liste bleibt leichtgewichtig
+                    }
+                    out.push(v);
+                }
+            }
+        }
+    }
+    out.sort_by_key(|v| std::cmp::Reverse(v["started_at"].as_u64().unwrap_or(0)));
+    out
+}
+
+#[cfg(feature = "local-meet")]
+#[tauri::command]
+pub fn meet_local_get(id: String) -> Result<serde_json::Value, String> {
+    // id ist von uns generiert ("local-<ts>") — trotzdem gegen Traversal härten
+    if id.contains(['/', '\\', '.']) {
+        return Err("Ungültige Meeting-ID".into());
+    }
+    let dir = crate::meet_local::engine::meetings_dir().join(&id);
+    let meeting: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(dir.join("meeting.json")).map_err(|_| "Meeting nicht gefunden")?,
+    )
+    .map_err(|_| "Meeting-Datei kaputt")?;
+    let transcript = std::fs::read_to_string(dir.join("transcript.md")).unwrap_or_default();
+    Ok(serde_json::json!({ "meeting": meeting, "transcript": transcript }))
+}
+
+// Stub-Varianten für Builds ohne `local-meet` — gleiche Command-Namen, damit
+// die UI EINEN Codepfad hat und auf `built:false` reagieren kann.
+#[cfg(not(feature = "local-meet"))]
+mod meet_local_stubs {
+    const NOT_BUILT: &str = "Dieses Build enthält das lokale Meet-Backend nicht.";
+
+    #[tauri::command]
+    pub fn meet_local_start() -> Result<(), String> {
+        Err(NOT_BUILT.into())
+    }
+    #[tauri::command]
+    pub fn meet_local_add_participant(_name: String) -> Result<String, String> {
+        Err(NOT_BUILT.into())
+    }
+    #[tauri::command]
+    pub fn meet_local_checkin(_name: String) -> Result<(), String> {
+        Err(NOT_BUILT.into())
+    }
+    #[tauri::command]
+    pub fn meet_local_status() -> Option<serde_json::Value> {
+        None
+    }
+    #[tauri::command]
+    pub fn meet_local_stop() -> Result<(), String> {
+        Err(NOT_BUILT.into())
+    }
+    #[tauri::command]
+    pub fn meet_local_dismiss() {}
+    #[tauri::command]
+    pub fn meet_local_list() -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+    #[tauri::command]
+    pub fn meet_local_get(_id: String) -> Result<serde_json::Value, String> {
+        Err(NOT_BUILT.into())
+    }
+}
+#[cfg(not(feature = "local-meet"))]
+pub use meet_local_stubs::*;

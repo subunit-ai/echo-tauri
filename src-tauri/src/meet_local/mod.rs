@@ -17,8 +17,8 @@
 //!   4. ⏳ Host-zentrierter Offline-Check-In (Zahl auf dem Host-Schirm,
 //!      lokales Whisper + digits-Match — kein QR nötig) + UI/Command-Wiring
 
-// dead_code: bis Baustein 4 (Command-/UI-Wiring) gibt es noch keinen
-// Laufzeit-Konsumenten — die Module sind über ihre Tests abgedeckt.
+// dead_code in Builds OHNE local-meet: dort gibt es keinen Laufzeit-
+// Konsumenten — die Module sind über ihre Tests abgedeckt.
 #[allow(dead_code)]
 pub mod incremental;
 #[allow(dead_code)]
@@ -26,6 +26,15 @@ pub mod pcm_store;
 #[cfg(feature = "local-whisper")]
 #[allow(dead_code)]
 pub mod whisper_window;
+
+// Die Pipeline-Orchestrierung (Capture→Check-In→Engine→Diarisierung) braucht
+// Whisper UND den Voiceprint-Embedder → eigenes Feature `local-meet`.
+#[cfg(feature = "local-meet")]
+pub mod capture;
+#[cfg(feature = "local-meet")]
+pub mod engine;
+#[cfg(feature = "local-meet")]
+pub mod model_fetch;
 
 // Bis das Command-/UI-Wiring (Baustein 4) die Pipeline konsumiert, sind die
 // Re-Exports das stabile Interface der Kette.
