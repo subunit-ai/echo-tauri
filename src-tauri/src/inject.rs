@@ -94,6 +94,33 @@ mod mac {
             AXIsProcessTrustedWithOptions(opts.as_concrete_TypeRef()) != 0
         }
     }
+
+    use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+    use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+    /// `kVK_ANSI_V` — the 'v' key's virtual keycode on macOS (Carbon HIToolbox).
+    const KVK_ANSI_V: u16 = 9;
+
+    /// Synthesize a real ⌘V via CGEvent: ONE keyDown for 'v' that already carries the
+    /// Command flag, then a keyUp. This is the macOS analogue of the native Windows paste
+    /// chord. enigo's chord instead posts a separate `Meta` press and then the 'v' as a
+    /// *Unicode* event — on macOS that 'v' often lands as the literal character (no Command
+    /// flag on it) and/or races the modifier, which is the intermittent bare-"v" paste bug.
+    /// Carrying the flag on the same event removes both failure modes. Main thread only
+    /// (called from `macos_inject`).
+    pub fn cmd_v() -> anyhow::Result<()> {
+        let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+            .map_err(|_| anyhow::anyhow!("CGEventSource::new failed"))?;
+        let down = CGEvent::new_keyboard_event(src.clone(), KVK_ANSI_V, true)
+            .map_err(|_| anyhow::anyhow!("keyDown event creation failed"))?;
+        down.set_flags(CGEventFlags::CGEventFlagCommand);
+        down.post(CGEventTapLocation::HID);
+        let up = CGEvent::new_keyboard_event(src, KVK_ANSI_V, false)
+            .map_err(|_| anyhow::anyhow!("keyUp event creation failed"))?;
+        up.set_flags(CGEventFlags::CGEventFlagCommand);
+        up.post(CGEventTapLocation::HID);
+        Ok(())
+    }
 }
 
 /// A captured target window. Platform-encoded in `id` (empty = none) so the
@@ -350,13 +377,13 @@ fn macos_inject(
             if let Err(e) = enigo.text(&text) {
                 if allow_paste_fallback {
                     log::warn!("macos inject: typing failed ({e}) — Cmd+V fallback");
-                    let _ = mac_cmd_v(&mut enigo);
+                    paste_cmd_v(&mut enigo);
                 } else {
                     log::warn!("macos inject: typing failed ({e})");
                 }
             }
-        } else if let Err(e) = mac_cmd_v(&mut enigo) {
-            log::warn!("macos inject: Cmd+V failed ({e})");
+        } else {
+            paste_cmd_v(&mut enigo);
         }
         log::info!("macos inject: done on main thread");
     }) {
@@ -364,7 +391,20 @@ fn macos_inject(
     }
 }
 
-/// macOS Cmd+V chord via enigo. MUST be called on the main thread (see `macos_inject`).
+/// Paste via the native CGEvent ⌘V (reliable — carries the Command flag on the 'v' event),
+/// falling back to enigo's chord only if the native path errors. Main thread only.
+#[cfg(target_os = "macos")]
+fn paste_cmd_v(enigo: &mut enigo::Enigo) {
+    if let Err(e) = mac::cmd_v() {
+        log::warn!("macos inject: native Cmd+V failed ({e}) — enigo chord fallback");
+        if let Err(e2) = mac_cmd_v(enigo) {
+            log::warn!("macos inject: enigo Cmd+V fallback also failed ({e2})");
+        }
+    }
+}
+
+/// macOS Cmd+V chord via enigo — last-resort fallback for [`paste_cmd_v`]. MUST be called on
+/// the main thread (see `macos_inject`).
 #[cfg(target_os = "macos")]
 fn mac_cmd_v(enigo: &mut enigo::Enigo) -> anyhow::Result<()> {
     use enigo::{Direction, Key, Keyboard};

@@ -94,6 +94,10 @@ wasapi = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.9"
+# Native CGEvent paste chord — a real Cmd+V (keycode + Command flag on one event),
+# instead of enigo's racy 3-call chord that can land a bare "v". Matches core-foundation
+# 0.9 (already in the enigo dependency tree).
+core-graphics = "0.23"
 
 [features]
 default = []

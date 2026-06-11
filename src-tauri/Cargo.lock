@@ -1291,6 +1291,7 @@ dependencies = [
  "arboard",
  "base64 0.22.1",
  "core-foundation 0.9.4",
+ "core-graphics 0.23.2",
  "cpal",
  "dirs 5.0.1",
  "enigo",
