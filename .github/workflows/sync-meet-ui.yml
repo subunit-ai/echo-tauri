@@ -1,0 +1,76 @@
+name: sync-meet-ui
+
+# Keeps the vendored meet-ui/ in sync with the canonical web app
+# (subunit-ai/meet-react). meet-ui is a copy maintained via scripts-sync-meet-ui.sh and is
+# stale-prone; this opens a PR whenever the canonical src drifts, so each Echo release ships
+# the CURRENT meet UI (the Meet view renders meet-ui natively — see src/sections/MeetLive.tsx).
+#
+# ── ACTIVATION ──
+# Add a repository secret  MEET_REACT_TOKEN  = a token (fine-grained PAT or classic) with READ
+# access to subunit-ai/meet-react. Without it the job NO-OPS, so the schedule won't spam
+# failures. Opening the PR uses the default GITHUB_TOKEN.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1-5" # weekdays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard — is MEET_REACT_TOKEN configured?
+        id: guard
+        env:
+          TOKEN: ${{ secrets.MEET_REACT_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "MEET_REACT_TOKEN not set — skipping meet-ui sync (add the secret to enable)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout echo-tauri
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          path: echo-tauri
+
+      - name: Checkout meet-react (canonical source)
+        if: steps.guard.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: subunit-ai/meet-react
+          token: ${{ secrets.MEET_REACT_TOKEN }}
+          path: meet-react
+
+      - name: Sync meet-ui ← meet-react/src
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: echo-tauri
+        run: bash scripts-sync-meet-ui.sh
+
+      - name: Open a PR if meet-ui drifted
+        if: steps.guard.outputs.skip != 'true'
+        working-directory: echo-tauri
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$(git status --porcelain meet-ui)" ]; then
+            echo "meet-ui already matches meet-react — nothing to do."
+            exit 0
+          fi
+          BR="chore/sync-meet-ui-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BR"
+          git add meet-ui
+          git commit -m "chore(meet-ui): sync from canonical meet-react"
+          git push origin "$BR"
+          gh pr create --base main --head "$BR" \
+            --title "chore(meet-ui): sync from meet-react" \
+            --body "Automated drift sync: the vendored \`meet-ui/\` diverged from subunit-ai/meet-react. Merge so the next Echo release ships the current meet UI."
