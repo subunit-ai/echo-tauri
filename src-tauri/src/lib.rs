@@ -13,6 +13,7 @@ mod hotkey;
 mod inject;
 mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;
+mod meet_local; // lokales Meet-Backend (Pro): geteilte Diarisierung aus crates/meet-core
 mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting transcripts
 mod meeting_detect;
 mod models;

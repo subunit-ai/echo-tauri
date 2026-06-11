@@ -1,0 +1,28 @@
+{
+  "version": "0.1.0",
+  "comment": "Einzige Quelle der Diarisierungs-Schwellen. Jede Änderung = Versions-Bump + Golden-Tests in python/ UND rust/ müssen grün sein. Validiert an GT-Skript-Tests 922462 (98,4%) + 301304 (100%) am 2026-06-11.",
+  "match": {
+    "T": 0.26,
+    "M": 0.04,
+    "MIN_EMB_S": 0.4
+  },
+  "adapt": {
+    "AD_MARGIN": 0.06,
+    "AD_DUR": 2.0,
+    "AD_TOP": 8,
+    "AD_MIN_CAND": 3,
+    "AD_REL": 0.1
+  },
+  "split": {
+    "SW_MIN_DUR": 1.2,
+    "SW_MIN_PART": 0.25,
+    "SW_M": 0.12,
+    "SW_PAUSE": 0.15,
+    "SW_DEPTH": 3,
+    "SENTENCE_ENDS": [".", "?", "!"]
+  },
+  "mini": {
+    "MINI_FLOOR": 0.2,
+    "MINI_M": 0.15
+  }
+}

@@ -30,3 +30,6 @@ dist-ssr
 *.key
 *.minisign
 minisign*.key
+
+# GT-Fixtures mit echten Voiceprints = BIOMETRIE — NIE committen
+src-tauri/tests/fixtures/
