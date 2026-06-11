@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; media-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://*.sentry.io https://transcribe.subunit.ai wss://transcribe.subunit.ai"
+      "csp": "default-src 'self'; img-src 'self' data:; media-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src https://meet.subunit.ai; connect-src 'self' ipc: http://ipc.localhost https://*.sentry.io https://transcribe.subunit.ai wss://transcribe.subunit.ai"
     }
   },
   "bundle": {

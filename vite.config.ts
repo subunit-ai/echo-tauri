@@ -18,15 +18,15 @@ export default defineConfig(async () => ({
     },
   },
 
-  // HTML entries: main hub, the transparent orb overlay, and the embedded meet view
-  // (meet.html runs the meet.subunit.ai React app in an iframe so its CSS stays isolated
-  // from Echo's shell while the sidebar stays put).
+  // HTML entries: main hub + the transparent orb overlay. The Meeting view now loads the
+  // LIVE meet.subunit.ai app (embed mode) in an iframe — it's no longer built from a vendored
+  // copy here. (The unused meet-ui/ vendor + @meet alias + scripts-sync-meet-ui.sh are now
+  // dead and can be removed in a follow-up.)
   build: {
     rollupOptions: {
       input: {
         main: "index.html",
         overlay: "overlay.html",
-        meet: "meet.html",
       },
     },
   },
