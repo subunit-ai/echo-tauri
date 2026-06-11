@@ -356,11 +356,15 @@ export function Settings() {
 
         {tab === "transcription" && (
           <>
-            <Row name={t("settings.mode")} hint={t("settings.modeHint")}>
-              <div style={{ flex: 1, maxWidth: 360 }}>
-                <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
+            {/* Stacked full-width row (like the model manager below) — squeezed
+                next to the label the 3-segment switch wrapped and looked broken. */}
+            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+              <div className="meta">
+                <div className="name">{t("settings.mode")}</div>
+                <div className="hint">{t("settings.modeHint")}</div>
               </div>
-            </Row>
+              <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
+            </div>
             <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
               <div className="meta">
                 <div className="name">{t("settings.localModel")}</div>

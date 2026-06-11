@@ -251,14 +251,18 @@ button {
   position: relative;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 5px;
+  /* 6px padding + 6px gap MUST match .mode-ind's inset/width math and the
+     translateX step in BigModeSwitch.tsx — drift here = a misaligned pill.
+     NO backdrop-filter: inside Settings the switch sits in a .card that
+     already has one, and WebKit renders nested backdrop-filters (plus the
+     card's hover transform) as a displaced/clipped smear. The tint alone
+     reads as glass on our glass surfaces. */
+  gap: 6px;
+  padding: 6px;
   background: var(--fill-weak);
-  backdrop-filter: var(--blur-chip);
-  -webkit-backdrop-filter: var(--blur-chip);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
   max-width: 560px;
 }
 .mode-seg {
@@ -287,10 +291,16 @@ button {
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .mode-seg .seg-sub {
   font-size: 10.5px;
   opacity: 0.75;
+  /* Never wrap — uneven segment heights skew the sliding pill. */
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mode-seg.active {
   color: #07101f;
