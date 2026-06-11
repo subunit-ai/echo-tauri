@@ -32,6 +32,35 @@ interface PromptData {
   library: Draft[];
 }
 
+/** Clean stroke icons — no emojis in the console chrome (design rule). */
+function Ico({ paths, filled = false, size = 13 }: { paths: string[]; filled?: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke={filled ? "none" : "currentColor"}
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths.map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  );
+}
+
+const ICONS = {
+  mic: ["M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z", "M19 11a7 7 0 0 1-14 0", "M12 18v4"],
+  pin: ["M9 3h6l-.7 6.2 3.2 3.3H6.5l3.2-3.3L9 3z", "M12 12.5V21"],
+  x: ["M6 6l12 12", "M18 6L6 18"],
+  bolt: ["M13 2L4.5 13.5H10l-1 8.5L19.5 10H13l1-8z"],
+  lib: ["M4 19.5A2.5 2.5 0 0 1 6.5 17H20", "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"],
+  trash: ["M3 6h18", "M8 6V4h8v2", "M19 6l-1 14H6L5 6", "M10 11v6", "M14 11v6"],
+};
+
 const newDraft = (text = ""): Draft => ({
   id: crypto.randomUUID(),
   title: "",
@@ -295,13 +324,13 @@ export function PromptConsole() {
             title={t("prompt.targetHint")}
             onClick={toggleTarget}
           >
-            🎙
+            <Ico paths={ICONS.mic} />
           </button>
           <button className={`pc-icon ${pinned ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
-            ⌖
+            <Ico paths={ICONS.pin} />
           </button>
           <button className="pc-icon" title={t("prompt.close")} onClick={hide}>
-            ✕
+            <Ico paths={ICONS.x} size={12} />
           </button>
         </div>
       </header>
@@ -367,7 +396,9 @@ export function PromptConsole() {
         {coachOpen && (
           <div className="pc-coach">
             <div className="pc-coach-head">
-              <span>⚡ {t("prompt.coach.title")}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Ico paths={ICONS.bolt} filled size={12} /> {t("prompt.coach.title")}
+              </span>
               <div className="pc-score">
                 <div className="pc-score-fill" style={{ width: `${score}%` }} />
               </div>
@@ -417,7 +448,7 @@ export function PromptConsole() {
                       deleteFromLibrary(e.id);
                     }}
                   >
-                    🗑
+                    <Ico paths={ICONS.trash} size={12} />
                   </button>
                 </div>
               ))}
@@ -439,7 +470,7 @@ export function PromptConsole() {
               setLibOpen(false);
             }}
           >
-            ⚡ {score}
+            <Ico paths={ICONS.bolt} filled size={11} /> {score}
           </button>
           <button
             className={`pc-btn ${libOpen ? "on" : ""}`}
@@ -449,7 +480,7 @@ export function PromptConsole() {
               setCoachOpen(false);
             }}
           >
-            ⛁
+            <Ico paths={ICONS.lib} size={12} />
           </button>
           <button className="pc-btn" onClick={copy} disabled={!active.text}>
             {copied ? t("prompt.copied") : t("prompt.copy")}
