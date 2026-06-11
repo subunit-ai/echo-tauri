@@ -8,14 +8,27 @@
 //! Python-Pipeline des Servers — Golden-Replay-getestet). Dieses Modul ist
 //! die Geräte-Seite drumherum; die Bausteine landen schrittweise hier:
 //!   1. ✅ Naming-Kette + Check-In-Digits (meet-core, GT-validiert)
-//!   2. ⏳ wespeaker-Voiceprints via ort (dieselbe ONNX-Datei wie der Server
-//!      → numerische Parität, validierte Schwellen gelten unverändert)
-//!   3. ⏳ inkrementelle whisper.cpp-Transkription mit Token-Timestamps
+//!   2. ✅ wespeaker-Voiceprints via ort in meet-core (dieselbe ONNX-Datei wie
+//!      der Server → numerische Parität; Feature `embedder`, hier noch aus)
+//!   3. ✅ Disk-Streaming-PCM (`pcm_store`, byte-identisch zum Server-Sidecar)
+//!      + inkrementelle Fenster-Transkription (`incremental`, Port der
+//!      Server-Windowing-Semantik) + whisper.cpp-Adapter mit Token→Wort-
+//!      Timestamps (`whisper_window`, Feature `local-whisper`)
 //!   4. ⏳ Host-zentrierter Offline-Check-In (Zahl auf dem Host-Schirm,
-//!      lokales Whisper + digits-Match — kein QR nötig)
+//!      lokales Whisper + digits-Match — kein QR nötig) + UI/Command-Wiring
 
-// Bis Baustein 2 (ort-Embedder) verdrahtet ist, konsumiert noch kein
-// Laufzeitpfad die Kette — die Re-Exports sind das stabile Interface dafür.
+// dead_code: bis Baustein 4 (Command-/UI-Wiring) gibt es noch keinen
+// Laufzeit-Konsumenten — die Module sind über ihre Tests abgedeckt.
+#[allow(dead_code)]
+pub mod incremental;
+#[allow(dead_code)]
+pub mod pcm_store;
+#[cfg(feature = "local-whisper")]
+#[allow(dead_code)]
+pub mod whisper_window;
+
+// Bis das Command-/UI-Wiring (Baustein 4) die Pipeline konsumiert, sind die
+// Re-Exports das stabile Interface der Kette.
 #[allow(unused_imports)]
 pub use meet_core::{digits_from_text, name_segments, spoken_code_matches, Anchors, Segment, Word};
 
