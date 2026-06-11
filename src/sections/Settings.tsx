@@ -337,7 +337,7 @@ export function Settings() {
             </Row>
             <Row name={t("settings.language")} hint={t("settings.languageHint")}>
               <Sel
-                value={c.ui_language === "en" ? "en" : "de"}
+                value={c.ui_language}
                 onChange={(v) => {
                   setLanguage(v);
                   set("ui_language", v);
