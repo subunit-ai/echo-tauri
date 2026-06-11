@@ -1,56 +1,176 @@
-/* Echo design tokens — ported from the PyQt6 theme.py palette.
-   Brand accent (cyan) is identical across dark/light so the orb + hover states
-   stay recognisable. Dark is the default (Subunit brand). */
+/* Echo design tokens — Subunit "Liquid Glass" design system.
+   Ported 1:1 from the live meet.subunit.ai redesign (v2.0.0):
+   frosted-glass surfaces over a soft radial mesh, one cyan accent used sparingly,
+   soft downward shadows, rounded forms.
+
+   Echo ships DARK-first (Subunit brand navy); :root therefore carries the dark
+   values and [data-theme="light"] swaps to the light set. The brand cyan
+   (#06b6d4) is identical to the old theme.py palette, so the accent is unchanged.
+
+   Legacy token names from the first Echo theme (--surface / --accent / --border /
+   --text / --muted / --bg-deep …) are kept as ALIASES onto the new glass tokens so
+   every existing component keeps rendering while surfaces upgrade to real glass.
+   CSS custom properties resolve lazily, so the aliases follow the theme swap with
+   no per-theme duplication. */
 
 :root {
-  /* Brand accent */
-  --accent: #06b6d4;
-  --accent-bright: #22d3ee;
-  --accent-dim: #0891b2;
+  /* ── Ink / background / accent ── */
+  --bg: #040c1a; /* base page colour under the mesh (brand navy) */
+  --ink: #eaf1fa;
+  --ink2: #9fb2c9;
+  --ink3: #6b809b;
+  --cyan: #22d3ee; /* THE accent — glows a touch brighter on navy */
+  --cyan-d: #22d3ee;
+  --cyan-ink: #67e8f9;
 
-  /* Dark palette (default) */
-  --bg: #0f172a; /* deep navy */
-  --bg-deep: #0a1424;
-  --surface: #1e293b;
-  --surface-alt: #293548;
-  --border: #334155;
-  --border-strong: #475569;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
+  /* ── Glass fills (frosted body of cards/surfaces) ── */
+  --glass: rgba(20, 38, 64, 0.55); /* primary glass: cards, header, modals */
+  --glass2: rgba(20, 38, 64, 0.42); /* secondary glass: tiles, ghost, sidebar */
 
-  /* State colors (orb / bubble / status) */
-  --rec: #ff5c5c;
-  --ok: #50dc82;
-  --warn: #ffc450;
-  --superfast: #f5a623;
-  --violet: #aa6eff;
+  /* ── Hairlines (separate mostly by space, faintly by line) ── */
+  --line: rgba(150, 180, 220, 0.12);
+  --line2: rgba(150, 180, 220, 0.2);
+
+  /* ── Soft, downward-biased depth ── */
+  --shadow: 0 26px 64px -28px rgba(0, 0, 0, 0.66);
+  --shadow-sm: 0 12px 30px -18px rgba(0, 0, 0, 0.6);
+
+  /* ── Glass edges + inner specular rims (the "liquid" feel) ── */
+  --glass-edge: rgba(150, 185, 225, 0.16);
+  --glass-edge2: rgba(150, 185, 225, 0.18);
+  --rim: rgba(190, 215, 245, 0.16);
+  --rim-soft: rgba(190, 215, 245, 0.12);
+  --rim-cta: rgba(255, 255, 255, 0.28);
+  --rim-danger: rgba(255, 255, 255, 0.22);
+
+  /* ── Translucent fills across fields / rows / pills ── */
+  --fill-strong: rgba(18, 34, 58, 0.66); /* fields, pickers, selects */
+  --fill-focus: rgba(12, 26, 46, 0.92); /* field bg on focus */
+  --fill-mid: rgba(22, 40, 66, 0.6); /* icon-button circle */
+  --fill-soft: rgba(20, 38, 64, 0.58); /* status pill, blocks */
+  --fill-weak: rgba(20, 38, 64, 0.5); /* list rows, seg track */
+  --fill-ghost-hover: rgba(28, 50, 80, 0.7);
+  --menu-bg: rgba(13, 28, 49, 0.95); /* dropdowns / sheets */
+  --recap-bg: rgba(12, 26, 46, 0.96); /* dialog card */
+  --grad-fade: rgba(12, 26, 46, 0.5);
+  --scrim: rgba(2, 8, 18, 0.62); /* behind modals */
+
+  /* ── Page background gradient + radial mesh blobs ── */
+  --page-grad: linear-gradient(168deg, #071427 0%, #040c1a 52%, #06121f 100%) #071427;
+  --mesh1: rgba(6, 182, 212, 0.3);
+  --mesh2: rgba(124, 92, 240, 0.26);
+  --mesh3: rgba(8, 145, 178, 0.26);
+
+  /* ── Semantic status colours ── */
+  --ok: #34d399;
+  --ok-bg: rgba(52, 211, 153, 0.15);
+  --ok-line: rgba(52, 211, 153, 0.32);
+  --amber: #fbbf24;
+  --amber-bg: rgba(251, 191, 36, 0.13);
+  --amber-line: rgba(251, 191, 36, 0.34);
+  --red: #fb5d7e;
+  --violet: #a78bfa;
   --mint: #6ee6be;
+  --superfast: #f5a623; /* SUPERFAST mode — brand-specific, kept distinct */
 
-  /* Radii */
-  --r-card: 12px;
-  --r-btn: 8px;
-  --r-chip: 6px;
+  /* ── Long-form prose (transcript / explanations) ── */
+  --prose: #cdddef;
+  --prose2: #b7cbe2;
 
-  /* Typography — native Apple/SF on Apple devices, system sans elsewhere.
-     (TJ 2026-05-26: product UI uses native Apple typography, no web fonts.) */
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+  /* ── Radii (rounded forms; desktop-tuned from the 26/18/14 mobile scale) ── */
+  --r: 24px; /* large glass surfaces: cards, modals */
+  --r-sm: 16px; /* mid: tiles, blocks */
+  --r-xs: 12px; /* small: chips */
+  --r-card: 18px;
+  --r-btn: 12px;
+  --r-chip: 8px;
+
+  /* ── Typography — native Apple/SF on Apple, system sans elsewhere ── */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
     "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
 
-  --ease: cubic-bezier(0.22, 1, 0.36, 1); /* OutCubic-ish */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Bouncy spring-like */
+  /* ── Easing ── */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-glass: cubic-bezier(0.2, 0.8, 0.2, 1); /* soft tactile micro-motion */
+
+  /* ── Glass primitive (apply with: backdrop-filter: var(--blur-glass)) ── */
+  --blur-glass: blur(34px) saturate(1.7);
+  --blur-chip: blur(20px) saturate(1.5);
+
+  /* ════ Legacy aliases → new glass tokens (keep existing components alive) ════ */
+  --accent: var(--cyan);
+  --accent-text: var(--cyan); /* bright cyan reads on dark */
+  --accent-bright: var(--accent-text);
+  --accent-dim: var(--cyan-ink);
+  --surface: var(--glass);
+  --surface-alt: var(--glass2);
+  --border: var(--line);
+  --border-strong: var(--line2);
+  --text: var(--ink);
+  --muted: var(--ink2);
+  --bg-deep: rgba(6, 14, 28, 0.55); /* recessed wells (tracks, input base) */
+  --rec: var(--red);
+  --warn: var(--amber);
 
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg: #f8fafc;
-  --bg-deep: #ffffff;
-  --surface: #ffffff;
-  --surface-alt: #f1f5f9;
-  --border: #cbd5e1;
-  --border-strong: #94a3b8;
-  --text: #0f172a;
-  --muted: #64748b;
+  --bg: #eef3fa;
+  --ink: #0b1b30;
+  --ink2: #586b82;
+  --ink3: #93a1b4;
+  --cyan: #06b6d4;
+  --cyan-d: #0a93b2;
+  --cyan-ink: #0784a0;
+
+  --glass: rgba(255, 255, 255, 0.66);
+  --glass2: rgba(255, 255, 255, 0.52);
+  --line: rgba(18, 40, 72, 0.09);
+  --line2: rgba(18, 40, 72, 0.14);
+  --shadow: 0 26px 62px -30px rgba(18, 48, 92, 0.34);
+  --shadow-sm: 0 12px 30px -18px rgba(18, 48, 92, 0.28);
+
+  --glass-edge: rgba(255, 255, 255, 0.62);
+  --glass-edge2: rgba(255, 255, 255, 0.7);
+  --rim: rgba(255, 255, 255, 0.72);
+  --rim-soft: rgba(255, 255, 255, 0.5);
+  --rim-cta: rgba(255, 255, 255, 0.4);
+  --rim-danger: rgba(255, 255, 255, 0.3);
+
+  --fill-strong: rgba(255, 255, 255, 0.72);
+  --fill-focus: #fff;
+  --fill-mid: rgba(255, 255, 255, 0.62);
+  --fill-soft: rgba(255, 255, 255, 0.6);
+  --fill-weak: rgba(255, 255, 255, 0.55);
+  --fill-ghost-hover: rgba(255, 255, 255, 0.78);
+  --menu-bg: rgba(255, 255, 255, 0.92);
+  --recap-bg: rgba(255, 255, 255, 0.94);
+  --grad-fade: rgba(255, 255, 255, 0.5);
+  --scrim: rgba(18, 40, 72, 0.42);
+
+  --page-grad: linear-gradient(168deg, #f4f8fd 0%, #e9eff7 50%, #edf4f9 100%) #f4f8fd;
+  --mesh1: rgba(6, 182, 212, 0.22);
+  --mesh2: rgba(116, 108, 245, 0.16);
+  --mesh3: rgba(6, 182, 212, 0.17);
+
+  --ok: #16a34a;
+  --ok-bg: rgba(22, 163, 74, 0.12);
+  --ok-line: rgba(22, 163, 74, 0.28);
+  --amber: #d97706;
+  --amber-bg: rgba(217, 119, 6, 0.1);
+  --amber-line: rgba(217, 119, 6, 0.3);
+  --red: #e11d48;
+  --violet: #7c5cf0;
+
+  --prose: #27425f;
+  --prose2: #33506e;
+
+  /* light-specific alias overrides (darker cyan + lighter well read better here) */
+  --accent-text: var(--cyan-d);
+  --bg-deep: rgba(255, 255, 255, 0.45);
+
   color-scheme: light;
 }
