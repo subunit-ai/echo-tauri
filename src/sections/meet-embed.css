@@ -1,0 +1,27 @@
+/* Bridge for rendering the shared meet-ui inside a shadow root (see MeetLive.tsx).
+   meet.css's :root/html/body rules are rewritten to :host/.meet-root at injection time
+   (scopeMeetCss), so meet renders with its OWN theme. This file just gives the shadow host
+   its box and confines meet's position:fixed chrome to the meet pane. */
+
+:host {
+  display: block;
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  /* `transform` makes :host the containing block for meet's position:fixed chrome (the
+     lang/account chips, the connection-lost banner, modals) so they stay inside this pane
+     instead of covering Echo's whole window. */
+  transform: translateZ(0);
+}
+
+/* meet.css's body rules (flex column, padding, aurora mesh) are mapped here by scopeMeetCss;
+   just cap the height to the pane so it scrolls within instead of overflowing the window. */
+.meet-root {
+  min-height: 100%;
+}
+
+/* meet's theme toggle can't drive the shadow's theme when embedded (it flips the document's
+   <html>, not :host) — hide it; meet keeps its default look. Echo owns the app theme. */
+.themetog {
+  display: none !important;
+}

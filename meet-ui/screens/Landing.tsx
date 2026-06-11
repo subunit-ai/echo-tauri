@@ -12,7 +12,7 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: () => 
           <span className="dot"></span>Automatisches Protokoll
         </div>
         <h1>{t("Meeting aufnehmen")}</h1>
-        <p>{t("Starte ein Meeting oder tritt einem bei. Jedes Gerät nimmt seinen eigenen Ton auf — für saubere Sprecher-Trennung.")}</p>
+        <p>{t("Starte ein Meeting oder tritt einem bei — mit sauberer Sprecher-Trennung.")}</p>
       </div>
       <div className="stack">
         <button className="action" onClick={onHost}>
@@ -51,6 +51,19 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: () => 
             </svg>
           </span>
         </button>
+      </div>
+      {/* DSGVO-Trust-Zeile (kein Kasten) — überall präsent, Startseite + Setup */}
+      <div className="dsgvo-trust">
+        <span className="dsgvo-trust-ic" aria-hidden="true" />
+        <span className="dsgvo-trust-txt">100&nbsp;% DSGVO-konform</span>
+        <span className="dsgvo-help" tabIndex={0} role="button" aria-label="Was bedeutet DSGVO-konform?">
+          ?
+          <span className="dsgvo-tip" role="tooltip">
+            Alle Meetings werden ausschließlich auf unseren Servern in Deutschland verarbeitet — DSGVO-konform.
+            Keine Weitergabe an Dritte, keine US-Cloud. Audio und Transkript werden nach der Auswertung
+            automatisch gelöscht. Höchste Datensicherheit ist unser Standard.
+          </span>
+        </span>
       </div>
     </div>
   );

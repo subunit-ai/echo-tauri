@@ -18,6 +18,7 @@ export interface Setup {
   spk: number | null;
   names: string[];
   language: string;
+  scheduledAt?: string | null; // ISO-Termin, wenn "Meeting planen" statt sofort starten (TJ 2026-06-11)
 }
 
 export interface ResultData {
@@ -61,6 +62,7 @@ interface MeetingState {
   // pod voice-enrollment
   enroll: any | null; // guest enrollment state
   hostEnroll: any | null; // host roster state
+  enrolling: boolean; // pod guided auto-enrollment in progress
   podGuest: boolean; // guest is in a pod meeting (central mic)
   podRecording: boolean;
   pendingJoinCode: string; // deep-link code prefill for the Join screen
@@ -94,6 +96,8 @@ interface MeetingState {
   recapParticipants: () => Promise<any[]>;
   sendRecapTo: (recipients: { token: string; email: string; lang: string }[]) => Promise<{ ok: boolean; sent?: number; error?: string }>;
   runIntel: (action: string) => Promise<{ ok: boolean; status: number }>;
+  loadMyMeetings: () => Promise<any[]>;
+  openHistoryMeeting: (code: string, hostToken: string) => void;
 }
 
 const Ctx = createContext<MeetingState | null>(null);
@@ -130,6 +134,7 @@ export function MeetingProvider({
   const [result, setResult] = useState<ResultData | null>(null);
   const [enroll, setEnroll] = useState<any | null>(null);
   const [hostEnroll, setHostEnroll] = useState<any | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
   const [podGuest, setPodGuest] = useState(false);
   const [podRecording, setPodRecording] = useState(false);
   const [pendingJoinCode, setPendingJoinCode] = useState("");
@@ -152,12 +157,19 @@ export function MeetingProvider({
     schedTimer: 0 as any,
     timerInt: 0 as any,
     stageInt: 0 as any,
+    resultsGen: 0, // bumped on each startResults — only the newest transcript poll stays alive
     mtgStarted: 0,
     mtgNow: 0,
     mtgSyncAt: 0,
     mtgStatus: "",
     protoCache: {} as Record<string, string>,
     enrollDoneShown: false,
+    // guided pod auto-enrollment (TJ 2026-06-10)
+    enrollStream: null as MediaStream | null,
+    enrolling: false,
+    enrollTried: {} as Record<string, number>, // per-person clip attempt counter (retry up to 3×)
+    enrollClipBusy: false,
+    enrollPollT: 0 as any,
   });
 
   const go = useCallback((sc: Screen) => {
@@ -210,9 +222,9 @@ export function MeetingProvider({
 
   // ---- Recorder wiring (shared by host + guest) ----
   const startRecorder = useCallback(
-    async (joinToken: string): Promise<boolean> => {
+    async (joinToken: string, stream?: MediaStream | null): Promise<boolean> => {
       const rec = new MeetingRecorder(
-        { code: s.current.code, joinToken, micDeviceId: s.current.micDeviceId },
+        { code: s.current.code, joinToken, micDeviceId: s.current.micDeviceId, stream },
         {
           onState: (on, msg) => {
             setRecOn(on);
@@ -243,6 +255,122 @@ export function MeetingProvider({
     },
     [role, go],
   );
+
+  // ---- Pod guided auto-enrollment (TJ 2026-06-10) ----
+  // Record a short Jabra clip while each participant reads their number → POST it; the
+  // server hears the code + stores the voiceprint anchor. When everyone is done, recording
+  // auto-starts. The host clicks nothing beyond "Aufnahme starten".
+  const recordEnrollClip = useCallback(async (token: string): Promise<boolean> => {
+    if (!s.current.enrollStream || s.current.enrollClipBusy) return false;
+    s.current.enrollClipBusy = true;
+    let matched = false;
+    try {
+      // Start almost immediately (just a MediaRecorder warm-up) so the FIRST digit isn't
+      // clipped — people read the moment their number shows. Generous window captures the
+      // full code at any pace. (Fix 2026-06-11: the 1.5s lead-in ate digit 1 → 57183→7183.)
+      await new Promise((r) => setTimeout(r, 300));
+      let mime = "audio/webm;codecs=opus";
+      if (!(window.MediaRecorder && MediaRecorder.isTypeSupported(mime))) mime = "audio/webm";
+      const chunks: BlobPart[] = [];
+      let rec: MediaRecorder;
+      try {
+        rec = new MediaRecorder(s.current.enrollStream, { mimeType: mime });
+      } catch {
+        rec = new MediaRecorder(s.current.enrollStream);
+      }
+      rec.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size) chunks.push(ev.data);
+      };
+      const stopped = new Promise<void>((res) => {
+        rec.onstop = () => res();
+      });
+      rec.start();
+      await new Promise((r) => setTimeout(r, 7000)); // ~7s: full 5-digit code at any pace
+      try {
+        rec.stop();
+      } catch {
+        /* ignore */
+      }
+      await stopped;
+      const res = await api.enrollClip(s.current.code, s.current.hostToken, token, new Blob(chunks, { type: mime }));
+      matched = !!(res && res.matched);
+    } catch {
+      /* ignore */
+    }
+    s.current.enrollClipBusy = false;
+    return matched;
+  }, []);
+
+  const hostBeginRecording = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    s.current.enrolling = false;
+    setEnrolling(false);
+    if (s.current.enrollPollT) {
+      clearTimeout(s.current.enrollPollT);
+      s.current.enrollPollT = 0;
+    }
+    setHostEnroll(null);
+    // Hand the already-open enroll stream to the recorder — ONE shared Jabra stream for
+    // check-in + recording (identical to the tested flow; the mic is never closed+reopened).
+    const es = s.current.enrollStream;
+    s.current.enrollStream = null; // ownership moves to the recorder
+    await api.startMeeting(s.current.code, s.current.hostToken);
+    const ok = await startRecorder(s.current.joinToken, es);
+    if (!ok) {
+      try {
+        es?.getTracks().forEach((t) => t.stop());
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error: "Mikro-Zugriff nötig — bitte erlauben." };
+    }
+    return { ok: true };
+  }, [startRecorder]);
+
+  const enrollClipLoop = useCallback(async () => {
+    if (!s.current.enrolling) return;
+    const st = await api.enrollState(s.current.code, s.current.hostToken);
+    setHostEnroll(st && st.active ? st : null);
+    if (st && st.finished) {
+      hostBeginRecording();
+      return;
+    }
+    if (st) {
+      // capture the clip for whoever is active now, once each. On a miss the person stays
+      // active → the "✓ erkannt" fallback button still works.
+      // Auto-clip the active person. RETRY up to 3× — a miss (e.g. a clipped digit) leaves
+      // them active, so we try again instead of getting stuck (Fix 2026-06-11). On a match the
+      // server marks them done → next person. After 3 misses the host's "✓ erkannt" takes over.
+      const act = (st.roster || []).find((p: any) => p.status === "active");
+      if (act) {
+        const tries = s.current.enrollTried[act.token] || 0;
+        if (tries < 3) {
+          s.current.enrollTried[act.token] = tries + 1;
+          await recordEnrollClip(act.token);
+        }
+      }
+    }
+    if (s.current.enrolling) s.current.enrollPollT = setTimeout(enrollClipLoop, 1500);
+  }, [recordEnrollClip, hostBeginRecording]);
+
+  const startGuidedEnroll = useCallback(async (): Promise<boolean> => {
+    if (s.current.enrolling) return true;
+    try {
+      // same Jabra mic as the recording → consistent voiceprints (TJ 2026-06-10)
+      const audio: MediaTrackConstraints = Object.assign(
+        s.current.micDeviceId ? { deviceId: { exact: s.current.micDeviceId } } : {},
+        { echoCancellation: true, noiseSuppression: true },
+      );
+      s.current.enrollStream = await navigator.mediaDevices.getUserMedia({ audio });
+    } catch {
+      return false;
+    }
+    s.current.enrolling = true;
+    s.current.enrollTried = {};
+    setEnrolling(true);
+    await api.enrollStart(s.current.code, s.current.hostToken);
+    enrollClipLoop();
+    return true;
+  }, [enrollClipLoop]);
 
   // ---- Timer ----
   const stopTimer = useCallback(() => {
@@ -329,6 +457,7 @@ export function MeetingProvider({
         expected_speakers: single ? setup.spk || 2 : null,
         speaker_names: single ? setup.names : [],
         language: setup.language || "auto",
+        scheduled_at: setup.scheduledAt || null,
       });
       if (!cr.ok) {
         return { ok: false, error: (cr.data.detail && (cr.data.detail.message || cr.data.detail)) || "Meeting konnte nicht erstellt werden (Account-Zugang?)." };
@@ -370,11 +499,16 @@ export function MeetingProvider({
       clearTimeout(s.current.schedTimer);
       s.current.schedTimer = 0;
     }
+    // Pod mode: guided voice-enrollment first, THEN recording (host clicks nothing more).
+    if (s.current.deviceMode === "pod") {
+      const ok = await startGuidedEnroll();
+      return ok ? { ok: true } : { ok: false, error: "Mikro-Zugriff nötig — bitte erlauben." };
+    }
     await api.startMeeting(s.current.code, s.current.hostToken);
     const ok = await startRecorder(s.current.joinToken);
     if (!ok) return { ok: false, error: "Mikro-Zugriff nötig — bitte erlauben." };
     return { ok: true };
-  }, [startRecorder]);
+  }, [startRecorder, startGuidedEnroll]);
 
   // Scheduled start: store the timer id so hostStartRec/reschedule can clear it (fix #7).
   const scheduleStart = useCallback((at: number) => {
@@ -398,6 +532,7 @@ export function MeetingProvider({
 
   const startResults = useCallback(
     (codeArg: string, token: string) => {
+      const gen = ++s.current.resultsGen; // invalidate any previous/parallel transcript poll
       const STAGES = [
         "🎧 Audio wird transkribiert…",
         "🧠 Gespräch wird analysiert…",
@@ -413,7 +548,9 @@ export function MeetingProvider({
         setStageText(STAGES[i]);
       }, 2600);
       const poll = async () => {
+        if (gen !== s.current.resultsGen) return; // a newer startResults superseded this poll
         const d = await api.transcript(codeArg, token);
+        if (gen !== s.current.resultsGen) return; // superseded during the await → stop (kein 5s-Re-Render-Loop)
         if (d && d.ready) {
           if (s.current.stageInt) {
             clearInterval(s.current.stageInt);
@@ -435,7 +572,19 @@ export function MeetingProvider({
           if (!(Array.isArray(d.explain_json) && d.explain_json.length)) pollExplain(codeArg, token, 20);
           return;
         }
-        setTimeout(poll, 5000);
+        if (d) {
+          // Processing transparency (vanilla _showProcEta): queue position OR rough remaining time.
+          const txt =
+            d.post_status === "queued" && (d.queue_ahead || 0) > 0
+              ? d.queue_ahead === 1
+                ? "1 Meeting ist noch vor deinem dran…"
+                : d.queue_ahead + " Meetings sind noch vor deinem dran…"
+              : (d.eta_s || 0) > 0
+                ? "Wird ausgewertet — ca. " + Math.max(1, Math.ceil(d.eta_s / 60)) + " Min…"
+                : null;
+          if (txt) setEndSub(txt);
+        }
+        if (gen === s.current.resultsGen) setTimeout(poll, 5000);
       };
       poll();
     },
@@ -459,8 +608,17 @@ export function MeetingProvider({
   const clearTimers = useCallback(() => {
     if (s.current.pollT) clearTimeout(s.current.pollT);
     if (s.current.endWatch) clearTimeout(s.current.endWatch);
+    if (s.current.enrollPollT) clearTimeout(s.current.enrollPollT);
     s.current.pollT = 0;
     s.current.endWatch = 0;
+    s.current.enrollPollT = 0;
+    s.current.enrolling = false;
+    try {
+      s.current.enrollStream?.getTracks().forEach((t) => t.stop());
+    } catch {
+      /* ignore */
+    }
+    s.current.enrollStream = null;
   }, []);
 
   const hostEnd = useCallback(async () => {
@@ -622,9 +780,22 @@ export function MeetingProvider({
   const leave = useCallback(() => {
     s.current.recorder?.stop();
     clearTimers();
+    setEnrolling(false);
+    // Persistierte Session löschen — sonst lädt der Reload das verlassene Meeting wieder
+    // (Bug 2026-06-11: Reload-Loop + abgelaufener JWT).
+    try {
+      sessionStorage.removeItem("meetS");
+    } catch {
+      /* ignore */
+    }
+    s.current.hostToken = "";
+    s.current.joinToken = "";
+    s.current.recorder = null;
+    setResult(null);
     setRole(null);
+    setCodeBoth("");
     go("landing");
-  }, [clearTimers, go]);
+  }, [clearTimers, go, setCodeBoth]);
 
   const hostEntry = useCallback(() => {
     if (identity?.jwt) go("hostlogin");
@@ -729,6 +900,38 @@ export function MeetingProvider({
     [identity],
   );
 
+  // ---- Account history (Verlauf) — the caller's own meetings, re-openable ----
+  const loadMyMeetings = useCallback(async (): Promise<any[]> => {
+    if (!identity?.jwt) return [];
+    return api.myMeetings(identity.jwt);
+  }, [identity]);
+
+  const openHistoryMeeting = useCallback(
+    async (c: string, hostToken: string) => {
+      clearTimers();
+      s.current.hostToken = hostToken;
+      s.current.joinToken = "";
+      s.current.protoCache = {};
+      setCodeBoth(c);
+      setRole("host");
+      // Geplantes/laufendes Meeting (noch kein Protokoll) → Host-Room zum Starten;
+      // beendetes → Protokoll/Result. Verhindert endloses "wird ausgewertet", wenn man
+      // ein terminiertes Meeting aus dem Verlauf zum Start wieder öffnet (TJ 2026-06-11).
+      const info = await api.meetingInfo(c);
+      if (info && info.status !== "ended" && info.status !== "purged") {
+        resumeHost(info, { code: c, hostToken });
+        return;
+      }
+      setResult(null);
+      setEndTitle("Meeting-Protokoll");
+      setEndSub("Lade Protokoll…");
+      setEndSpin(true);
+      go("ended");
+      startResults(c, hostToken);
+    },
+    [clearTimers, setCodeBoth, go, startResults, resumeHost],
+  );
+
   const canRecap = role === "host";
   const canIntel = !!(identity?.jwt && decodeJwt(identity.jwt).op === true);
 
@@ -737,11 +940,12 @@ export function MeetingProvider({
     recOn, recMsg, connLost, muted, timer,
     guestStartVisible, guestHint, guestRecText, waitSub,
     endTitle, endSub, endSpin, stageText, result, canRecap, canIntel,
-    enroll, hostEnroll, podGuest, podRecording, pendingJoinCode, resumeRecording, peekHost, singleHint,
+    enroll, hostEnroll, enrolling, podGuest, podRecording, pendingJoinCode, resumeRecording, peekHost, singleHint,
     setIdentity, go, goJoin, openRecapView, hostEntry, createMeeting, approve, hostStartRec, scheduleStart, hostEnd,
     peekMeeting, guestJoin, guestStartRec, toggleMute, leave, resumeHost, resumeGuest,
     hostEnrollStart, hostEnrollMark, setMicDevice,
     translateProtocol, recapParticipants, sendRecapTo, runIntel,
+    loadMyMeetings, openHistoryMeeting,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
