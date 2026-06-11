@@ -34,7 +34,10 @@ jobs:
             # Trade-off until re-enabled: macOS re-prompts for Mic + Accessibility once per
             # update (ad-hoc identity changes each build). Gatekeeper still needs
             # right-click → Open on first launch. Updater bundle stays minisign-signed.
-            args: "--target aarch64-apple-darwin --features local-whisper"
+            # local-meet (= local-whisper + wespeaker/ort): macOS-first Rollout des
+            # lokalen Meet-Backends — ort zieht onnxruntime-Binaries (macOS arm64
+            # offiziell unterstützt). Andere Plattformen folgen nach CI-Verifikation.
+            args: "--target aarch64-apple-darwin --features local-meet"
 
     runs-on: ${{ matrix.platform }}
     steps:
