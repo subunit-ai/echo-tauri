@@ -318,5 +318,33 @@
     "sourceCode": "Quellcode / Releases",
     "github": "GitHub →",
     "autoSaveNote": "Änderungen werden automatisch gespeichert"
+  },
+  "meetLocal": {
+    "cardTitle": "Lokales Meeting",
+    "cardDesc": "Aufnahme, Transkript & Sprecher-Trennung komplett auf diesem Gerät — dein Audio verlässt den Rechner nie. Für Pod-Meetings mit einem Mikrofon.",
+    "open": "Öffnen",
+    "title": "Lokales Meeting",
+    "pitch": "Die komplette Meeting-Verarbeitung läuft auf diesem Gerät: Whisper-Transkription, Stimm-Check-In und Sprecher-Trennung — auch ganz ohne Internet. Audio verlässt den Rechner nie.",
+    "gateBuilt": "App-Version mit lokalem Meet-Backend",
+    "gatePlan": "Pro-Abo aktiv",
+    "gateHw": "Gerät stark genug (Apple Silicon oder ≥ 16 GB RAM)",
+    "modelHint": "Beim ersten Start wird das Stimm-Modell (~26 MB) geladen — danach läuft alles offline.",
+    "start": "🎙 Lokales Meeting starten",
+    "starting": "Starte… (lädt ggf. Modelle)",
+    "phaseRecording": "Aufnahme läuft",
+    "phaseProcessing": "Verarbeitung…",
+    "phaseDone": "Fertig",
+    "phaseError": "Fehler",
+    "segments": "{{count}} Abschnitte transkribiert",
+    "participants": "Teilnehmer & Stimm-Check-In",
+    "participantsEmpty": "Noch keine Teilnehmer — Namen anlegen, dann liest jede Person ihre Zahl vor. So lernt Echo die Stimmen kennen.",
+    "namePlaceholder": "Name (z. B. Tom)",
+    "addParticipant": "Hinzufügen",
+    "checkinStart": "Check-In",
+    "checkinPrompt": "{{name}}, bitte diese Zahl laut vorlesen:",
+    "checkinHint": "Einfach in normaler Lautstärke Richtung Mikrofon sprechen — ca. 8 Sekunden.",
+    "checkinFailed": "Zahl von {{name}} nicht erkannt — einfach nochmal auf Check-In klicken.",
+    "stop": "⏹ Meeting beenden",
+    "processingHint": "Restliche Aufnahme wird transkribiert und den Sprechern zugeordnet. Das kann je nach Länge ein paar Minuten dauern — alles lokal."
   }
 }

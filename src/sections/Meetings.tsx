@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyText, processMeeting } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
+import { MeetLocal } from "./MeetLocal";
 
 // Re-process styles available on a stored meeting transcript (server /v1/cleanup).
 // `labelKey` resolves through i18n at render time.
@@ -17,6 +18,7 @@ const ACTIONS: { style: string; labelKey: string }[] = [
 export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
   const { t } = useTranslation();
   const { config, reload } = useConfig();
+  const [localView, setLocalView] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${i}:${style}`
   const [result, setResult] = useState<Record<number, { label: string; text: string }>>({});
@@ -33,6 +35,9 @@ export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
   }, [reload]);
 
   if (!config) return null;
+  if (localView) {
+    return <MeetLocal onClose={() => setLocalView(false)} />;
+  }
 
   const list = config.meetings;
   const thresholdMin = Math.round(config.long_form_threshold_seconds / 60);
@@ -81,6 +86,34 @@ export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
           onClick={onStartMeeting}
         >
           {t("meetings.start")}
+        </button>
+      </div>
+
+      {/* Lokales Meeting (Pro): komplette Verarbeitung auf diesem Gerät. */}
+      <div
+        className="card"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
+            {t("meetLocal.cardTitle")} <span className="tier-badge">Pro</span>
+          </div>
+          <div className="section-sub" style={{ margin: "5px 0 0", maxWidth: 520 }}>
+            {t("meetLocal.cardDesc")}
+          </div>
+        </div>
+        <button
+          className="sub-tab"
+          style={{ padding: "10px 18px", fontSize: 14, whiteSpace: "nowrap" }}
+          onClick={() => setLocalView(true)}
+        >
+          {t("meetLocal.open")}
         </button>
       </div>
 

@@ -241,3 +241,45 @@ export function patchForUiMode(m: UiMode): Partial<Config> {
       return { mode: "subunit", cloud_superfast: true };
   }
 }
+
+// ---- Lokales Meet-Backend (Pro, Cargo-Feature local-meet) ----
+
+export interface MeetLocalAvailability {
+  built: boolean;
+  plan_ok: boolean;
+  hw_ok: boolean;
+  speaker_model: boolean;
+  active: boolean;
+}
+
+export interface MeetLocalParticipant {
+  name: string;
+  code: string;
+  enrolled: boolean;
+}
+
+export interface MeetLocalSnapshot {
+  phase: "recording" | "processing" | "done" | "error";
+  message?: string;
+  meeting_id: string;
+  duration_s: number;
+  participants: MeetLocalParticipant[];
+  checkin_active: string | null;
+  checkin_result: string | null;
+  segments_done: number;
+  level: number;
+}
+
+export const meetLocalAvailable = () => invoke<MeetLocalAvailability>("meet_local_available");
+export const meetLocalStart = () => invoke<void>("meet_local_start");
+export const meetLocalAddParticipant = (name: string) =>
+  invoke<string>("meet_local_add_participant", { name });
+export const meetLocalCheckin = (name: string) => invoke<void>("meet_local_checkin", { name });
+export const meetLocalStatus = () => invoke<MeetLocalSnapshot | null>("meet_local_status");
+export const meetLocalStop = () => invoke<void>("meet_local_stop");
+export const meetLocalDismiss = () => invoke<void>("meet_local_dismiss");
+export const meetLocalList = () => invoke<Record<string, unknown>[]>("meet_local_list");
+export const meetLocalGet = (id: string) =>
+  invoke<{ meeting: Record<string, unknown>; transcript: string }>("meet_local_get", { id });
+export const onMeetLocal = (cb: (s: MeetLocalSnapshot) => void): Promise<UnlistenFn> =>
+  listen<MeetLocalSnapshot>("echo://meet-local", (e) => cb(e.payload));

@@ -318,5 +318,33 @@
     "sourceCode": "Source / Releases",
     "github": "GitHub →",
     "autoSaveNote": "Changes are saved automatically"
+  },
+  "meetLocal": {
+    "cardTitle": "Local meeting",
+    "cardDesc": "Recording, transcript & speaker separation entirely on this device — your audio never leaves the machine. For pod meetings with one microphone.",
+    "open": "Open",
+    "title": "Local meeting",
+    "pitch": "The entire meeting pipeline runs on this device: Whisper transcription, voice check-in and speaker separation — even fully offline. Audio never leaves the machine.",
+    "gateBuilt": "App build includes the local meet backend",
+    "gatePlan": "Pro plan active",
+    "gateHw": "Device is powerful enough (Apple Silicon or ≥ 16 GB RAM)",
+    "modelHint": "On first start the voice model (~26 MB) is downloaded — everything runs offline afterwards.",
+    "start": "🎙 Start local meeting",
+    "starting": "Starting… (may download models)",
+    "phaseRecording": "Recording",
+    "phaseProcessing": "Processing…",
+    "phaseDone": "Done",
+    "phaseError": "Error",
+    "segments": "{{count}} sections transcribed",
+    "participants": "Participants & voice check-in",
+    "participantsEmpty": "No participants yet — add names, then each person reads their number out loud so Echo learns the voices.",
+    "namePlaceholder": "Name (e.g. Tom)",
+    "addParticipant": "Add",
+    "checkinStart": "Check-in",
+    "checkinPrompt": "{{name}}, please read this number out loud:",
+    "checkinHint": "Just speak towards the microphone at normal volume — about 8 seconds.",
+    "checkinFailed": "Couldn't recognize {{name}}'s number — just click check-in again.",
+    "stop": "⏹ End meeting",
+    "processingHint": "The remaining audio is being transcribed and assigned to speakers. Depending on length this can take a few minutes — all locally."
   }
 }
