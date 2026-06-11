@@ -164,17 +164,22 @@ button {
   grid-area: content;
   overflow-y: auto;
   padding: 26px 30px;
-  /* Same glass tint as the sidebar so the whole app reads as one cohesive surface — the
-     floating cards (more opaque + frosted) sit on top, and the aurora still shows through. */
+  /* EXACTLY the sidebar's treatment — glass tint + backdrop blur — so the inner section is
+     the same soft frosted gradient as the top bar and sidebar (the blur is what turns the
+     page gradient/aurora behind it into that smooth glassy gradient). The Liquid-Glass cards
+     then float on top. */
   background: var(--glass2);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
 }
-/* Meeting view fills the content pane edge-to-edge. Same glass tint as the rest so the Meet
-   section blends into the unified surface. */
+/* Meeting view fills the content pane edge-to-edge — same frosted glass as the rest. */
 .content-meet {
   padding: 0;
   overflow: hidden;
   display: flex;
   background: var(--glass2);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
 }
 
 .page-animate {
