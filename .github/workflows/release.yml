@@ -165,8 +165,39 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Echo ${{ github.ref_name }}"
-          # Publish directly (no draft) so installers are visible on the Releases
-          # page; non-prerelease so the updater's /releases/latest resolves.
-          releaseDraft: false
+          # Build into a DRAFT and publish atomically in the `publish` job below,
+          # only after ALL platforms uploaded. Publishing per-job (the old
+          # releaseDraft:false) made /releases/latest — the updater endpoint —
+          # serve a half-built latest.json while the run was in flight (or stuck
+          # after a macOS flake), so Macs saw "None of the fallback platforms
+          # ['darwin-aarch64-app','darwin-aarch64'] were found".
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish:
+    # Atomic release: flip the draft public only when every platform's installers
+    # AND its latest.json entries are complete. If any build job fails, the draft
+    # stays invisible and the updater keeps serving the previous full release;
+    # `gh run rerun --failed` re-runs the failed build and then this job.
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release (draft → public, mark latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          repo="${{ github.repository }}"
+          # Drafts aren't resolvable via /releases/tags/<tag> — find by listing.
+          id=$(gh api "repos/$repo/releases?per_page=20" \
+            --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)
+          if [ -z "$id" ]; then
+            echo "::error::no release found for $tag"; exit 1
+          fi
+          gh api -X PATCH "repos/$repo/releases/$id" \
+            -F draft=false -f make_latest=true > /dev/null
+          echo "published $tag (release $id)"
