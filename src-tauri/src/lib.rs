@@ -10,6 +10,7 @@ mod diarize;
 mod events;
 mod hardware;
 mod hotkey;
+mod http;
 mod inject;
 mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;

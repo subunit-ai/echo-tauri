@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use super::{vocab, Segment, TranscriptResult};
+use super::{resample_to_16k, vocab, Segment, TranscriptResult};
 use crate::config::Config;
 
 // Loading a model costs GBs of RAM/VRAM — keep one context, keyed by model name.
@@ -104,25 +104,6 @@ pub fn run(
         quality_mode: "local".to_string(),
         segments,
     })
-}
-
-/// Linear-resample mono f32 to 16 kHz (whisper.cpp requires 16 kHz).
-fn resample_to_16k(input: &[f32], sr: u32) -> Vec<f32> {
-    if sr == 16_000 || input.is_empty() {
-        return input.to_vec();
-    }
-    let ratio = 16_000f64 / sr as f64;
-    let out_len = ((input.len() as f64) * ratio) as usize;
-    let mut out = Vec::with_capacity(out_len);
-    for i in 0..out_len {
-        let src = i as f64 / ratio;
-        let idx = src.floor() as usize;
-        let frac = (src - idx as f64) as f32;
-        let a = input.get(idx).copied().unwrap_or(0.0);
-        let b = input.get(idx + 1).copied().unwrap_or(a);
-        out.push(a + (b - a) * frac);
-    }
-    out
 }
 
 #[cfg(test)]

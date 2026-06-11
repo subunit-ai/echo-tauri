@@ -31,20 +31,32 @@ fn cleanup(cfg: &Config, text: &str, style: &str) -> anyhow::Result<String> {
     // Match the FULL "/v1/transcribe" segment — a bare "/transcribe" also occurs
     // in the host (transcribe.subunit.ai) and str::replace would corrupt it.
     let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/cleanup");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()?;
-    let mut req = client.post(&url).json(&serde_json::json!({
-        "text": text,
-        "language": cfg.language,
-        "style": style,
-    }));
-    if !cfg.subunit_access_token.is_empty() {
-        req = req.bearer_auth(&cfg.subunit_access_token);
-    } else if !cfg.subunit_api_key.is_empty() {
-        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
-    }
-    let resp = req.send()?;
+    // Shared pooled client — reuses the connection the transcribe call just
+    // used, so cleanup adds no extra TLS handshake before the paste.
+    let build_request = || {
+        let mut req = crate::http::client()
+            .post(&url)
+            .timeout(Duration::from_secs(30))
+            .json(&serde_json::json!({
+                "text": text,
+                "language": cfg.language,
+                "style": style,
+            }));
+        if !cfg.subunit_access_token.is_empty() {
+            req = req.bearer_auth(&cfg.subunit_access_token);
+        } else if !cfg.subunit_api_key.is_empty() {
+            req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+        }
+        req
+    };
+    let resp = match build_request().send() {
+        Ok(r) => r,
+        Err(e) if crate::http::is_transient(&e) => {
+            log::warn!("cleanup: transient transport error, retrying once: {e}");
+            build_request().send()?
+        }
+        Err(e) => return Err(e.into()),
+    };
     if !resp.status().is_success() {
         anyhow::bail!("cleanup {}", resp.status());
     }

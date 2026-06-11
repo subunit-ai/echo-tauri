@@ -200,11 +200,9 @@ pub fn ensure_fresh(app: &AppHandle) {
 }
 
 fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .build()?;
-    let resp = client
+    let resp = crate::http::client()
         .post(format!("{AUTH_BASE}/refresh"))
+        .timeout(Duration::from_secs(20))
         .json(&serde_json::json!({ "refresh_token": refresh_token }))
         .send()?;
     if !resp.status().is_success() {
@@ -270,11 +268,9 @@ pub fn refresh_plan(app: &AppHandle) {
 }
 
 fn fetch_active_tier(token: &str) -> anyhow::Result<String> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .build()?;
-    let resp = client
+    let resp = crate::http::client()
         .get(format!("{AUTH_BASE}/me/workspace/active"))
+        .timeout(Duration::from_secs(15))
         .bearer_auth(token)
         .send()?;
     if !resp.status().is_success() {

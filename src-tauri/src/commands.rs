@@ -97,6 +97,23 @@ pub fn do_start(app: &AppHandle) {
         return;
     }
     emit_state(app, EngineState::Recording, None);
+
+    // Pre-warm the cloud path while the user is still speaking: refresh the
+    // access token if it's about to expire and open the pooled TLS connection,
+    // so neither round-trip sits between "stop" and the transcript.
+    {
+        let (mode, endpoint) = {
+            let c = state.config.lock();
+            (c.mode.clone(), c.subunit_endpoint.clone())
+        };
+        if mode == "subunit" {
+            let app2 = app.clone();
+            std::thread::spawn(move || {
+                crate::auth::ensure_fresh(&app2);
+                crate::http::prewarm(&endpoint);
+            });
+        }
+    }
 }
 
 pub fn do_cancel(app: &AppHandle) {
