@@ -109,6 +109,25 @@ fn split_mixed_segment() {
 }
 
 #[test]
+fn degenerate_anchors_never_panic() {
+    // Codex P1: Desktop-Pfad — 0/1 Anker und NaN-Embeddings dürfen nie panicken.
+    let segs = vec![seg(0.0, 3.0, "hallo", None)];
+    let table = HashMap::from([(key(0.0, 3.0), mix(0.9, 0.1))]);
+
+    let r0 = name_segments(&segs, &vec![], table_embedder(table.clone()), None);
+    assert_eq!(r0.names, vec![None]);
+
+    let one: Anchors = vec![("Solo".to_string(), unit(0))];
+    let r1 = name_segments(&segs, &one, table_embedder(table), None);
+    assert_eq!(r1.names[0].as_deref(), Some("Solo"));
+    assert_eq!(r1.stats.named, 1);
+
+    // NaN-Embedding → rank sortiert ohne Panik (Ergebnis egal, nur kein Crash)
+    let nan_table = HashMap::from([(key(0.0, 3.0), vec![f32::NAN; D])]);
+    let _ = name_segments(&segs, &anchors(), table_embedder(nan_table), None);
+}
+
+#[test]
 fn mini_rescue_and_ffill() {
     // 0.3s-Einwurf: zu kurz für normales Embedding, Mini-Embed rettet ihn;
     // ein weiteres embedloses Segment ohne Mini-Treffer erbt per ffill.

@@ -47,6 +47,8 @@ fn mel_banks() -> Vec<Vec<f32>> {
 }
 
 /// Log-Mel-Fbank ohne CMN. Gibt `[T][80]` zurück (leer wenn < 1 Frame).
+/// Bewusste Abweichung von torchaudio (Codex P2): < 400 Samples asserten dort,
+/// hier leer zurück — `Embedder` mappt das defensiv auf „kein Embedding".
 pub fn fbank(samples: &[f32]) -> Vec<Vec<f32>> {
     if samples.len() < FRAME_LEN {
         return Vec::new();

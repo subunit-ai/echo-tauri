@@ -57,14 +57,23 @@ pub struct NameResult {
 pub type Anchors = Vec<(String, Vec<f32>)>;
 
 fn cos(a: &[f32], b: &[f32]) -> f64 {
-    // Eingaben sind L2-normiert (wie np.dot in der Referenz, f32-Akkumulation)
+    // Eingaben sind L2-normiert (wie np.dot in der Referenz, f32-Akkumulation).
+    // Längen-Mismatch = kaputter Aufrufer — in Tests laut, in Prod kein Panic
+    // (zip kürzt; np.dot würde werfen — Codex P2).
+    debug_assert_eq!(a.len(), b.len(), "cos: Vektor-Längen-Mismatch");
     a.iter().zip(b).map(|(x, y)| x * y).sum::<f32>() as f64
 }
 
 /// `[(cos, name)]` absteigend — Tie-Break wie Pythons Tupel-Sort (Name absteigend).
+/// NaN-Scores (kaputte Embeddings) panicken nicht (Codex P1), sie sortieren
+/// als „gleich" — wie Pythons exception-freier Tupel-Sort bleibt das Ergebnis
+/// dann Implementierungsdetail.
 fn rank<'a>(e: &[f32], anchors: &'a Anchors) -> Vec<(f64, &'a str)> {
+    use std::cmp::Ordering;
     let mut v: Vec<(f64, &str)> = anchors.iter().map(|(n, a)| (cos(e, a), n.as_str())).collect();
-    v.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap().then_with(|| y.1.cmp(x.1)));
+    v.sort_by(|x, y| {
+        y.0.partial_cmp(&x.0).unwrap_or(Ordering::Equal).then_with(|| y.1.cmp(x.1))
+    });
     v
 }
 
@@ -128,6 +137,23 @@ pub fn name_segments<F>(segs: &[Segment], anchors: &Anchors, embed: F, params_ov
 where
     F: Fn(f64, f64, f64) -> Option<Vec<f32>>,
 {
+    // Degenerierte Anker-Fälle (Codex P1 — die Desktop-App darf nie panicken;
+    // das Python-Original setzt ≥2 Anker voraus): ohne Anker ist nichts
+    // benennbar, mit genau EINEM Anker ist jedes Segment trivial dieser
+    // Sprecher (die Margin-Logik braucht einen Zweitplatzierten).
+    if anchors.len() < 2 {
+        let names: Vec<Option<String>> = match anchors.first() {
+            Some((n, _)) => vec![Some(n.clone()); segs.len()],
+            None => vec![None; segs.len()],
+        };
+        let named = names.iter().filter(|x| x.is_some()).count();
+        return NameResult {
+            segments: segs.to_vec(),
+            names,
+            stats: NameStats { pass1_direct: 0, pass2_direct: 0, named, adapted: false, splits: 0 },
+        };
+    }
+
     let p = params_override.unwrap_or_else(|| params());
     let (t, m, min_emb) = (p.matching.t, p.matching.m, p.matching.min_emb_s);
     let ad = &p.adapt;
