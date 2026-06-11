@@ -15,10 +15,12 @@ const ACTIONS: { style: string; labelKey: string }[] = [
   { style: "recap_email", labelKey: "meetings.actionRecapEmail" },
 ];
 
-export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
+export function Meetings() {
   const { t } = useTranslation();
   const { config, reload } = useConfig();
-  const [localView, setLocalView] = useState(false);
+  // Zwei Segmente (TJ 2026-06-12): "Lokales Meeting" (Pro, Default — startet direkt in den
+  // Flow) und "Aufnahmen" (Archiv + Nachverarbeitung). Live-Meeting wohnt in der Sidebar.
+  const [tab, setTab] = useState<"local" | "recordings">("local");
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // `${i}:${style}`
   const [result, setResult] = useState<Record<number, { label: string; text: string }>>({});
@@ -35,9 +37,6 @@ export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
   }, [reload]);
 
   if (!config) return null;
-  if (localView) {
-    return <MeetLocal onClose={() => setLocalView(false)} />;
-  }
 
   const list = config.meetings;
   const thresholdMin = Math.round(config.long_form_threshold_seconds / 60);
@@ -61,68 +60,29 @@ export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
     <div>
       <h1 className="section-title">{t("meetings.title")}</h1>
 
-      {/* Live meeting launcher → opens the native meet view (full window). */}
-      <div
-        className="card"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
-            {t("meetings.liveTitle")}
-          </div>
-          <div className="section-sub" style={{ margin: "5px 0 0", maxWidth: 520 }}>
-            {t("meetings.liveDesc")}
-          </div>
-        </div>
+      {/* Segment-Umschalter: Lokales Meeting (Pro) | Aufnahmen */}
+      <div className="sub-tabs">
         <button
-          className="sub-tab onb-primary"
-          style={{ padding: "10px 18px", fontSize: 14, whiteSpace: "nowrap" }}
-          onClick={onStartMeeting}
+          className={`sub-tab ${tab === "local" ? "active" : ""}`}
+          onClick={() => setTab("local")}
         >
-          {t("meetings.start")}
+          {t("meetings.tabLocal")} <span className="tier-badge">Pro</span>
+        </button>
+        <button
+          className={`sub-tab ${tab === "recordings" ? "active" : ""}`}
+          onClick={() => setTab("recordings")}
+        >
+          {t("meetings.tabRecordings")}
         </button>
       </div>
 
-      {/* Lokales Meeting (Pro): komplette Verarbeitung auf diesem Gerät. */}
-      <div
-        className="card"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          marginBottom: 24,
-        }}
-      >
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
-            {t("meetLocal.cardTitle")} <span className="tier-badge">Pro</span>
-          </div>
-          <div className="section-sub" style={{ margin: "5px 0 0", maxWidth: 520 }}>
-            {t("meetLocal.cardDesc")}
-          </div>
-        </div>
-        <button
-          className="sub-tab"
-          style={{ padding: "10px 18px", fontSize: 14, whiteSpace: "nowrap" }}
-          onClick={() => setLocalView(true)}
-        >
-          {t("meetLocal.open")}
-        </button>
-      </div>
+      {tab === "local" && <MeetLocal embedded onClose={() => setTab("recordings")} />}
 
-      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>
-        {t("meetings.recordingsHeading")}
-      </h2>
-      <p className="section-sub">{t("meetings.subtitle", { minutes: thresholdMin })}</p>
+      {tab === "recordings" && (
+        <>
+          <p className="section-sub">{t("meetings.subtitle", { minutes: thresholdMin })}</p>
 
-      {list.length === 0 ? (
+          {list.length === 0 ? (
         <div className="empty">{t("meetings.empty")}</div>
       ) : (
         list.map((m, i) => {
@@ -231,6 +191,8 @@ export function Meetings({ onStartMeeting }: { onStartMeeting?: () => void }) {
             </div>
           );
         })
+      )}
+        </>
       )}
     </div>
   );

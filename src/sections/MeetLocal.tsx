@@ -59,7 +59,17 @@ function fmtDur(s: number) {
   return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-export function MeetLocal({ onClose }: { onClose: () => void }) {
+/** Person-Icon (Stroke) für noch nicht eingecheckte Teilnehmer — kein Emoji (Enterprise). */
+function PersonIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+    </svg>
+  );
+}
+
+export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
   const { t } = useTranslation();
   const [avail, setAvail] = useState<MeetLocalAvailability | null>(null);
   const [hw, setHw] = useState<HardwareInfo | null>(null);
@@ -194,7 +204,7 @@ export function MeetLocal({ onClose }: { onClose: () => void }) {
     const ready = !!avail && avail.built && avail.plan_ok && avail.hw_ok;
     return (
       <div>
-        <h1 className="section-title">{t("meetLocal.title")}</h1>
+        {!embedded && <h1 className="section-title">{t("meetLocal.title")}</h1>}
         <p className="section-sub" style={{ maxWidth: 560 }}>{t("meetLocal.pitch")}</p>
         <div className="card" style={{ maxWidth: 560 }}>
           <div className="ml-scan-head">
@@ -236,9 +246,11 @@ export function MeetLocal({ onClose }: { onClose: () => void }) {
             >
               {starting ? t("meetLocal.starting") : t("meetLocal.start")}
             </button>
-            <button className="sub-tab" style={{ padding: "10px 18px" }} onClick={onClose}>
-              {t("common.back")}
-            </button>
+            {!embedded && (
+              <button className="sub-tab" style={{ padding: "10px 18px" }} onClick={onClose}>
+                {t("common.back")}
+              </button>
+            )}
           </div>
           {error && <p style={{ color: "var(--danger, #f66)", marginTop: 12 }}>{error}</p>}
         </div>
@@ -281,10 +293,16 @@ export function MeetLocal({ onClose }: { onClose: () => void }) {
 
   return (
     <div>
-      <h1 className="section-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {t("meetLocal.title")}
-        <span className="tier-badge">{phaseLabel[snap.phase]}</span>
-      </h1>
+      {embedded ? (
+        <div style={{ margin: "0 0 14px" }}>
+          <span className="tier-badge">{phaseLabel[snap.phase]}</span>
+        </div>
+      ) : (
+        <h1 className="section-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {t("meetLocal.title")}
+          <span className="tier-badge">{phaseLabel[snap.phase]}</span>
+        </h1>
+      )}
 
       <div className="card" style={{ maxWidth: 640 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
@@ -322,9 +340,11 @@ export function MeetLocal({ onClose }: { onClose: () => void }) {
             {snap.participants.map((p) => (
               <div
                 key={p.name}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid var(--border, rgba(255,255,255,0.06))" }}
               >
-                <span style={{ fontSize: 15 }}>{p.enrolled ? "✅" : "👤"}</span>
+                <span style={{ display: "grid", placeItems: "center", width: 18 }}>
+                  {p.enrolled ? <GateIcon ok /> : <PersonIcon />}
+                </span>
                 <span style={{ fontWeight: 600, flex: 1 }}>{p.name}</span>
                 {!p.enrolled && (
                   <button className="sub-tab" onClick={() => checkin(p.name)}>

@@ -57,7 +57,8 @@
     "meetings": "Meetings",
     "vocabulary": "Vocabulary",
     "settings": "Settings",
-    "help": "Help"
+    "help": "Help",
+    "meetingsLive": "Live meeting"
   },
   "header": {
     "planBadgeTitle": "Your current plan",
@@ -165,7 +166,9 @@
     "actionDecisions": "Decisions",
     "actionMinutes": "Minutes",
     "actionRecapEmail": "Recap email",
-    "processError": "Error: {{error}}"
+    "processError": "Error: {{error}}",
+    "tabLocal": "Local meeting",
+    "tabRecordings": "Recordings"
   },
   "vocab": {
     "title": "Vocabulary",

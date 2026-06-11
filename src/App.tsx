@@ -46,10 +46,16 @@ function Shell() {
       <Header />
       {/* Sidebar stays static even while the meeting view is open — selecting any section
           exits the meeting and navigates there. The native meet renders in the content pane
-          (an isolated iframe), so the left nav never moves. */}
+          (an isolated iframe), so the left nav never moves.
+          "Live-Meeting" ist ein eigener Sidebar-Eintrag (TJ 2026-06-12) und startet die
+          native Meet-View DIREKT — kein Zwischenschritt über eine Launcher-Karte. */}
       <Sidebar
-        active={meetLive ? "meetings" : section}
+        active={meetLive ? "meetlive" : section}
         onSelect={(s) => {
+          if (s === "meetlive") {
+            setMeetLive(true);
+            return;
+          }
           setMeetLive(false);
           setSection(s);
         }}
@@ -64,7 +70,7 @@ function Shell() {
             {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
             {section === "history" && <History />}
             {section === "settings" && <Settings />}
-            {section === "meetings" && <Meetings onStartMeeting={() => setMeetLive(true)} />}
+            {section === "meetings" && <Meetings />}
             {section === "vocabulary" && <Vocabulary />}
             {section === "help" && <Placeholder title={t("app.help")} />}
           </div>
