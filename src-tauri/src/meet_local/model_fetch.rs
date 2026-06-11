@@ -24,11 +24,32 @@ pub fn speaker_model_downloaded() -> bool {
         .unwrap_or(false)
 }
 
+fn md5_of(path: &std::path::Path) -> anyhow::Result<String> {
+    let mut f = std::fs::File::open(path)?;
+    let mut hasher = md5::Context::new();
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.consume(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.compute()))
+}
+
 /// Lädt das Modell, falls es fehlt (blocking — vom Engine-Thread aufrufen).
+/// Auch ein vorhandener Cache wird md5-verifiziert (Codex P2: korrupte/
+/// manipulierte Datei darf den Integritäts-Check nicht umgehen) — bei
+/// Mismatch wird gelöscht + frisch geladen.
 pub fn ensure_speaker_model() -> anyhow::Result<PathBuf> {
     let path = speaker_model_path();
     if speaker_model_downloaded() {
-        return Ok(path);
+        if md5_of(&path).map(|h| h == MD5).unwrap_or(false) {
+            return Ok(path);
+        }
+        log::warn!("meet-local: gecachtes Voiceprint-Modell md5-Mismatch — lade neu");
+        let _ = std::fs::remove_file(&path);
     }
     std::fs::create_dir_all(crate::models::models_dir())?;
     let tmp = path.with_extension("part");

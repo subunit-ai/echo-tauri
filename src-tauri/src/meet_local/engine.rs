@@ -27,7 +27,7 @@ use meet_core::{name_segments, Anchors, Embedder, Segment};
 use super::capture::MeetCapture;
 use super::incremental::{IncrementalState, WindowTranscriber};
 use super::model_fetch;
-use super::pcm_store::{PcmStore, SR};
+use super::pcm_store::{PcmReader, PcmWriter, SR};
 use super::whisper_window::WhisperWindow;
 
 /// Stimm-Check-In: Aufnahmefenster nach dem Klick (Server: ~7 s Clip).
@@ -76,7 +76,8 @@ enum Cmd {
 struct EngineCore {
     dir: PathBuf,
     meeting_id: String,
-    store: Arc<Mutex<PcmStore>>,
+    /// Lock-frei: der Capture-Thread besitzt den Writer, wir lesen nur.
+    reader: PcmReader,
     capture: Option<MeetCapture>,
     whisper: WhisperWindow,
     embedder: Option<Embedder>,
@@ -103,13 +104,16 @@ impl EngineHandle {
     pub fn add_participant(&self, name: String) -> Result<String, String> {
         let (tx, rx) = channel();
         self.cmd_tx.send(Cmd::AddParticipant { name, reply: tx }).map_err(|_| "Engine weg")?;
-        rx.recv_timeout(Duration::from_secs(5)).map_err(|_| "Engine antwortet nicht")?
+        // 15 s: die Engine kann in einem Whisper-Step stecken. Läuft der
+        // Timeout dennoch ab, wird das gequeute Kommando später trotzdem
+        // ausgeführt — harmlos (Teilnehmer erscheint verspätet im Snapshot).
+        rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "Engine antwortet nicht")?
     }
 
     pub fn start_checkin(&self, name: String) -> Result<(), String> {
         let (tx, rx) = channel();
         self.cmd_tx.send(Cmd::StartCheckin { name, reply: tx }).map_err(|_| "Engine weg")?;
-        rx.recv_timeout(Duration::from_secs(5)).map_err(|_| "Engine antwortet nicht")?
+        rx.recv_timeout(Duration::from_secs(15)).map_err(|_| "Engine antwortet nicht")?
     }
 
     /// Beendet die Aufnahme; Verarbeitung läuft im Engine-Thread weiter
@@ -126,8 +130,17 @@ impl EngineHandle {
 impl Drop for EngineHandle {
     fn drop(&mut self) {
         let _ = self.cmd_tx.send(Cmd::Stop);
-        if let Some(j) = self.join.take() {
-            let _ = j.join();
+        // Nur joinen, wenn die Verarbeitung schon durch ist (dann ist es ein
+        // schneller Aufräum-Join). Ein aktives Meeting beim App-Exit darf den
+        // Prozess nicht minutenlang blocken (Codex P1) — der Engine-Thread
+        // verarbeitet detached best-effort weiter; das inkrementelle Manifest
+        // ist ohnehin crash-sicher auf Platte.
+        if self.is_finished() {
+            if let Some(j) = self.join.take() {
+                let _ = j.join();
+            }
+        } else if self.join.take().is_some() {
+            log::warn!("meet-local: EngineHandle drop bei laufender Verarbeitung — Thread detached");
         }
     }
 }
@@ -152,10 +165,10 @@ pub fn start(
     let started_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
     let meeting_id = format!("local-{started_at}");
     let dir = meetings_dir().join(&meeting_id);
-    let store = Arc::new(Mutex::new(
-        PcmStore::create(&dir.join("audio.pcm")).map_err(|e| format!("PCM-Datei: {e}"))?,
-    ));
-    let capture = MeetCapture::start(mic_device, store.clone())?;
+    let pcm_path = dir.join("audio.pcm");
+    let writer = PcmWriter::create(&pcm_path).map_err(|e| format!("PCM-Datei: {e}"))?;
+    let reader = PcmReader::new(&pcm_path);
+    let capture = MeetCapture::start(mic_device, writer)?;
 
     let status = Arc::new(Mutex::new(Snapshot {
         phase: Phase::Recording,
@@ -172,7 +185,7 @@ pub fn start(
     let core = EngineCore {
         dir,
         meeting_id,
-        store,
+        reader,
         capture: Some(capture),
         whisper: WhisperWindow { model, language },
         embedder: Some(embedder),
@@ -210,10 +223,8 @@ fn run(mut c: EngineCore, cmd_rx: std::sync::mpsc::Receiver<Cmd>) {
         c.tick_checkin();
         if last_step.elapsed() >= STEP_EVERY {
             last_step = Instant::now();
-            let dur = c.store.lock().duration_s();
-            let mut store = c.store.lock();
-            let n = c.inc.step(&mut store, &mut c.whisper);
-            drop(store);
+            let dur = c.reader.duration_s();
+            let n = c.inc.step(&c.reader, &mut c.whisper);
             if n > 0 {
                 let _ = c.inc.write_manifest(&c.dir.join("audio.segs.json"));
             }
@@ -224,7 +235,7 @@ fn run(mut c: EngineCore, cmd_rx: std::sync::mpsc::Receiver<Cmd>) {
             c.publish();
         } else {
             let mut s = c.status.lock();
-            s.duration_s = c.store.lock().duration_s();
+            s.duration_s = c.reader.duration_s();
             s.level = c.capture.as_ref().map(|cap| cap.level()).unwrap_or(0.0);
         }
         // Disk-/Stream-Ausfall während der Aufnahme → sofort sichtbar machen,
@@ -280,7 +291,7 @@ impl EngineCore {
         if !self.participants.iter().any(|p| p.name == name) {
             return Err("Unbekannter Teilnehmer".into());
         }
-        let from = self.store.lock().duration_s();
+        let from = self.reader.duration_s();
         self.checkin = Some((name.clone(), from));
         let mut s = self.status.lock();
         s.checkin_active = Some(name);
@@ -293,7 +304,7 @@ impl EngineCore {
     /// Host startet den Check-In einfach nochmal (wie online).
     fn tick_checkin(&mut self) {
         let Some((name, from)) = self.checkin.clone() else { return };
-        let now = self.store.lock().duration_s();
+        let now = self.reader.duration_s();
         if now < from + CHECKIN_WINDOW_S {
             return;
         }
@@ -311,7 +322,7 @@ impl EngineCore {
         let Some(p) = self.participants.iter().position(|p| p.name == name) else {
             return false;
         };
-        let Ok(clip) = self.store.lock().read_slice_s(a, b) else { return false };
+        let Ok(clip) = self.reader.read_slice_s(a, b) else { return false };
         if clip.len() < SR {
             return false; // < 1 s Audio — Capture-Problem
         }
@@ -337,29 +348,40 @@ impl EngineCore {
         if let Some(cap) = self.capture.take() {
             cap.stop();
         }
+        // Stop mitten im Check-In-Fenster (Codex P2): mit dem vorhandenen
+        // Audio noch versuchen statt still verwerfen — und den UI-Zustand
+        // in jedem Fall aufräumen.
+        if let Some((name, from)) = self.checkin.take() {
+            let end = self.reader.duration_s().min(from + CHECKIN_WINDOW_S);
+            let ok = end - from >= 2.0 && self.process_checkin(&name, from, end);
+            let mut s = self.status.lock();
+            s.checkin_active = None;
+            s.checkin_result = Some(format!("{}:{name}", if ok { "ok" } else { "failed" }));
+            s.participants = self.participants.clone();
+        }
         {
             let mut s = self.status.lock();
             s.phase = Phase::Processing;
-            s.duration_s = self.store.lock().duration_s();
+            s.duration_s = self.reader.duration_s();
         }
         self.publish();
 
-        let mut store = self.store.lock();
-        self.inc.finalize(&mut store, &mut self.whisper);
-        drop(store);
-        let _ = self.inc.write_manifest(&self.dir.join("audio.segs.json"));
+        self.inc.finalize(&self.reader, &mut self.whisper);
+        if let Err(e) = self.inc.write_manifest(&self.dir.join("audio.segs.json")) {
+            log::warn!("meet-local: Manifest-Write fehlgeschlagen: {e}");
+        }
 
         // Naming-Kette mit injiziertem Embedder über den PCM-Store —
         // exakt der Server-_embed-Vertrag (Dauer-Floor, None bei kaputt).
         let segments = self.inc.segments.clone();
-        let names: Vec<Option<String>> = if self.anchors.len() >= 1 && !segments.is_empty() {
-            let store = self.store.clone();
+        let names: Vec<Option<String>> = if !self.anchors.is_empty() && !segments.is_empty() {
+            let reader = self.reader.clone();
             let embedder = Mutex::new(self.embedder.take());
             let embed = move |a: f64, b: f64, min_s: f64| -> Option<Vec<f32>> {
                 if b - a < min_s {
                     return None;
                 }
-                let clip = store.lock().read_slice_s(a, b).ok()?;
+                let clip = reader.read_slice_s(a, b).ok()?;
                 if (clip.len() as f64) < min_s * SR as f64 {
                     return None;
                 }
@@ -378,7 +400,7 @@ impl EngineCore {
     }
 
     fn persist(&self, segments: Vec<Segment>, names: Vec<Option<String>>) {
-        let duration = self.store.lock().duration_s();
+        let duration = self.reader.duration_s();
         let transcript = render_transcript(&segments, &names);
         let meeting = serde_json::json!({
             "id": self.meeting_id,
@@ -397,17 +419,9 @@ impl EngineCore {
                 serde_json::to_vec_pretty(&meeting).unwrap_or_default(),
             )
             .is_ok();
-        // Voiceprints separat (Biometrie): Transkript-Artefakte bleiben teilbar.
-        let vp: serde_json::Value = self
-            .anchors
-            .iter()
-            .map(|(n, a)| (n.clone(), serde_json::json!(a)))
-            .collect::<serde_json::Map<_, _>>()
-            .into();
-        let _ = std::fs::write(
-            self.dir.join("voiceprints.json"),
-            serde_json::to_vec(&vp).unwrap_or_default(),
-        );
+        // Voiceprints werden BEWUSST NICHT persistiert (Codex P1: Biometrie
+        // im Klartext-app_data). Sie leben nur im RAM der Meeting-Session;
+        // jedes Meeting enrollt frisch — das ist unser DSGVO-Argument.
 
         let mut s = self.status.lock();
         s.duration_s = duration;

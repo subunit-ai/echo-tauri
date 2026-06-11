@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use meet_core::{Segment, Word};
 
-use super::pcm_store::{PcmStore, SR};
+use super::pcm_store::{PcmReader, SR};
 
 pub const SEG_S: usize = 300; // MEET_SEG_SECONDS
 pub const CTX_S: usize = 15; // MEET_SEG_CONTEXT
@@ -55,7 +55,7 @@ pub fn ready_windows(total_samples: u64) -> usize {
 /// (Segmente, fehlgeschlagen?) zurück — ein Fenster-Fehler erzeugt wie auf
 /// dem Server ein Warn-Segment und markiert den Lauf als nicht-zertifizierbar.
 pub fn transcribe_windows(
-    store: &mut PcmStore,
+    store: &PcmReader,
     t: &mut dyn WindowTranscriber,
     start_window: usize,
     max_window: Option<usize>,
@@ -160,7 +160,7 @@ impl IncrementalState {
 
     /// Während der Aufnahme zyklisch aufrufen: transkribiert alle NEU fertig
     /// gewordenen Fenster. Gibt die Zahl neuer Segmente zurück.
-    pub fn step(&mut self, store: &mut PcmStore, t: &mut dyn WindowTranscriber) -> usize {
+    pub fn step(&mut self, store: &PcmReader, t: &mut dyn WindowTranscriber) -> usize {
         if self.finalized {
             return 0;
         }
@@ -180,7 +180,7 @@ impl IncrementalState {
     }
 
     /// Aufnahme-Ende: Rest-Fenster (inkl. Anbruch) transkribieren + final markieren.
-    pub fn finalize(&mut self, store: &mut PcmStore, t: &mut dyn WindowTranscriber) {
+    pub fn finalize(&mut self, store: &PcmReader, t: &mut dyn WindowTranscriber) {
         if self.finalized {
             return;
         }
@@ -236,12 +236,13 @@ mod tests {
 
     /// `name` MUSS pro Test eindeutig sein — cargo test läuft parallel,
     /// ein geteiltes Verzeichnis wäre eine Datei-Race zwischen den Tests.
-    fn store_with_seconds(name: &str, secs: usize) -> (PcmStore, std::path::PathBuf) {
+    fn store_with_seconds(name: &str, secs: usize) -> (PcmReader, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("echo-incr-test-{name}"));
         let path = dir.join("audio.pcm");
-        let mut st = PcmStore::create(&path).unwrap();
-        st.append_i16(&vec![1000i16; secs * SR]).unwrap();
-        (st, dir)
+        let mut w = super::super::pcm_store::PcmWriter::create(&path).unwrap();
+        w.append_i16(&vec![1000i16; secs * SR]).unwrap();
+        w.flush().unwrap();
+        (PcmReader::new(&path), dir)
     }
 
     #[test]
@@ -256,11 +257,11 @@ mod tests {
     #[test]
     fn windowing_offsets_filter_and_tail() {
         // 11 Minuten → 2 fertige Fenster + Rest
-        let (mut st, dir) = store_with_seconds("windowing", 660);
+        let (st, dir) = store_with_seconds("windowing", 660);
         let mut fake = Fake { calls: vec![], fail_on_call: None };
         let mut inc = IncrementalState::new();
 
-        let n = inc.step(&mut st, &mut fake);
+        let n = inc.step(&st, &mut fake);
         assert_eq!(inc.last_window, 2);
         // Fenster 0: kein linker Kontext → BEIDE Segmente im Core (1.0 + 20.0);
         // Fenster 1: Segment bei 1.0 liegt im linken Kontext → gefiltert
@@ -277,10 +278,10 @@ mod tests {
         assert!(s[1].energy.unwrap() > 999.0 && s[1].energy.unwrap() < 1001.0); // int16-RMS
 
         // step ohne neue Daten = no-op
-        assert_eq!(inc.step(&mut st, &mut fake), 0);
+        assert_eq!(inc.step(&st, &mut fake), 0);
 
         // finalize transkribiert den Rest (Fenster 2, angebrochen)
-        inc.finalize(&mut st, &mut fake);
+        inc.finalize(&st, &mut fake);
         assert!(inc.finalized && inc.usable);
         assert_eq!(fake.calls.len(), 3);
         // Fenster 2: left=15, verfügbar 660-585=75 s
@@ -297,10 +298,10 @@ mod tests {
 
     #[test]
     fn window_failure_marks_unusable() {
-        let (mut st, dir) = store_with_seconds("failure", 660);
+        let (st, dir) = store_with_seconds("failure", 660);
         let mut fake = Fake { calls: vec![], fail_on_call: Some(2) };
         let mut inc = IncrementalState::new();
-        inc.step(&mut st, &mut fake);
+        inc.step(&st, &mut fake);
         assert!(!inc.usable);
         assert!(inc.segments.iter().any(|s| s.text == FAIL_TEXT));
         std::fs::remove_dir_all(&dir).ok();

@@ -8,13 +8,19 @@
 //! (sonst Knackser alle ~10 ms) und appendet in den Store.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Sender, SyncSender, TrySendError};
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use parking_lot::Mutex;
 
-use super::pcm_store::PcmStore;
+use super::pcm_store::PcmWriter;
+
+/// Bounded Chunk-Queue (Codex P1): der Audio-Callback darf NIE blockieren und
+/// der Speicher NIE unbegrenzt wachsen. cpal liefert ~10-50-ms-Chunks; 2048
+/// Einträge ≈ deutlich über eine Minute Puffer. Läuft sie voll (Disk hängt),
+/// wird der Chunk verworfen + die Aufnahme als fehlerhaft markiert — wie die
+/// Server-Sidecar-Queue (überlaufen → "incremental incomplete").
+const CHUNK_QUEUE_MAX: usize = 2048;
 
 const SR_OUT: f64 = 16_000.0;
 
@@ -70,9 +76,10 @@ pub struct MeetCapture {
 }
 
 impl MeetCapture {
-    /// Startet die Aufnahme in `store`. Blockiert bis der Stream läuft oder
-    /// liefert eine nutzerlesbare Fehlermeldung (Muster aus `recorder.rs`).
-    pub fn start(device: Option<String>, store: Arc<Mutex<PcmStore>>) -> Result<Self, String> {
+    /// Startet die Aufnahme in den exklusiv übernommenen `writer`. Blockiert
+    /// bis der Stream läuft oder liefert eine nutzerlesbare Fehlermeldung
+    /// (Muster aus `recorder.rs`).
+    pub fn start(device: Option<String>, mut writer: PcmWriter) -> Result<Self, String> {
         let (stop_tx, stop_rx) = channel::<()>();
         let (ready_tx, ready_rx) = channel::<Result<(), String>>();
         let level = Arc::new(AtomicU32::new(0));
@@ -82,8 +89,8 @@ impl MeetCapture {
         let join = std::thread::Builder::new()
             .name("echo-meet-capture".into())
             .spawn(move || {
-                let (chunk_tx, chunk_rx) = channel::<Vec<f32>>();
-                let (stream, in_sr) = match build_stream(device, lvl, chunk_tx) {
+                let (chunk_tx, chunk_rx) = std::sync::mpsc::sync_channel::<Vec<f32>>(CHUNK_QUEUE_MAX);
+                let (stream, in_sr) = match build_stream(device, lvl, fl.clone(), chunk_tx) {
                     Ok(v) => v,
                     Err(e) => {
                         let _ = ready_tx.send(Err(format!("Mikrofon: {e}")));
@@ -106,7 +113,7 @@ impl MeetCapture {
                         Ok(chunk) => {
                             let out = rs.push(&chunk);
                             if !out.is_empty() {
-                                if store.lock().append_f32(&out).is_err() {
+                                if writer.append_f32(&out).is_err() {
                                     fl.store(true, Ordering::Relaxed);
                                     break;
                                 }
@@ -121,17 +128,22 @@ impl MeetCapture {
                 while let Ok(chunk) = chunk_rx.try_recv() {
                     let out = rs.push(&chunk);
                     if !out.is_empty() {
-                        let _ = store.lock().append_f32(&out);
+                        let _ = writer.append_f32(&out);
                     }
                 }
-                let _ = store.lock().flush();
+                let _ = writer.flush();
             })
             .map_err(|e| format!("Capture-Thread: {e}"))?;
 
         match ready_rx.recv_timeout(std::time::Duration::from_secs(5)) {
             Ok(Ok(())) => Ok(Self { stop_tx, join: Some(join), level, failed }),
             Ok(Err(e)) => Err(e),
-            Err(_) => Err("Mikrofon-Start hat nicht reagiert.".into()),
+            Err(_) => {
+                // Codex P1: ein spät startender Stream darf nicht herrenlos
+                // weiter aufnehmen — Stop vorab queuen, dann erst Err.
+                let _ = stop_tx.send(());
+                Err("Mikrofon-Start hat nicht reagiert.".into())
+            }
         }
     }
 
@@ -151,7 +163,8 @@ impl MeetCapture {
 fn build_stream(
     device_name: Option<String>,
     level: Arc<AtomicU32>,
-    chunk_tx: Sender<Vec<f32>>,
+    failed: Arc<AtomicBool>,
+    chunk_tx: SyncSender<Vec<f32>>,
 ) -> anyhow::Result<(cpal::Stream, u32)> {
     let host = cpal::default_host();
     let device = match device_name {
@@ -173,13 +186,17 @@ fn build_stream(
 
     macro_rules! stream_as {
         ($t:ty, $conv:expr) => {{
-            let (tx, l) = (chunk_tx.clone(), level.clone());
+            let (tx, l, fl) = (chunk_tx.clone(), level.clone(), failed.clone());
             device.build_input_stream(
                 &config,
                 move |data: &[$t], _| {
                     let f: Vec<f32> = data.iter().map($conv).collect();
                     let mono = downmix(&f, channels, &l);
-                    let _ = tx.send(mono);
+                    // try_send: NIE blockieren; voll = Disk/Engine hängt →
+                    // Chunk verwerfen + Aufnahme als fehlerhaft markieren.
+                    if let Err(TrySendError::Full(_)) = tx.try_send(mono) {
+                        fl.store(true, Ordering::Relaxed);
+                    }
                 },
                 err_fn,
                 None,

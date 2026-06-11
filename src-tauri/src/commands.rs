@@ -305,6 +305,10 @@ pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config
         config.subunit_token_expires_in = cur.subunit_token_expires_in;
         config.subunit_workspace_id = cur.subunit_workspace_id.clone();
         config.subunit_api_key = cur.subunit_api_key.clone();
+        // plan ist ein Server-Entitlement (auth.rs setzt es nach dem
+        // Workspace-Fetch) — ein Frontend-Roundtrip darf es nie ändern,
+        // sonst wäre das Pro-Gating lokal umgehbar.
+        config.plan = cur.plan.clone();
         cur.hotkey != config.hotkey
     };
     config.save().map_err(|e| e.to_string())?;
