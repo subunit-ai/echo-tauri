@@ -190,6 +190,13 @@ button {
   animation: fade-in-up 0.25s var(--ease-out) forwards;
 }
 
+/* Pulsierender Aufnahme-Punkt (components/icons.tsx RecDot) — ersetzt 🔴. */
+@keyframes rec-dot-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

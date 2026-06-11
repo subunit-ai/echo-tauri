@@ -120,7 +120,7 @@
     "hint": "· record it?",
     "recordNow": "Record",
     "ignore": "Ignore",
-    "recording": "🔴 Recording {{app}} meeting…",
+    "recording": "Recording {{app}} meeting…",
     "stop": "Stop",
     "saved": "Meeting transcribed + saved"
   },
@@ -129,7 +129,7 @@
     "hotkeyLabel": "Hotkey",
     "modeHold": "Hold to record",
     "modeToggle": "Toggle to record",
-    "startMeeting": "🎙 Start meeting",
+    "startMeeting": "Start meeting",
     "meetingCreating": "Creating meeting…",
     "meetingOpened": "Meeting {{code}} opened",
     "statTranscriptions": "Transcriptions",
@@ -155,7 +155,7 @@
     "title": "Meetings",
     "liveTitle": "Live meeting",
     "liveDesc": "Start a meeting or join one — automatic minutes & clean speaker separation. Each device records its own audio.",
-    "start": "🎙 Start meeting",
+    "start": "Start meeting",
     "recordingsHeading": "Recordings",
     "subtitle": "Long recordings (≥ {{minutes}} min) — stored separately. Click to open the full transcript; the buttons generate summary / action items / decisions.",
     "empty": "No long recordings yet.",
@@ -337,7 +337,7 @@
     "gatePlan": "Pro plan",
     "gateHw": "Device performance",
     "modelHint": "On first start the voice model (~26 MB) is downloaded — everything runs offline afterwards.",
-    "start": "🎙 Start local meeting",
+    "start": "Start local meeting",
     "starting": "Starting… (may download models)",
     "phaseRecording": "Recording",
     "phaseProcessing": "Processing…",
@@ -411,13 +411,13 @@
         "constraints": "Limits set"
       },
       "tpl": {
-        "goal": "Task: ",
-        "role": "Role: You are an experienced expert in ",
-        "context": "Context: ",
+        "goal": "Task:",
+        "role": "Role: You are an experienced expert in",
+        "context": "Context:",
         "format": "Format: answer as a list/table/prose, at most … words.",
-        "audience": "Audience: ",
-        "examples": "Example — the result should look like this: ",
-        "constraints": "Avoid: … · Pay attention to: "
+        "audience": "Audience:",
+        "examples": "Example — the result should look like this:",
+        "constraints": "Avoid: … · Pay attention to:"
       }
     }
   }

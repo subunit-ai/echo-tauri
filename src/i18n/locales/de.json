@@ -120,7 +120,7 @@
     "hint": "· aufnehmen?",
     "recordNow": "Aufnehmen",
     "ignore": "Ignorieren",
-    "recording": "🔴 {{app}}-Meeting wird aufgenommen…",
+    "recording": "{{app}}-Meeting wird aufgenommen…",
     "stop": "Stop",
     "saved": "Meeting transkribiert + gespeichert"
   },
@@ -129,7 +129,7 @@
     "hotkeyLabel": "Hotkey",
     "modeHold": "Halten zum Aufnehmen",
     "modeToggle": "Umschalten zum Aufnehmen",
-    "startMeeting": "🎙 Meeting starten",
+    "startMeeting": "Meeting starten",
     "meetingCreating": "Erstelle Meeting…",
     "meetingOpened": "Meeting {{code}} geöffnet",
     "statTranscriptions": "Transkriptionen",
@@ -155,7 +155,7 @@
     "title": "Meetings",
     "liveTitle": "Live-Meeting",
     "liveDesc": "Starte ein Meeting oder tritt einem bei — automatisches Protokoll & saubere Sprecher-Trennung. Jedes Gerät nimmt seinen eigenen Ton auf.",
-    "start": "🎙 Meeting starten",
+    "start": "Meeting starten",
     "recordingsHeading": "Aufnahmen",
     "subtitle": "Lange Aufnahmen (≥ {{minutes}} Min) — separat gespeichert. Klick öffnet das volle Transkript; die Buttons erzeugen Zusammenfassung / Aufgaben / Entscheidungen.",
     "empty": "Noch keine langen Aufnahmen.",
@@ -337,7 +337,7 @@
     "gatePlan": "Pro-Abo",
     "gateHw": "Geräteleistung",
     "modelHint": "Beim ersten Start wird das Stimm-Modell (~26 MB) geladen — danach läuft alles offline.",
-    "start": "🎙 Lokales Meeting starten",
+    "start": "Lokales Meeting starten",
     "starting": "Starte… (lädt ggf. Modelle)",
     "phaseRecording": "Aufnahme läuft",
     "phaseProcessing": "Verarbeitung…",
@@ -411,13 +411,13 @@
         "constraints": "Grenzen gesetzt"
       },
       "tpl": {
-        "goal": "Aufgabe: ",
-        "role": "Rolle: Du bist ein erfahrener Experte für ",
-        "context": "Kontext: ",
+        "goal": "Aufgabe:",
+        "role": "Rolle: Du bist ein erfahrener Experte für",
+        "context": "Kontext:",
         "format": "Format: Antworte als Liste/Tabelle/Fließtext, maximal … Wörter.",
-        "audience": "Zielgruppe: ",
-        "examples": "Beispiel — so soll das Ergebnis aussehen: ",
-        "constraints": "Vermeide: … · Achte auf: "
+        "audience": "Zielgruppe:",
+        "examples": "Beispiel — so soll das Ergebnis aussehen:",
+        "constraints": "Vermeide: … · Achte auf:"
       }
     }
   }

@@ -4,6 +4,7 @@
 // per Event (echo://meet-local) + Polling-Fallback.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { MicIcon } from "../components/icons";
 import {
   getConfig,
   hardwareInfo,
@@ -240,10 +241,18 @@ export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; 
           <div style={{ display: "flex", gap: 10 }}>
             <button
               className="sub-tab onb-primary"
-              style={{ padding: "10px 18px", fontSize: 14, opacity: ready && !starting ? 1 : 0.45 }}
+              style={{
+                padding: "10px 18px",
+                fontSize: 14,
+                opacity: ready && !starting ? 1 : 0.45,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+              }}
               disabled={!ready || starting}
               onClick={start}
             >
+              <MicIcon />
               {starting ? t("meetLocal.starting") : t("meetLocal.start")}
             </button>
             {!embedded && (

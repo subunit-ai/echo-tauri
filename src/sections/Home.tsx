@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
+import { MicIcon } from "../components/icons";
 import { RecordPanel } from "../components/RecordPanel";
 import { patchForUiMode, uiModeOf } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
@@ -23,7 +24,12 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
       <BigModeSwitch value={uiModeOf(config)} onChange={(m) => patch(patchForUiMode(m))} />
 
       <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
-        <button className="sub-tab" onClick={onStartMeeting}>
+        <button
+          className="sub-tab"
+          onClick={onStartMeeting}
+          style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+        >
+          <MicIcon />
           {t("home.startMeeting")}
         </button>
       </div>
