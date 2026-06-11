@@ -29,17 +29,27 @@ function scopeMeetCss(css: string): string {
     .replaceAll("body{", ".meet-root{");
 }
 
+// Auto-fit: meet-ui is designed mobile/touch-sized, which reads as "too zoomed in" inside
+// Echo's desktop pane. Scale the content so it always fits the pane nicely. zoom (not
+// transform) reflows, so scrolling/layout stay correct. Tunable: DESIGN_W is the pane width
+// at which meet shows at ~full size; below that it scales down, never up past 1.
+const DESIGN_W = 760;
+const MIN_ZOOM = 0.58;
+function fitZoom(paneWidth: number): number {
+  return Math.max(MIN_ZOOM, Math.min(1, paneWidth / DESIGN_W));
+}
+
 /**
  * Meeting view — renders the shared meet-ui app NATIVELY inside Echo (no iframe, no network
- * load), in a Shadow DOM. Opening Meet is instant and looks identical to the standalone
- * meet.subunit.ai (meet keeps its own frosted-glass theme — the scoped meet.css carries its
- * tokens on `:host`). meet.css is vendored from the canonical meet-react and kept current via
- * scripts-sync-meet-ui.sh, so each Echo release ships the up-to-date meet UI.
+ * load), in a Shadow DOM. Looks identical to meet.subunit.ai (meet keeps its own frosted-
+ * glass theme); auto-fits to the pane and lets meet's own dark-mode toggle work.
  *
- * Isolation: inside the shadow root, neither meet.css nor Echo's CSS can leak across. The
- * `transform` on `:host` (meet-embed.css) confines meet's position:fixed chrome to this pane.
- * Auth: Echo's subunit token is read directly over the `meet_token` IPC (same JS context, no
- * postMessage) so the host lands logged in automatically.
+ * - Isolation: meet.css scoped to the shadow; `transform` on :host confines meet's
+ *   position:fixed chrome to this pane.
+ * - Auto-fit: a ResizeObserver scales `.meet-root` (zoom) to the pane width.
+ * - Theme: meet's toggle flips `html.dark` on the document; a MutationObserver mirrors that
+ *   onto the shadow host (`:host(.dark)`) so the toggle actually themes the embedded UI.
+ * - Auth: the subunit token is read over the `meet_token` IPC → host lands logged in.
  */
 export function MeetLive() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -70,7 +80,22 @@ export function MeetLive() {
       />,
     );
 
+    // Auto-fit the mobile-sized UI to the pane (sets --meet-zoom, used by .meet-root).
+    const applyZoom = () => host.style.setProperty("--meet-zoom", String(fitZoom(host.clientWidth)));
+    applyZoom();
+    const ro = new ResizeObserver(applyZoom);
+    ro.observe(host);
+
+    // Mirror the document's dark class onto the shadow host so meet's theme toggle (which
+    // flips html.dark) actually themes the embedded UI (:host(.dark)).
+    const syncDark = () => host.classList.toggle("dark", document.documentElement.classList.contains("dark"));
+    syncDark();
+    const mo = new MutationObserver(syncDark);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     return () => {
+      ro.disconnect();
+      mo.disconnect();
       // React forbids unmounting a root while rendering; defer past the current commit.
       queueMicrotask(() => {
         root.unmount();

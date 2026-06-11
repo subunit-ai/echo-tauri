@@ -1,8 +1,9 @@
 # Open-Source-Komponenten Dritter
 
-> **Stub — vor Release automatisch generieren.** Echo bündelt Open-Source-Software, die ihren
-> eigenen (meist permissiven) Lizenzen unterliegt. Die vollständige, versionsgenaue Liste ist
-> aus den Manifesten zu generieren und diesem Dokument beizulegen.
+> Echo bündelt Open-Source-Software, die ihren eigenen (durchweg permissiven) Lizenzen
+> unterliegt. Generierte, versionsgenaue Listen — vor jedem Release neu erzeugen:
+> - Frontend (npm): [`THIRD-PARTY-npm.md`](./THIRD-PARTY-npm.md) — alles MIT/Apache-2.0/ISC.
+> - Backend (Rust): [`THIRD-PARTY-rust.md`](./THIRD-PARTY-rust.md) — MIT/Apache-2.0/BSD/ISC/Unicode.
 
 ## Generieren
 
