@@ -157,6 +157,9 @@ export interface HardwareInfo {
   ram_gb: number;
   cpu_cores: number;
   gpu_build: boolean;
+  /** std::env::consts::OS / ARCH — shown in the local-meet device scan. */
+  os: string;
+  arch: string;
 }
 export const hardwareInfo = () => invoke<HardwareInfo>("hardware_info");
 export const listLocalModels = () => invoke<ModelInfo[]>("list_local_models");

@@ -18,6 +18,11 @@ pub struct HardwareInfo {
     pub ram_gb: f64,
     pub cpu_cores: usize,
     pub gpu_build: bool,
+    /// `std::env::consts::OS` / `ARCH` — shown in the local-meet device scan
+    /// so the user sees what was actually probed (and the UI can tell Apple
+    /// Silicon from "enough RAM").
+    pub os: String,
+    pub arch: String,
 }
 
 pub fn detect() -> HardwareInfo {
@@ -51,5 +56,7 @@ pub fn detect() -> HardwareInfo {
         ram_gb: (ram_gb * 10.0).round() / 10.0,
         cpu_cores,
         gpu_build,
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
     }
 }
