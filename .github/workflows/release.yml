@@ -139,6 +139,38 @@ jobs:
 
       - run: npm ci
 
+      - name: macOS signing keychain (stable self-signed cert — keeps TCC grants across updates)
+        if: matrix.platform == 'macos-14'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE:-}" ] || [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            echo "no signing cert configured — staying ad-hoc"; exit 0
+          fi
+          # We do the keychain dance OURSELVES (not via tauri-action's cert env):
+          # the cert is SELF-SIGNED, and codesign refuses to resolve an untrusted
+          # identity (CSSMERR_TP_NOT_TRUSTED) — that was the real cause of the
+          # v0.4.24+ "failed to resolve signing identity" failures. tauri-action
+          # imports but never TRUSTS the cert; the add-trusted-cert below does.
+          echo "$APPLE_CERTIFICATE" | base64 -d > /tmp/echo-sign.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security set-keychain-settings -lut 21600 build.keychain  # no auto-lock mid-build
+          security import /tmp/echo-sign.p12 -k build.keychain \
+            -P "${APPLE_CERTIFICATE_PASSWORD:-}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k ci build.keychain > /dev/null
+          security find-certificate -c "$APPLE_SIGNING_IDENTITY" -p build.keychain > /tmp/echo-sign.pem
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+            -k /Library/Keychains/System.keychain /tmp/echo-sign.pem
+          rm /tmp/echo-sign.p12
+          echo "valid codesigning identities now:"
+          security find-identity -v -p codesigning build.keychain
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,18 +180,14 @@ jobs:
           # Crash reporting DSNs (no-op if unset).
           ECHO_SENTRY_DSN: ${{ secrets.ECHO_SENTRY_DSN }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          # macOS code signing: TEMPORARILY DISABLED — back to ad-hoc ("-" from
-          # tauri.conf.json), which is what builds successfully (v0.4.22/0.4.23).
-          # The stable self-signed cert attempt failed at codesign with "failed to
-          # resolve signing identity": APPLE_SIGNING_IDENTITY did not match the imported
-          # APPLE_CERTIFICATE's Common Name, so the macOS build (and macOS auto-update)
-          # was blocked on EVERY release since v0.4.24.
-          # RE-ENABLE later: uncomment the three APPLE_* lines AND set the
-          # APPLE_SIGNING_IDENTITY secret to the EXACT CN of the .p12 cert (confirm on a
-          # mac after import via `security find-identity -v -p codesigning`).
-          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # macOS: STABLE signing identity (env overrides tauri.conf's ad-hoc "-").
+          # Identity-stable signing is what makes macOS TCC (Accessibility/Mic)
+          # grants SURVIVE updates — ad-hoc re-signed every build, so macOS saw
+          # "a new app" each release and dropped the grants. The cert was
+          # imported + trusted in the keychain step above; deliberately NOT
+          # passing APPLE_CERTIFICATE here (tauri-action would re-import it
+          # untrusted into its own keychain).
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           # Windows Authenticode via Azure Trusted Signing — configure in
           # tauri.conf.json bundle.windows + add the Azure secrets here.
         with:
