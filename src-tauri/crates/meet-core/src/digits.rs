@@ -41,7 +41,7 @@ pub fn digits_from_text(text: &str) -> String {
     let mut out = String::new();
     let mut tok = String::new();
     let mut tok_kind = Kind::Other;
-    let mut flush = |tok: &mut String, k: Kind, out: &mut String| {
+    let flush = |tok: &mut String, k: Kind, out: &mut String| {
         if tok.is_empty() {
             return;
         }

@@ -9,8 +9,20 @@ publish = false
 [lib]
 name = "meet_core"
 
+[features]
+# wespeaker-Voiceprint-Embedder (fbank + onnxruntime). Optional, weil ort
+# native onnxruntime-Binaries zieht — Konsumenten aktivieren das Feature erst,
+# wenn sie den lokalen Embedder wirklich bauen (Echo: Phase-2-Baustein 2).
+embedder = ["dep:ort", "dep:rustfft"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 # preserve_order: Replay-Fixtures sind JSON-Objekte, deren Anker-Reihenfolge
 # der Python-Referenz (dict-Insertion-Order) entsprechen muss.
 serde_json = { version = "1", features = ["preserve_order"] }
+ort = { version = "2.0.0-rc.10", optional = true }
+rustfft = { version = "6", optional = true }
+
+[dev-dependencies]
+# WAV-Lesen für den Embedder-Paritäts-Test (fixtures/parity.wav)
+hound = "3"
