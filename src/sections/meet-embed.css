@@ -1,0 +1,72 @@
+/* Echo-owned bridge for embedding the shared meet-ui (meet.css) inside a Shadow DOM.
+   meet.css targets :root / html / body — those selectors match nothing inside a shadow
+   root, so this file re-supplies the page-level pieces meet.css normally hangs off <body>
+   (background + aurora mesh, centered column layout), confines meet's position:fixed chrome
+   to this pane, and fills the few meet-only tokens Echo's :root doesn't define. Everything
+   else (component classes) comes from meet.css verbatim; the design tokens inherit across
+   the shadow boundary from Echo's :root, so meet follows Echo's Liquid-Glass theme. */
+
+/* The shadow host is the meet "page". `transform` makes it the containing block for meet's
+   position:fixed chrome (lang/account chips, the connection-lost banner, modals), so they
+   stay inside this pane instead of overlaying Echo's whole window. */
+:host {
+  display: block;
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  transform: translateZ(0);
+  background: var(--page-grad);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    system-ui, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* meet-only tokens Echo's :root doesn't carry (everything else is inherited). */
+:host {
+  --bg-edge: transparent;
+  --qr-bg: #fff;
+  --option-bg: var(--menu-bg);
+  --tog-off: var(--surface-alt, rgba(150, 180, 220, 0.2));
+  --tog-knob: #fff;
+  --tog-knob-sh: rgba(0, 0, 0, 0.4);
+  --tg-moon: inline-flex;
+  --tg-sun: none;
+}
+
+/* Plays the role meet.css gives <body>: a centered column with the aurora mesh behind it. */
+.meet-embed-root {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 18px 40px;
+}
+/* Aurora mesh (meet.css puts this on body::before, which is inert in the shadow). Absolute,
+   not fixed, so it fills this pane and scrolls naturally. @keyframes aurora lives in the
+   injected meet.css. */
+.meet-embed-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(48% 42% at 8% 10%, var(--mesh1), transparent 64%),
+    radial-gradient(48% 42% at 92% 10%, var(--mesh2), transparent 64%);
+  background-repeat: no-repeat;
+  will-change: transform;
+  animation: aurora 8s ease-in-out infinite;
+}
+
+/* meet's own theme toggle is redundant when embedded — meet follows Echo's theme via the
+   inherited tokens, and Echo's Settings owns the theme. Hide it. */
+.themetog {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meet-embed-root::before {
+    animation: none;
+  }
+}

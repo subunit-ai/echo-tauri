@@ -18,15 +18,15 @@ export default defineConfig(async () => ({
     },
   },
 
-  // HTML entries: main hub, the transparent orb overlay, and the embedded meet view
-  // (meet.html runs the meet.subunit.ai React app in an iframe so its CSS stays isolated
-  // from Echo's shell while the sidebar stays put).
+  // HTML entries: main hub + the transparent orb overlay. The Meeting view is no longer a
+  // separate entry — meet-ui now renders natively inside the main app via a shadow root
+  // (src/sections/MeetLive.tsx), so meet.css imports as a string (?inline) and is scoped to
+  // that shadow rather than built as its own page.
   build: {
     rollupOptions: {
       input: {
         main: "index.html",
         overlay: "overlay.html",
-        meet: "meet.html",
       },
     },
   },
