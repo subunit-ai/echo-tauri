@@ -155,12 +155,40 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Request timed segments only when we'll diarize this long-form recording.
     let want_segments = is_long && cfg.diarization_enabled;
 
+    // Style (long-form > auto-mode > config) — computed BEFORE the transcription:
+    // the target window (and thus the auto-mode title) is captured at record-
+    // start, so the style is already known here and can ride along on the
+    // transcribe request (combined transcribe+cleanup, one round trip less).
+    let title = state
+        .target
+        .lock()
+        .as_ref()
+        .map(|t| t.title.clone())
+        .unwrap_or_default();
+    let style = if is_long {
+        cfg.long_form_cleanup_style.clone()
+    } else if cfg.cleanup_auto_mode {
+        crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
+    } else {
+        cfg.cleanup_style.clone()
+    };
+    // Combined round trip only for normal dictation: long-form cleanup can take
+    // up to 90 s server-side — that stays on the separate /v1/cleanup call so
+    // the transcribe request can't run into its 120 s budget.
+    let inline_cleanup = !is_long && cfg.cleanup_enabled && style != "raw";
+
     log::info!(
-        "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments}",
+        "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments} inline_cleanup={inline_cleanup}",
         cfg.mode
     );
     let t_tx = std::time::Instant::now();
-    let result = match transcribe::run_opts(&cfg, &cap.samples, cap.sample_rate, want_segments) {
+    let result = match transcribe::run_opts(
+        &cfg,
+        &cap.samples,
+        cap.sample_rate,
+        want_segments,
+        inline_cleanup.then_some(style.as_str()),
+    ) {
         Ok(r) => r,
         Err(e) => {
             log::warn!("transcribe: failed ({}) after {:?}", e.code, t_tx.elapsed());
@@ -169,32 +197,30 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         }
     };
     log::info!(
-        "transcribe: ok engine_mode={} chars={} (+{:?})",
+        "transcribe: ok engine_mode={} chars={} server_cleanup={} (+{:?})",
         result.quality_mode,
         result.text.chars().count(),
+        result.cleaned_text.is_some(),
         t_tx.elapsed()
     );
 
-    // Target window (captured at record-start) + style (long-form > auto-mode > config).
+    // Target window (captured at record-start) for the paste-back below.
     let target = state.target.lock().take();
-    let title = target.as_ref().map(|t| t.title.clone()).unwrap_or_default();
-    let style = if is_long {
-        cfg.long_form_cleanup_style.clone()
-    } else if cfg.cleanup_auto_mode {
-        crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
-    } else {
-        cfg.cleanup_style.clone()
-    };
 
     // Keep the timed segments for diarization (the reconstructed result below
     // drops them — the IPC payload stays lean).
     let segments = result.segments;
 
-    // Post-process: optional server AI-cleanup ("raw" = passthrough) + DACH formatting.
-    let mut text = result.text;
-    if cfg.cleanup_enabled && style != "raw" {
-        text = crate::cleanup::maybe_cleanup(&cfg, &text, &style);
-    }
+    // Post-process: optional AI-cleanup ("raw" = passthrough) + DACH formatting.
+    // Prefer the server-side cleanup from the combined round trip; fall back to
+    // the separate /v1/cleanup call (old servers, local engine, inline error).
+    let mut text = match result.cleaned_text {
+        Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
+        _ if cfg.cleanup_enabled && style != "raw" => {
+            crate::cleanup::maybe_cleanup(&cfg, &result.text, &style)
+        }
+        _ => result.text,
+    };
     if cfg.dach_format_enabled {
         text = crate::dach::dach_format(&text);
     }
@@ -202,6 +228,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         text,
         quality_mode: result.quality_mode,
         segments: Vec::new(),
+        cleaned_text: None,
     };
 
     // The recording had audio but transcribed to nothing (silence / a mic that
@@ -685,7 +712,7 @@ pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
     let cfg = state.config.lock().clone();
     let duration_s = mixed.len() as f64 / sr.max(1) as f64;
     let result =
-        transcribe::run_opts(&cfg, &mixed, sr, false).map_err(|e| format!("{e}"))?;
+        transcribe::run_opts(&cfg, &mixed, sr, false, None).map_err(|e| format!("{e}"))?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

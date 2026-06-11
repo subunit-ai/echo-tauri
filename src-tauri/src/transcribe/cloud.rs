@@ -1,9 +1,10 @@
 //! Subunit cloud transcriber — POST multipart to `/v1/transcribe`.
 //!
 //! Exact contract (must stay in sync with the FastAPI server):
-//!   multipart: file=audio.wav, language, quality_mode, prompt?, provider?
+//!   multipart: file=audio.wav, language, quality_mode, prompt?, provider?,
+//!              cleanup_style? (combined transcribe+cleanup, v0.4.40+)
 //!   auth:      Authorization: Bearer <jwt>  (primary) | X-API-Key (legacy)
-//!   response:  { text, quality_mode, ... }   402 => trial expired
+//!   response:  { text, quality_mode, cleaned_text?, ... }   402 => trial expired
 
 use std::time::Duration;
 
@@ -17,6 +18,7 @@ pub fn transcribe_subunit(
     wav: Vec<u8>,
     superfast: bool,
     want_segments: bool,
+    cleanup_style: Option<&str>,
 ) -> Result<TranscriptResult, EngineError> {
     // Shared pooled client (prewarmed at record-start) — no TLS handshake here.
     let client = crate::http::client();
@@ -41,6 +43,15 @@ pub fn transcribe_subunit(
         }
         if want_segments {
             form = form.text("with_segments", "true");
+        }
+        // Combined transcribe+cleanup: the server runs the AI cleanup and
+        // returns `cleaned_text` in the same response — no second round trip
+        // before the paste. Old servers ignore the field; the caller falls
+        // back to its own /v1/cleanup call when `cleaned_text` is absent.
+        if let Some(style) = cleanup_style {
+            if !style.is_empty() && style != "raw" {
+                form = form.text("cleanup_style", style.to_string());
+            }
         }
 
         let mut req = client
@@ -119,9 +130,18 @@ pub fn transcribe_subunit(
         })
         .unwrap_or_default();
 
+    // Server-side cleanup result (combined round trip). Vocab post-replace
+    // applies here too — the server cleans the raw transcript, the vocabulary
+    // fixes (whole-word, case-insensitive) are a client concern.
+    let cleaned_text = json
+        .get("cleaned_text")
+        .and_then(|v| v.as_str())
+        .map(|t| vocab::apply_vocab_replace(t.trim(), cfg));
+
     Ok(TranscriptResult {
         text: vocab::apply_vocab_replace(&text, cfg),
         quality_mode,
         segments,
+        cleaned_text,
     })
 }

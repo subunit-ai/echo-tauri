@@ -29,6 +29,12 @@ pub struct TranscriptResult {
     /// empty for normal dictation so the IPC payload stays lean.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub segments: Vec<Segment>,
+    /// Server-side AI-cleanup result (combined transcribe+cleanup round trip).
+    /// Some only when the server ran the requested `cleanup_style`; None means
+    /// the caller falls back to the separate /v1/cleanup call (old servers,
+    /// cleanup error, local engine).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleaned_text: Option<String>,
 }
 
 /// Structured error across the IPC boundary so the frontend branches on `code`
@@ -58,11 +64,15 @@ impl std::error::Error for EngineError {}
 /// 16 kHz and runs whisper.cpp.
 /// `want_segments` requests timed transcript segments (used by the long-form
 /// diarization merge); off for normal dictation keeps the payload lean.
+/// `cleanup_style` requests the combined transcribe+cleanup round trip (cloud
+/// only): the server runs the AI cleanup and returns `cleaned_text` in the same
+/// response, saving the separate /v1/cleanup round trip before the paste.
 pub fn run_opts(
     cfg: &Config,
     samples: &[f32],
     sample_rate: u32,
     want_segments: bool,
+    cleanup_style: Option<&str>,
 ) -> Result<TranscriptResult, EngineError> {
     match cfg.mode.as_str() {
         "local" => {
@@ -95,7 +105,7 @@ pub fn run_opts(
             };
             let wav = samples_to_wav(&samples, sample_rate)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
-            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast, want_segments)
+            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast, want_segments, cleanup_style)
         }
         other => Err(EngineError::new(
             "unsupported",

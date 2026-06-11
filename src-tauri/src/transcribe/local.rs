@@ -103,6 +103,7 @@ pub fn run(
         text: vocab::apply_vocab_replace(text.trim(), cfg),
         quality_mode: "local".to_string(),
         segments,
+        cleaned_text: None,
     })
 }
 
