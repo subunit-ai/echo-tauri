@@ -372,6 +372,38 @@
     "tabClose": "Close",
     "pin": "Always on top",
     "close": "Hide (content is kept)",
-    "targetHint": "Console as target: dictations land here instead of the app"
+    "targetHint": "Console as target: dictations land here instead of the app",
+    "coach": {
+      "title": "Prompt Coach",
+      "add": "+ Block",
+      "allGood": "Strong — your prompt covers every context building block.",
+      "q": {
+        "goal": "What exactly should the AI do? Describe the task in at least one full sentence.",
+        "role": "What role should the AI take? An expert in what?",
+        "context": "What background matters? Give context about the situation.",
+        "format": "What should the result look like? List, table, length …",
+        "audience": "Who is the result for? Name the audience.",
+        "examples": "Show an example of what the result should look like.",
+        "constraints": "What should the AI avoid? Set limits: style, tone, length."
+      },
+      "ok": {
+        "goal": "Task described",
+        "role": "Role defined",
+        "context": "Context provided",
+        "format": "Format specified",
+        "audience": "Audience named",
+        "examples": "Example included",
+        "constraints": "Limits set"
+      },
+      "tpl": {
+        "goal": "Task: ",
+        "role": "Role: You are an experienced expert in ",
+        "context": "Context: ",
+        "format": "Format: answer as a list/table/prose, at most … words.",
+        "audience": "Audience: ",
+        "examples": "Example — the result should look like this: ",
+        "constraints": "Avoid: … · Pay attention to: "
+      }
+    }
   }
 }

@@ -60,10 +60,37 @@ function parseData(raw: string): PromptData {
 const tabLabel = (d: Draft, untitled: string) =>
   d.title.trim() || d.text.trim().slice(0, 16).trim() || untitled;
 
+// ---- Prompt-Coach: autonomous context elicitation. ----
+// Heuristic checks for the building blocks of a strong prompt (goal, role,
+// context, format, audience, examples, constraints). Every unmet block turns
+// into a QUESTION the console asks the user, plus a one-click template that
+// scaffolds the missing piece — actively coaxing good context out of the user
+// so the downstream AI can deliver. Local + instant (no network); an
+// AI-powered refine on top is the planned next stage.
+const COACH_KEYS = ["goal", "role", "context", "format", "audience", "examples", "constraints"] as const;
+type CoachKey = (typeof COACH_KEYS)[number];
+
+function analyzePrompt(text: string): Record<CoachKey, boolean> {
+  const t = text.toLowerCase();
+  const has = (re: RegExp) => re.test(t);
+  return {
+    goal: text.trim().length >= 25,
+    role: has(/\b(du bist|you are|act as|agiere als|verhalte dich wie|als (erfahrene?r? )?(experte|expertin|profi)|rolle\s*:|role\s*:)/),
+    context: has(/(kontext|hintergrund|context|background|situation|ausgangslage|gegeben)/) || text.trim().length >= 400,
+    format:
+      has(/(format|liste|tabelle|json|markdown|stichpunkt|bullet|gliederung|absatz|abschnitt|paragraph|table|list|outline)/) ||
+      has(/(wörter|words|zeichen|characters|sätze|sentences|länge|length|seiten|pages)/),
+    audience: has(/(zielgruppe|audience|leser|reader|für (anfänger|einsteiger|experten|kunden|kinder|laien|entwickler|beginners|experts|customers|developers))/),
+    examples: has(/(z\.\s?b\.|beispiel|example|e\.\s?g\.|wie folgt|etwa so|zum beispiel|for instance)/),
+    constraints: has(/(vermeide|avoid|verzichte|keinesfalls|auf keinen fall|don'?t|max\.|maximal|höchstens|mindestens|at (most|least)|\bstil\b|\bton\b|tonalität|\btone\b|grenzen|einschränkung)/),
+  };
+}
+
 export function PromptConsole() {
   const { t } = useTranslation();
   const [data, setData] = useState<PromptData | null>(null);
   const [libOpen, setLibOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const [pinned, setPinned] = useState(true);
   const [asTarget, setAsTarget] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -160,6 +187,9 @@ export function PromptConsole() {
   const chars = active.text.length;
   const words = active.text.trim() ? active.text.trim().split(/\s+/).length : 0;
   const tokens = Math.ceil(chars / 4);
+  const checks = analyzePrompt(active.text);
+  const metCount = COACH_KEYS.filter((k) => checks[k]).length;
+  const score = Math.round((metCount / COACH_KEYS.length) * 100);
 
   // ---- Actions ----
   const setText = (text: string) =>
@@ -227,6 +257,13 @@ export function PromptConsole() {
 
   const deleteFromLibrary = (id: string) =>
     update((d) => ({ ...d, library: d.library.filter((e) => e.id !== id) }));
+
+  /** Coach "+": scaffold the missing building block at the end of the draft. */
+  const addCoachTemplate = (key: CoachKey) => {
+    const base = active.text.replace(/\s+$/, "");
+    setText((base ? base + "\n\n" : "") + t(`prompt.coach.tpl.${key}`));
+    editorRef.current?.focus();
+  };
 
   const togglePin = () => {
     const next = !pinned;
@@ -327,6 +364,33 @@ export function PromptConsole() {
           spellCheck={false}
           onChange={(e) => setText(e.target.value)}
         />
+        {coachOpen && (
+          <div className="pc-coach">
+            <div className="pc-coach-head">
+              <span>⚡ {t("prompt.coach.title")}</span>
+              <div className="pc-score">
+                <div className="pc-score-fill" style={{ width: `${score}%` }} />
+              </div>
+              <span className="pc-score-num">{score}%</span>
+            </div>
+            <div className="pc-coach-list">
+              {score === 100 && <div className="pc-coach-all">✓ {t("prompt.coach.allGood")}</div>}
+              {COACH_KEYS.filter((k) => !checks[k]).map((k) => (
+                <div key={k} className="pc-coach-row">
+                  <span className="pc-coach-q">{t(`prompt.coach.q.${k}`)}</span>
+                  <button className="pc-btn" onClick={() => addCoachTemplate(k)}>
+                    {t("prompt.coach.add")}
+                  </button>
+                </div>
+              ))}
+              {COACH_KEYS.filter((k) => checks[k]).map((k) => (
+                <div key={k} className="pc-coach-row met">
+                  <span className="pc-check">✓</span> {t(`prompt.coach.ok.${k}`)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {libOpen && (
           <div className="pc-lib">
             <div className="pc-lib-head">
@@ -367,7 +431,24 @@ export function PromptConsole() {
           {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
         </span>
         <div className="pc-foot-actions">
-          <button className={`pc-btn ${libOpen ? "on" : ""}`} title={t("prompt.library")} onClick={() => setLibOpen(!libOpen)}>
+          <button
+            className={`pc-btn ${coachOpen ? "on" : ""}`}
+            title={t("prompt.coach.title")}
+            onClick={() => {
+              setCoachOpen(!coachOpen);
+              setLibOpen(false);
+            }}
+          >
+            ⚡ {score}
+          </button>
+          <button
+            className={`pc-btn ${libOpen ? "on" : ""}`}
+            title={t("prompt.library")}
+            onClick={() => {
+              setLibOpen(!libOpen);
+              setCoachOpen(false);
+            }}
+          >
             ⛁
           </button>
           <button className="pc-btn" onClick={copy} disabled={!active.text}>

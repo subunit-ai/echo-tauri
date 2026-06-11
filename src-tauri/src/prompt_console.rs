@@ -27,10 +27,28 @@ static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// Create the console window (no-op if it already exists). The window is
 /// transparent + undecorated; on macOS a native HUD vibrancy layer blurs the
 /// desktop behind it — the frontend draws dark Liquid Glass on top.
+///
+/// MUST NOT be called from a synchronous IPC command: those run on the main
+/// thread, and window creation dispatches to the same event loop → deadlock
+/// on Windows (the "console never appears on Erik's ARM Surface" bug). The
+/// `prompt_console_toggle` command is async for exactly this reason.
 pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = app.get_webview_window(LABEL) {
         return Ok(w);
     }
+    // Native glass behind the webview: try WITH the OS blur effect first, and
+    // if that build fails (effect unsupported on this Windows/GPU combo), fall
+    // back to a plain transparent window — the CSS glass tint still reads fine.
+    match build_window(app, true) {
+        Ok(w) => Ok(w),
+        Err(e) => {
+            log::warn!("prompt console: build with effects failed ({e}) — retrying plain");
+            build_window(app, false)
+        }
+    }
+}
+
+fn build_window(app: &AppHandle, effects: bool) -> tauri::Result<WebviewWindow> {
     #[allow(unused_mut)]
     let mut b = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("prompt.html".into()))
         .title("Echo Prompt")
@@ -47,15 +65,17 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     // console look; Windows Acrylic is the closest equivalent. Linux gets the
     // semi-transparent panel without the OS blur — still coherent.
     #[cfg(target_os = "macos")]
-    {
+    if effects {
         use tauri::window::{Effect, EffectsBuilder};
         b = b.effects(EffectsBuilder::new().effect(Effect::HudWindow).radius(20.0).build());
     }
     #[cfg(target_os = "windows")]
-    {
+    if effects {
         use tauri::window::{Effect, EffectsBuilder};
         b = b.effects(EffectsBuilder::new().effect(Effect::Acrylic).build());
     }
+    #[cfg(target_os = "linux")]
+    let _ = effects;
     b.build()
 }
 
@@ -103,8 +123,11 @@ pub fn receive_transcript(app: &AppHandle, text: &str) {
 
 // ---- IPC commands ----
 
+/// ASYNC on purpose: sync commands execute on the main thread, and creating a
+/// webview window from there deadlocks on Windows (the event loop is busy
+/// running the command). Async commands run on a worker thread → safe.
 #[tauri::command]
-pub fn prompt_console_toggle(app: AppHandle) {
+pub async fn prompt_console_toggle(app: AppHandle) {
     toggle(&app);
 }
 

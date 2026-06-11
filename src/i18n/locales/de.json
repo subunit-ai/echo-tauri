@@ -372,6 +372,38 @@
     "tabClose": "Schließen",
     "pin": "Immer im Vordergrund",
     "close": "Ausblenden (Inhalt bleibt erhalten)",
-    "targetHint": "Konsole als Ziel: Diktate landen hier statt in der App"
+    "targetHint": "Konsole als Ziel: Diktate landen hier statt in der App",
+    "coach": {
+      "title": "Prompt-Coach",
+      "add": "+ Baustein",
+      "allGood": "Stark — dein Prompt deckt alle Kontext-Bausteine ab.",
+      "q": {
+        "goal": "Was genau soll die KI tun? Beschreib die Aufgabe in mindestens einem vollen Satz.",
+        "role": "Welche Rolle soll die KI einnehmen? Experte wofür?",
+        "context": "Welcher Hintergrund ist wichtig? Gib Kontext zur Situation.",
+        "format": "Wie soll das Ergebnis aussehen? Liste, Tabelle, Länge …",
+        "audience": "Für wen ist das Ergebnis? Nenne die Zielgruppe.",
+        "examples": "Zeig ein Beispiel, wie das Ergebnis aussehen soll.",
+        "constraints": "Was soll die KI vermeiden? Setze Grenzen: Stil, Ton, Länge."
+      },
+      "ok": {
+        "goal": "Aufgabe beschrieben",
+        "role": "Rolle definiert",
+        "context": "Kontext vorhanden",
+        "format": "Format festgelegt",
+        "audience": "Zielgruppe genannt",
+        "examples": "Beispiel enthalten",
+        "constraints": "Grenzen gesetzt"
+      },
+      "tpl": {
+        "goal": "Aufgabe: ",
+        "role": "Rolle: Du bist ein erfahrener Experte für ",
+        "context": "Kontext: ",
+        "format": "Format: Antworte als Liste/Tabelle/Fließtext, maximal … Wörter.",
+        "audience": "Zielgruppe: ",
+        "examples": "Beispiel — so soll das Ergebnis aussehen: ",
+        "constraints": "Vermeide: … · Achte auf: "
+      }
+    }
   }
 }
