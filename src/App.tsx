@@ -5,7 +5,6 @@ import { Sidebar, type Section } from "./components/Sidebar";
 import { SoundFx } from "./components/SoundFx";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
-import { Meetings } from "./sections/Meetings";
 import { MeetLive } from "./sections/MeetLive";
 import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
@@ -50,8 +49,14 @@ function Shell() {
       <Sidebar
         active={meetLive ? "meetings" : section}
         onSelect={(s) => {
-          setMeetLive(false);
-          setSection(s);
+          // "Meet" opens the meeting app directly (the mobile meet UI fills the pane) —
+          // no intermediate Echo page with a "start meeting" button.
+          if (s === "meetings") {
+            setMeetLive(true);
+          } else {
+            setMeetLive(false);
+            setSection(s);
+          }
         }}
       />
       {meetLive ? (
@@ -64,7 +69,6 @@ function Shell() {
             {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
             {section === "history" && <History />}
             {section === "settings" && <Settings />}
-            {section === "meetings" && <Meetings onStartMeeting={() => setMeetLive(true)} />}
             {section === "vocabulary" && <Vocabulary />}
             {section === "help" && <Placeholder title={t("app.help")} />}
           </div>
