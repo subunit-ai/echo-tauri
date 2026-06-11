@@ -340,8 +340,14 @@ pub fn open_config_dir() {
 }
 
 /// Open an external URL in the default browser (About → GitHub link).
+/// Only http(s) links are honoured — a frontend-supplied `file:`, `javascript:`
+/// or custom-scheme value must not be able to invoke an arbitrary OS handler.
 #[tauri::command]
 pub fn open_external(url: String) {
+    if !crate::meet::is_web_url(&url) {
+        log::warn!("open_external: refusing non-web URL");
+        return;
+    }
     crate::meet::open_url(&url);
 }
 
