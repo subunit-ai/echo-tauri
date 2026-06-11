@@ -1,25 +1,41 @@
 /* Bridge for rendering the shared meet-ui inside a shadow root (see MeetLive.tsx).
    meet.css's :root/html/body rules are rewritten to :host/.meet-root at injection time
-   (scopeMeetCss), so meet renders with its OWN theme. This file gives the shadow host its
-   box, confines meet's position:fixed chrome to the meet pane, and auto-fits the mobile-
-   sized UI to the pane. */
+   (scopeMeetCss). This file makes the embed blend NATIVELY into Echo: it drops meet's own
+   page background + mesh so Echo's window background/aurora shows through, follows Echo's
+   theme, confines meet's position:fixed chrome to the pane, and auto-fits the mobile-sized
+   UI. meet + Echo share the same Liquid-Glass tokens, so the surfaces match Echo exactly. */
 
 :host {
   display: block;
   position: relative;
   height: 100%;
   overflow: auto;
-  /* `transform` makes :host the containing block for meet's position:fixed chrome (the
-     lang/account chips, the theme toggle, the connection-lost banner, modals) so they stay
-     inside this pane instead of covering Echo's whole window. */
+  /* Let Echo's window background (page gradient + aurora mesh) show through — meet's own
+     full-bleed background is dropped here so the section reads as part of Echo. */
+  background: transparent;
+  /* `transform` makes :host the containing block for meet's position:fixed chrome (lang/
+     account chips, connection-lost banner, modals) so they stay inside this pane. */
   transform: translateZ(0);
 }
 
-/* meet.css's body rules (flex column, padding, aurora mesh) are mapped here by scopeMeetCss.
-   `zoom` (set from JS via --meet-zoom by a ResizeObserver) scales the mobile-sized UI to fit
-   Echo's desktop pane — it reflows (unlike transform:scale), so scroll/layout stay correct.
-   Cap the min-height to the pane so it scrolls within instead of overflowing the window. */
+/* meet.css's body rules (flex column, padding) are mapped here by scopeMeetCss. `zoom` (set
+   from JS via --meet-zoom by a ResizeObserver) auto-fits the mobile-sized UI to the pane —
+   it reflows (unlike transform:scale). */
 .meet-root {
   min-height: 100%;
+  background: transparent;
   zoom: var(--meet-zoom, 1);
+}
+
+/* Drop meet's own aurora mesh + edge-fade — Echo's window background provides them, so the
+   embed blends seamlessly instead of layering a second background inside the pane. */
+.meet-root::before,
+.meet-root::after {
+  display: none !important;
+}
+
+/* Theme is unified with Echo (the host mirrors Echo's data-theme → :host(.dark)), so meet's
+   own light/dark toggle is redundant here. Hide it; theme is set in Echo's Settings. */
+.themetog {
+  display: none !important;
 }

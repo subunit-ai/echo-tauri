@@ -41,14 +41,15 @@ function fitZoom(paneWidth: number): number {
 
 /**
  * Meeting view — renders the shared meet-ui app NATIVELY inside Echo (no iframe, no network
- * load), in a Shadow DOM. Looks identical to meet.subunit.ai (meet keeps its own frosted-
- * glass theme); auto-fits to the pane and lets meet's own dark-mode toggle work.
+ * load), in a Shadow DOM, blended into Echo's look: Echo's window background shows through and
+ * meet follows Echo's theme. meet + Echo share the same Liquid-Glass tokens, so surfaces match.
  *
  * - Isolation: meet.css scoped to the shadow; `transform` on :host confines meet's
  *   position:fixed chrome to this pane.
+ * - Native blend: the embed bridge drops meet's own background/mesh (Echo's shows through).
  * - Auto-fit: a ResizeObserver scales `.meet-root` (zoom) to the pane width.
- * - Theme: meet's toggle flips `html.dark` on the document; a MutationObserver mirrors that
- *   onto the shadow host (`:host(.dark)`) so the toggle actually themes the embedded UI.
+ * - Theme: a MutationObserver mirrors Echo's `<html data-theme>` onto the shadow host
+ *   (`:host(.dark)`) so meet renders in Echo's dark/light. Theme is set in Echo's Settings.
  * - Auth: the subunit token is read over the `meet_token` IPC → host lands logged in.
  */
 export function MeetLive() {
@@ -86,12 +87,14 @@ export function MeetLive() {
     const ro = new ResizeObserver(applyZoom);
     ro.observe(host);
 
-    // Mirror the document's dark class onto the shadow host so meet's theme toggle (which
-    // flips html.dark) actually themes the embedded UI (:host(.dark)).
-    const syncDark = () => host.classList.toggle("dark", document.documentElement.classList.contains("dark"));
-    syncDark();
-    const mo = new MutationObserver(syncDark);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    // Follow Echo's theme: mirror Echo's <html data-theme> onto the shadow host so meet
+    // renders in Echo's dark/light (:host(.dark)). meet + Echo share the same Liquid-Glass
+    // tokens, so this matches Echo exactly. Theme is controlled in Echo's Settings.
+    const syncTheme = () =>
+      host.classList.toggle("dark", document.documentElement.getAttribute("data-theme") !== "light");
+    syncTheme();
+    const mo = new MutationObserver(syncTheme);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     return () => {
       ro.disconnect();
