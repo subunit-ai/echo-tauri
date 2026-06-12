@@ -1,0 +1,496 @@
+/* First-run intro — full-screen cinematic scenes on the liquid-glass system.
+   Everything lives under .intro so app.css stays untouched; all colors come
+   from tokens.css so light theme works for free. */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 50;
+}
+
+/* ── Aurora: three slow-drifting mesh blobs behind everything ── */
+.intro-aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.intro-blob {
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  will-change: transform;
+}
+.intro-blob.b1 {
+  background: radial-gradient(circle, var(--mesh1) 0%, transparent 65%);
+  top: -22vmax;
+  left: -14vmax;
+  animation: intro-drift1 22s ease-in-out infinite alternate;
+}
+.intro-blob.b2 {
+  background: radial-gradient(circle, var(--mesh2) 0%, transparent 65%);
+  bottom: -26vmax;
+  right: -16vmax;
+  animation: intro-drift2 26s ease-in-out infinite alternate;
+}
+.intro-blob.b3 {
+  background: radial-gradient(circle, var(--mesh3) 0%, transparent 65%);
+  top: 30%;
+  left: 42%;
+  width: 38vmax;
+  height: 38vmax;
+  animation: intro-drift3 18s ease-in-out infinite alternate;
+}
+/* The opening scene leans into the light; later scenes calm it down. */
+.intro.is-opening .intro-blob {
+  opacity: 0.75;
+}
+@keyframes intro-drift1 {
+  to {
+    transform: translate(9vmax, 7vmax) scale(1.12);
+  }
+}
+@keyframes intro-drift2 {
+  to {
+    transform: translate(-8vmax, -6vmax) scale(1.08);
+  }
+}
+@keyframes intro-drift3 {
+  to {
+    transform: translate(-6vmax, 5vmax) scale(0.92);
+  }
+}
+
+/* ── Scene container + transitions ── */
+.intro-scene {
+  position: relative;
+  width: min(680px, 92vw);
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 28px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  animation: intro-scene-in 0.42s var(--ease) both;
+}
+.intro-scene.is-leaving {
+  animation: intro-scene-out 0.38s var(--ease-out) both;
+}
+@keyframes intro-scene-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes intro-scene-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.99);
+  }
+}
+
+.intro-title {
+  font-size: clamp(22px, 4.2vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.intro-body {
+  color: var(--ink2);
+  font-size: clamp(13px, 1.8vw, 15px);
+  line-height: 1.55;
+  max-width: 52ch;
+  margin: 0;
+}
+.intro-hint {
+  color: var(--ink3);
+  font-size: 12px;
+  margin: 0;
+}
+.intro-warn {
+  color: var(--amber);
+  font-size: 12.5px;
+  margin: 0;
+  max-width: 48ch;
+}
+
+/* ── Buttons ── */
+.intro-btn {
+  appearance: none;
+  border: 1px solid var(--rim-cta);
+  border-radius: 999px;
+  padding: 11px 28px;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: #062029;
+  background: linear-gradient(180deg, var(--cyan-ink), var(--cyan));
+  box-shadow:
+    0 10px 30px -10px color-mix(in srgb, var(--cyan) 60%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition:
+    transform 0.18s var(--ease-spring),
+    box-shadow 0.18s var(--ease-glass);
+}
+.intro-btn:hover {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow:
+    0 14px 36px -10px color-mix(in srgb, var(--cyan) 72%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.intro-btn:active {
+  transform: translateY(0) scale(0.99);
+}
+.intro-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+.intro-ghost {
+  appearance: none;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  padding: 9px 20px;
+  font-size: 13px;
+  color: var(--ink2);
+  background: var(--glass2);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.intro-ghost:hover {
+  color: var(--ink);
+  border-color: var(--glass-edge2);
+  background: var(--fill-ghost-hover);
+}
+.intro-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* ── Chrome: skip (top right) + progress dots (bottom center) ── */
+.intro-skip {
+  position: fixed;
+  top: 18px;
+  right: 20px;
+  z-index: 60;
+}
+.intro-dots {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 60;
+}
+.intro-dots button {
+  appearance: none;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  background: var(--glass2);
+  cursor: default;
+  transition:
+    background 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s var(--ease-spring);
+}
+.intro-dots button.is-past {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--cyan) 35%, transparent);
+}
+.intro-dots button.is-on {
+  background: var(--cyan);
+  border-color: transparent;
+  transform: scale(1.25);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cyan) 70%, transparent);
+}
+
+/* ── Opening scene ── */
+.intro-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  animation: intro-brand-in 0.9s var(--ease-spring) both;
+}
+@keyframes intro-brand-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.intro-wordmark {
+  font-size: clamp(34px, 7vw, 52px);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  margin: 0;
+  background: linear-gradient(180deg, var(--ink), color-mix(in srgb, var(--ink) 55%, var(--cyan)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.intro-tagline {
+  min-height: 1.6em;
+  color: var(--ink2);
+  font-size: clamp(14px, 2.2vw, 17px);
+  margin: 0;
+}
+.intro-caret::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.12em;
+  background: var(--cyan);
+  animation: intro-caret-blink 1s steps(1) infinite;
+}
+@keyframes intro-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.intro-fade-late {
+  animation: intro-fade 0.5s var(--ease-out) both;
+}
+@keyframes intro-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── Glass settings rows (account / mic / mode scenes) ── */
+.intro-rows {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.intro-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: var(--r-sm);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
+  font-size: 13.5px;
+  text-align: left;
+}
+.intro-row > span:first-child {
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.intro-row select {
+  max-width: 230px;
+}
+
+/* ── Voice canvas ── */
+.intro-voice {
+  width: min(560px, 100%);
+  border-radius: var(--r);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass2);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  overflow: hidden;
+}
+.intro-voice canvas {
+  display: block;
+  width: 100%;
+}
+
+/* ── Virtual keyboard ── */
+.vk {
+  width: min(620px, 96%);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 16px;
+  border-radius: var(--r);
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+}
+.vk-row {
+  display: flex;
+  gap: 7px;
+}
+.vk-key {
+  flex: var(--w, 1) 1 0;
+  min-width: 0;
+  height: clamp(30px, 5.4vh, 42px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(10px, 1.5vw, 12.5px);
+  font-weight: 550;
+  color: var(--ink2);
+  border-radius: var(--r-chip);
+  background: var(--fill-weak);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--rim-soft);
+  user-select: none;
+  transition:
+    color 0.12s var(--ease-glass),
+    border-color 0.12s var(--ease-glass),
+    box-shadow 0.12s var(--ease-glass),
+    transform 0.12s var(--ease-glass),
+    background 0.12s var(--ease-glass);
+}
+.vk-key.is-pressed {
+  color: var(--cyan-ink);
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 14%, var(--fill-weak));
+  transform: translateY(1px);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--cyan) 55%, transparent),
+    inset 0 1px 0 var(--rim);
+}
+.vk-key.is-lit {
+  color: var(--cyan-ink);
+  border-color: color-mix(in srgb, var(--cyan) 70%, transparent);
+  background: color-mix(in srgb, var(--cyan) 10%, var(--fill-weak));
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--cyan) 38%, transparent),
+    inset 0 1px 0 var(--rim);
+  animation: vk-breathe 2.6s ease-in-out infinite;
+}
+@keyframes vk-breathe {
+  50% {
+    box-shadow:
+      0 0 22px color-mix(in srgb, var(--cyan) 60%, transparent),
+      inset 0 1px 0 var(--rim);
+  }
+}
+/* Light wave: each key blooms briefly, staggered by its column position. */
+.vk.is-sweeping .vk-key {
+  animation: vk-wave 0.55s var(--ease-out) calc(var(--col, 0) * 26ms) both;
+}
+.vk.is-sweeping .vk-key.is-lit {
+  animation:
+    vk-wave 0.55s var(--ease-out) calc(var(--col, 0) * 26ms) both,
+    vk-breathe 2.6s ease-in-out 1.2s infinite;
+}
+@keyframes vk-wave {
+  0% {
+    color: var(--ink2);
+  }
+  35% {
+    color: var(--cyan-ink);
+    border-color: var(--cyan);
+    box-shadow:
+      0 0 20px color-mix(in srgb, var(--cyan) 65%, transparent),
+      inset 0 1px 0 var(--rim);
+  }
+  100% {
+    /* settle back to the resting style (or .is-lit takes over) */
+  }
+}
+
+/* ── Combo chips (hotkey confirmation + finale headline) ── */
+.intro-chips {
+  display: inline-flex;
+  gap: 6px;
+  vertical-align: middle;
+}
+.intro-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 5px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cyan-ink);
+  border-radius: var(--r-chip);
+  background: color-mix(in srgb, var(--cyan) 10%, var(--fill-weak));
+  border: 1px solid color-mix(in srgb, var(--cyan) 60%, transparent);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--cyan) 30%, transparent),
+    inset 0 1px 0 var(--rim);
+}
+
+/* ── Finale transcript card ── */
+.intro-transcript {
+  width: min(560px, 100%);
+  min-height: 84px;
+  padding: 18px 20px;
+  border-radius: var(--r-card);
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  font-size: 14.5px;
+  line-height: 1.6;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.intro-transcript.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink3);
+  text-align: center;
+}
+
+/* ── Reduced motion: everything still works, nothing moves ── */
+@media (prefers-reduced-motion: reduce) {
+  .intro-blob,
+  .intro-scene,
+  .intro-scene.is-leaving,
+  .intro-brand,
+  .intro-fade-late,
+  .vk.is-sweeping .vk-key,
+  .vk-key.is-lit,
+  .intro-caret::after {
+    animation: none !important;
+  }
+  .vk-key,
+  .intro-btn,
+  .intro-dots button {
+    transition: none !important;
+  }
+}

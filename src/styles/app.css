@@ -748,70 +748,8 @@ input:focus {
   border-color: var(--rec);
 }
 
-/* ---------- Onboarding ---------- */
-.onb {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* transparent so the page gradient + radial mesh (body::before) show behind
-     the frosted onboarding card */
-  background: transparent;
-}
-.onb-card {
-  width: min(560px, 92vw);
-  background: var(--glass);
-  backdrop-filter: var(--blur-glass);
-  -webkit-backdrop-filter: var(--blur-glass);
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--r);
-  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
-  padding: 38px 34px;
-  text-align: center;
-}
-.onb-card h1 {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 14px 0 8px;
-}
-.onb-card p {
-  color: var(--muted);
-  margin: 6px 0;
-}
-.onb-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-.onb-row:last-of-type {
-  border-bottom: none;
-}
-.onb-dots {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin: 26px 0 18px;
-}
-.onb-dots span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--border-strong);
-}
-.onb-dots span.on {
-  background: var(--accent);
-}
-.onb-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+/* Accent-filled primary pill (shared: MeetLocal CTAs, hotkey capture). The
+   first-run flow itself lives in src/intro/ with its own stylesheet. */
 .onb-primary {
   border-color: var(--accent);
   color: var(--bg);

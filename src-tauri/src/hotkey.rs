@@ -4,7 +4,7 @@
 //! toggle mode flips on each press. Combo is parsed from `config.hotkey`
 //! (`<ctrl>+<space>` style).
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Manager};
@@ -20,6 +20,26 @@ static LAST_TOGGLE_MS: AtomicU64 = AtomicU64::new(0);
 // Same debounce for the Prompt-Console hotkey (auto-repeat would open+close it).
 static LAST_PROMPT_MS: AtomicU64 = AtomicU64::new(0);
 
+// True while the first-run intro owns the keyboard: the OS registration would
+// swallow the combo (DOM key events never see a registered global shortcut), so
+// the intro's virtual keyboard / hold-to-dictate finale could never light it up —
+// and a press would run the full pipeline incl. injection into the focused Echo
+// window. register_from_config honours the flag, so a set_config-triggered
+// re-register (hotkey scene patches config.hotkey) keeps the combo free.
+// In-memory only: if the app dies mid-intro, the next launch registers normally.
+static SUSPENDED: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+pub fn hotkey_set_suspended(app: AppHandle, suspended: bool) {
+    SUSPENDED.store(suspended, Ordering::SeqCst);
+    log::info!("hotkey suspended={suspended}");
+    if suspended {
+        let _ = app.global_shortcut().unregister_all();
+    } else {
+        reregister_from_config(&app);
+    }
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -34,6 +54,9 @@ pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
         (c.hotkey.clone(), c.prompt_console_hotkey.clone())
     };
     let _ = app.global_shortcut().unregister_all();
+    if SUSPENDED.load(Ordering::SeqCst) {
+        return Ok(()); // intro owns the keyboard — stay unregistered
+    }
 
     // Prompt-Console hotkey first, best-effort: a bad or conflicting combo must
     // never take the RECORD hotkey down with it. Skipped when it duplicates the

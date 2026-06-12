@@ -1,43 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import i18n from "../i18n";
-
-// Map a JS key event to the token the Rust accelerator parser understands.
-function keyName(e: KeyboardEvent): string | null {
-  const k = e.key;
-  if (["Control", "Shift", "Alt", "Meta"].includes(k)) return null; // pure modifier — keep waiting
-  if (k === " " || k === "Spacebar") return "space";
-  const map: Record<string, string> = {
-    ArrowUp: "up",
-    ArrowDown: "down",
-    ArrowLeft: "left",
-    ArrowRight: "right",
-    Enter: "enter",
-    Escape: "esc",
-    Tab: "tab",
-    Backspace: "backspace",
-    Delete: "delete",
-  };
-  if (map[k]) return map[k];
-  return k.toLowerCase(); // letters, digits, F-keys (f1…)
-}
-
-// Flag obviously-problematic hotkeys before the user commits one.
-function conflictWarning(combo: string): string | null {
-  if (!combo) return null;
-  const c = combo.toLowerCase();
-  const hasModifier = /<ctrl>|<shift>|<alt>|<cmd>/.test(c);
-  if (!hasModifier) return i18n.t("hotkey.noModifierWarning");
-  // Well-known OS/app shortcuts that would clash badly.
-  const clashes: [RegExp, string][] = [
-    [/<ctrl>\+<c>$|<ctrl>\+<v>$|<ctrl>\+<x>$|<ctrl>\+<z>$/, i18n.t("hotkey.clashCopyPaste")],
-    [/<alt>\+<tab>$/, i18n.t("hotkey.clashWindowSwitch")],
-    [/<cmd>\+<space>$/, i18n.t("hotkey.clashSpotlight")],
-    [/<ctrl>\+<shift>\+<esc>$/, i18n.t("hotkey.clashTaskManager")],
-  ];
-  for (const [re, msg] of clashes) if (re.test(c)) return i18n.t("hotkey.clashPrefix", { msg });
-  return null;
-}
+import { comboFromEvent, conflictWarning } from "../lib/hotkeys";
 
 /** Click → press a combo → emits `<ctrl>+<space>`-style string. */
 export function HotkeyCapture({
@@ -54,15 +17,9 @@ export function HotkeyCapture({
   const onKeyDown = (e: KeyboardEvent) => {
     if (!capturing) return;
     e.preventDefault();
-    const name = keyName(e);
-    if (!name) return;
-    const parts: string[] = [];
-    if (e.ctrlKey) parts.push("ctrl");
-    if (e.shiftKey) parts.push("shift");
-    if (e.altKey) parts.push("alt");
-    if (e.metaKey) parts.push("cmd");
-    parts.push(name);
-    onChange(parts.map((p) => `<${p}>`).join("+"));
+    const combo = comboFromEvent(e);
+    if (!combo) return; // pure modifier — keep waiting
+    onChange(combo);
     setCapturing(false);
   };
 

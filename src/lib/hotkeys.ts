@@ -1,0 +1,109 @@
+import i18n from "../i18n";
+
+// Shared hotkey helpers: map JS key events to the token vocabulary the Rust
+// accelerator parser understands (`<ctrl>+<space>`-style combos). Used by the
+// Settings HotkeyCapture and the intro's virtual keyboard / finale.
+
+/** Minimal structural event type — works for React and native KeyboardEvent. */
+export interface KeyLike {
+  key: string;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}
+
+const MODIFIER_KEYS: Record<string, string> = {
+  Control: "ctrl",
+  Shift: "shift",
+  Alt: "alt",
+  Meta: "cmd",
+};
+
+/** Token for a pure-modifier key press ("Control" → "ctrl"), null otherwise. */
+export function modifierName(key: string): string | null {
+  return MODIFIER_KEYS[key] ?? null;
+}
+
+/** Map a key event to the non-modifier token; null while only modifiers are down. */
+export function keyName(e: KeyLike): string | null {
+  const k = e.key;
+  if (MODIFIER_KEYS[k]) return null; // pure modifier — keep waiting
+  if (k === " " || k === "Spacebar") return "space";
+  const map: Record<string, string> = {
+    ArrowUp: "up",
+    ArrowDown: "down",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+    Enter: "enter",
+    Escape: "esc",
+    Tab: "tab",
+    Backspace: "backspace",
+    Delete: "delete",
+  };
+  if (map[k]) return map[k];
+  return k.toLowerCase(); // letters, digits, F-keys (f1…)
+}
+
+/** Modifier tokens currently held, in canonical order. */
+export function modsOf(e: KeyLike): string[] {
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push("ctrl");
+  if (e.shiftKey) parts.push("shift");
+  if (e.altKey) parts.push("alt");
+  if (e.metaKey) parts.push("cmd");
+  return parts;
+}
+
+/** Full combo string from an event (`<ctrl>+<space>`); null on pure modifiers. */
+export function comboFromEvent(e: KeyLike): string | null {
+  const name = keyName(e);
+  if (!name) return null;
+  return [...modsOf(e), name].map((p) => `<${p}>`).join("+");
+}
+
+/** Canonical token spelling — the Rust parser accepts aliases ("option",
+ *  "win", "meta"); UI consumers (virtual keyboard, chips) want one id each. */
+export function normalizeToken(t: string): string {
+  const aliases: Record<string, string> = {
+    control: "ctrl",
+    commandorcontrol: "ctrl",
+    cmdorctrl: "ctrl",
+    option: "alt",
+    command: "cmd",
+    meta: "cmd",
+    super: "cmd",
+    win: "cmd",
+    windows: "cmd",
+    return: "enter",
+    escape: "esc",
+  };
+  return aliases[t] ?? t;
+}
+
+/** `<ctrl>+<space>` → ["ctrl", "space"] (normalized). Tolerates whitespace. */
+export function parseCombo(combo: string): string[] {
+  return combo
+    .split("+")
+    .map((raw) =>
+      normalizeToken(raw.trim().replace(/^</, "").replace(/>$/, "").trim().toLowerCase()),
+    )
+    .filter((t) => t.length > 0);
+}
+
+/** Flag obviously-problematic hotkeys before the user commits one. */
+export function conflictWarning(combo: string): string | null {
+  if (!combo) return null;
+  const c = combo.toLowerCase();
+  const hasModifier = /<ctrl>|<shift>|<alt>|<cmd>/.test(c);
+  if (!hasModifier) return i18n.t("hotkey.noModifierWarning");
+  // Well-known OS/app shortcuts that would clash badly.
+  const clashes: [RegExp, string][] = [
+    [/<ctrl>\+<c>$|<ctrl>\+<v>$|<ctrl>\+<x>$|<ctrl>\+<z>$/, i18n.t("hotkey.clashCopyPaste")],
+    [/<alt>\+<tab>$/, i18n.t("hotkey.clashWindowSwitch")],
+    [/<cmd>\+<space>$/, i18n.t("hotkey.clashSpotlight")],
+    [/<ctrl>\+<shift>\+<esc>$/, i18n.t("hotkey.clashTaskManager")],
+  ];
+  for (const [re, msg] of clashes) if (re.test(c)) return i18n.t("hotkey.clashPrefix", { msg });
+  return null;
+}
