@@ -10,7 +10,6 @@ import { MeetLive } from "./sections/MeetLive";
 import { Onboarding } from "./sections/Onboarding";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
-import { UpdatePrompt } from "./components/UpdatePrompt";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { onState, onNeedsAccessibility } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
@@ -41,7 +40,6 @@ function Shell() {
   return (
     <div className="app">
       <SoundFx />
-      <UpdatePrompt />
       <MeetingPrompt />
       <Header />
       {/* Sidebar stays static even while the meeting view is open — selecting any section

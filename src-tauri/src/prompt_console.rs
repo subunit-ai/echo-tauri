@@ -91,11 +91,16 @@ pub fn toggle(app: &AppHandle) {
                 let _ = w.set_focus();
             }
         }
-        None => {
-            if let Err(e) = create(app) {
-                log::warn!("prompt console: create failed: {e}");
+        None => match create(app) {
+            // Explicitly show + focus + raise after creating: on Windows a freshly
+            // built transparent window can come up hidden or behind others.
+            Ok(w) => {
+                let _ = w.show();
+                let _ = w.set_focus();
+                let _ = w.set_always_on_top(true);
             }
-        }
+            Err(e) => log::warn!("prompt console: create failed: {e}"),
+        },
     }
 }
 

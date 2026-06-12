@@ -247,22 +247,29 @@ pub fn run() {
                 }
             }
 
-            // Best-effort auto-update check (no-op until signed releases exist).
-            if app.state::<AppState>().config.lock().auto_update_check {
+            // Auto-update check — on launch AND every 3 h, so a long-running
+            // background instance surfaces a new release without a restart. We
+            // never auto-install (high blast radius); we emit availability and the
+            // top-bar "Jetzt aktualisieren" button (or Settings) triggers the
+            // install. Re-reads the config each tick so toggling it takes effect.
+            {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Ok(updater) = handle.updater() {
-                        match updater.check().await {
-                            // Don't silently install on launch (high blast radius).
-                            // Surface availability; install is user-triggered via
-                            // the check_for_updates command.
-                            Ok(Some(update)) => {
-                                log::info!("update available: {}", update.version);
-                                let _ = handle.emit("echo://update-available", update.version);
+                    loop {
+                        let enabled = handle.state::<AppState>().config.lock().auto_update_check;
+                        if enabled {
+                            if let Ok(updater) = handle.updater() {
+                                match updater.check().await {
+                                    Ok(Some(update)) => {
+                                        log::info!("update available: {}", update.version);
+                                        let _ = handle.emit("echo://update-available", update.version);
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => log::debug!("update check: {e}"),
+                                }
                             }
-                            Ok(None) => {}
-                            Err(e) => log::debug!("update check: {e}"),
                         }
+                        tokio::time::sleep(std::time::Duration::from_secs(3 * 3600)).await;
                     }
                 });
             }

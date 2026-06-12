@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { appVersion } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { BrandMark } from "./BrandMark";
+import { HeaderUpdate } from "./HeaderUpdate";
 
 export function Header() {
   const { t } = useTranslation();
@@ -24,6 +25,7 @@ export function Header() {
       </div>
       {version && <span className="version">v{version}</span>}
       <div className="spacer" />
+      <HeaderUpdate />
       <span className={`plan-badge ${planClass}`} title={t("header.planBadgeTitle")}>
         {t(`header.plan.${plan}`)}
       </span>

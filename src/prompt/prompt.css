@@ -48,6 +48,17 @@ body {
   overflow: hidden;
 }
 
+/* Windows: no dependable window vibrancy → make the shell SOLID (still glassy
+   gradient + edge) so the console is never near-invisible. Also opaque-ify the
+   overlays and chips so nothing reads as see-through without an OS blur layer. */
+.is-windows .pc-shell {
+  background: linear-gradient(160deg, #18293f 0%, #0e1c30 52%, #0b1626 100%);
+}
+.is-windows .pc-lib,
+.is-windows .pc-coach {
+  background: #0e1c30;
+}
+
 /* Soft specular highlight across the top — the "liquid" catch-light. */
 .pc-shell::before {
   content: "";
