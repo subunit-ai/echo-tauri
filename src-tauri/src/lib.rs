@@ -22,6 +22,7 @@ mod prompt_console;
 mod synapse;
 mod overlay;
 mod recorder;
+mod store; // SQLite history + meetings (echo.db)
 mod transcribe;
 
 use commands::AppState;
@@ -111,8 +112,11 @@ pub fn run() {
             commands::copy_text,
             commands::open_config_dir,
             commands::open_external,
+            commands::history_list,
+            commands::history_count,
             commands::delete_history_entry,
             commands::clear_history,
+            commands::meetings_list,
             commands::set_orb_position,
             commands::orb_quick,
             commands::orb_cycle,
@@ -160,6 +164,30 @@ pub fn run() {
                 std::env::consts::OS,
                 std::env::consts::ARCH,
             );
+
+            // History/meetings live in SQLite (echo.db) — durable, searchable,
+            // and a finishing dictation no longer rewrites the whole config file.
+            // One-time migration empties the legacy config.json arrays.
+            if let Err(e) = store::init() {
+                log::warn!("store: init failed ({e}) — history disabled this session");
+            } else {
+                let st = app.state::<AppState>();
+                let (h, m) = {
+                    let c = st.config.lock();
+                    (c.history.clone(), c.meetings.clone())
+                };
+                if !h.is_empty() || !m.is_empty() {
+                    match store::migrate_from_config(&h, &m) {
+                        Ok(()) => {
+                            let mut c = st.config.lock();
+                            c.history.clear();
+                            c.meetings.clear();
+                            let _ = c.save();
+                        }
+                        Err(e) => log::warn!("store: migration failed: {e}"),
+                    }
+                }
+            }
 
             // macOS: the paste-back path must reach the main thread (enigo crashes
             // off-thread). Stash the handle for inject::macos_inject, then trigger the

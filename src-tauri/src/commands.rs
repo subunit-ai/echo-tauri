@@ -86,9 +86,10 @@ pub fn do_start(app: &AppHandle) {
     if mode == "subunit" {
         std::thread::spawn(move || crate::http::prewarm(&endpoint));
     }
-    if lock {
-        *state.target.lock() = Some(crate::inject::capture_active_window());
-    }
+    // ALWAYS capture the focused window — Auto-Mode picks the cleanup style
+    // from it. Re-focusing on paste still happens only with target_lock on
+    // (deliver() gates that internally).
+    *state.target.lock() = Some(crate::inject::capture_active_window());
     // Wait for the recorder to actually open the mic. A failure here (no device /
     // busy / permission) must surface as an error — never a phantom "recording"
     // state where the user talks into nothing.
@@ -131,6 +132,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     emit_state(app, EngineState::Transcribing, None);
 
+    // Latency measurement system: t_total spans recorder-stop → text delivered.
+    // Per-phase numbers (encode/stt from the engine, cleanup/inject here) are
+    // logged as ONE greppable line and stored with the history entry, so we can
+    // iterate on latency against real field data instead of feelings.
+    let t_total = std::time::Instant::now();
+
     // Cloud path: refresh the access token if it's expired before we call out.
     if state.config.lock().mode == "subunit" {
         crate::auth::ensure_fresh(app);
@@ -147,16 +154,25 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // The cleanup style (long-form > auto-mode > config) is known BEFORE we call
     // out — the target window was captured at record-start — so it can ride along
     // on the transcribe request (combined transcribe+cleanup, one round trip less).
-    let title = state
-        .target
-        .lock()
-        .as_ref()
-        .map(|t| t.title.clone())
-        .unwrap_or_default();
+    let (app_name, title) = {
+        let t = state.target.lock();
+        (
+            t.as_ref().map(|t| t.app.clone()).unwrap_or_default(),
+            t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+        )
+    };
     let style = if is_long {
         cfg.long_form_cleanup_style.clone()
     } else if cfg.cleanup_auto_mode {
-        crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
+        let (style, source) = crate::auto_mode::pick_style(
+            &app_name,
+            &title,
+            &cfg.auto_mode_overrides,
+            &cfg.cleanup_style,
+        );
+        // App name only at info (titles can carry document names → debug).
+        log::info!("auto-mode: style={style} source={source} app=\"{app_name}\"");
+        style
     } else {
         cfg.cleanup_style.clone()
     };
@@ -201,7 +217,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     // Post-process: prefer the server-side cleanup from the combined round trip;
     // fall back to the separate /v1/cleanup call (old server, local engine, or
-    // long-form). Then DACH formatting. "raw" = passthrough.
+    // long-form). Then DACH formatting. "raw" = passthrough. cleanup_ms times
+    // only the separate call — the inline path already sits inside stt_ms.
+    let t_cleanup = std::time::Instant::now();
     let mut text = match result.cleaned_text {
         Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
         _ if cfg.cleanup_enabled && style != "raw" => {
@@ -212,11 +230,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     if cfg.dach_format_enabled {
         text = crate::dach::dach_format(&text);
     }
+    let cleanup_ms = t_cleanup.elapsed().as_millis() as u64;
     let result = TranscriptResult {
         text,
         quality_mode: result.quality_mode,
         segments: Vec::new(),
         cleaned_text: None,
+        timings: result.timings,
     };
 
     // The recording had audio but transcribed to nothing (silence / a mic that
@@ -236,6 +256,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // "Konsole als Ziel": the transcript belongs to the Prompt Console, not the
     // app behind. Still copy it so a manual paste works everywhere. Otherwise:
     // paste-back into the captured target window (clipboard + paste per config).
+    let t_inject = std::time::Instant::now();
     if cfg.prompt_console_as_target {
         if let Err(e) = crate::inject::set_clipboard(&result.text) {
             log::warn!("clipboard failed: {e}");
@@ -244,6 +265,18 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
         log::warn!("inject failed: {e}");
     }
+    let inject_ms = t_inject.elapsed().as_millis() as u64;
+
+    // The one latency line we iterate against (counts only — never content).
+    let total_ms = t_total.elapsed().as_millis() as u64;
+    log::info!(
+        "latency: total={total_ms}ms encode={}ms stt={}ms cleanup={cleanup_ms}ms inject={inject_ms}ms \
+         tier={} style={style} audio={duration_s:.1}s chars={}",
+        result.timings.encode_ms,
+        result.timings.stt_ms,
+        result.quality_mode,
+        result.text.chars().count()
+    );
 
     // Best-effort push to the Synapse knowledge base (detached so the up-to-5s
     // round-trip never delays the user). No-op unless synapse_save_enabled.
@@ -257,36 +290,38 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    // Stats + history.
-    {
+    // Stats (config) + history/meetings (SQLite store).
+    let (history_enabled, history_size) = {
         let mut c = state.config.lock();
         c.total_transcriptions += 1;
         c.total_audio_seconds += duration_s;
-        if c.history_enabled && !result.text.trim().is_empty() {
-            let entry = serde_json::json!({
-                "text": result.text,
-                "quality_mode": result.quality_mode,
-                "ts": now,
-            });
-            c.history.insert(0, entry);
-            let max = c.history_size.max(0) as usize;
-            if c.history.len() > max {
-                c.history.truncate(max);
-            }
-        }
-        if is_long && !result.text.trim().is_empty() {
-            let m = serde_json::json!({
-                "ts": now,
-                "text": result.text,
-                "quality_mode": result.quality_mode,
-                "duration_s": duration_s as i64,
-            });
-            c.meetings.insert(0, m);
-            if c.meetings.len() > 100 {
-                c.meetings.truncate(100);
-            }
-        }
         let _ = c.save();
+        (c.history_enabled, c.history_size.max(0) as usize)
+    };
+    if history_enabled && !result.text.trim().is_empty() {
+        let entry = serde_json::json!({
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "ts": now,
+            // Latency breakdown + applied style — the History UI shows them and
+            // we mine real-world numbers from them.
+            "latency_ms": total_ms,
+            "stt_ms": result.timings.stt_ms,
+            "cleanup_ms": cleanup_ms,
+            "style": style,
+            "duration_s": duration_s,
+        });
+        crate::store::add_history(&entry, history_size);
+        use tauri::Emitter;
+        let _ = app.emit("echo://history-changed", ());
+    }
+    if is_long && !result.text.trim().is_empty() {
+        crate::store::add_meeting(&serde_json::json!({
+            "ts": now,
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "duration_s": duration_s as i64,
+        }));
     }
 
     // Long-form diarization: detached (can take up to ~120s) so it never delays
@@ -300,20 +335,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 if let Some(speaker_text) =
                     crate::diarize::speaker_transcript(&cfg2, wav, &segments)
                 {
-                    let state = app2.state::<AppState>();
-                    {
-                        let mut c = state.config.lock();
-                        if let Some(m) = c
-                            .meetings
-                            .iter_mut()
-                            .find(|m| m.get("ts").and_then(|v| v.as_u64()) == Some(now))
-                        {
-                            if let Some(obj) = m.as_object_mut() {
-                                obj.insert("speaker_text".into(), serde_json::json!(speaker_text));
-                            }
-                        }
-                        let _ = c.save();
-                    }
+                    crate::store::update_meeting_by_ts(now as i64, "speaker_text", &speaker_text);
                     let _ = app2.emit("echo://meetings-updated", ());
                 }
             });
@@ -398,26 +420,37 @@ pub fn open_external(url: String) {
 
 /// Delete one history entry by index (newest = 0), then persist.
 #[tauri::command]
-pub fn delete_history_entry(state: State<'_, AppState>, index: usize) -> Result<(), String> {
-    let cfg = {
-        let mut c = state.config.lock();
-        if index < c.history.len() {
-            c.history.remove(index);
-        }
-        c.clone()
-    };
-    cfg.save().map_err(|e| e.to_string())
+pub fn delete_history_entry(id: i64) {
+    crate::store::delete_history(id);
 }
 
-/// Clear the whole transcription history, then persist.
+/// Clear the whole transcription history.
 #[tauri::command]
-pub fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
-    let cfg = {
-        let mut c = state.config.lock();
-        c.history.clear();
-        c.clone()
-    };
-    cfg.save().map_err(|e| e.to_string())
+pub fn clear_history() {
+    crate::store::clear_history();
+}
+
+/// Newest-first history page from the store. `query` = case-insensitive
+/// substring search on the transcript text; empty = everything.
+#[tauri::command]
+pub fn history_list(query: Option<String>, limit: Option<u32>, offset: Option<u32>) -> Vec<serde_json::Value> {
+    crate::store::list_history(
+        query.as_deref().unwrap_or(""),
+        limit.unwrap_or(200).min(1000),
+        offset.unwrap_or(0),
+    )
+}
+
+/// Total number of stored history entries (Home stat card).
+#[tauri::command]
+pub fn history_count() -> i64 {
+    crate::store::count_history()
+}
+
+/// All stored meetings, newest first (each with its store `id`).
+#[tauri::command]
+pub fn meetings_list() -> Vec<serde_json::Value> {
+    crate::store::list_meetings()
 }
 
 /// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
@@ -444,7 +477,14 @@ pub(crate) fn orb_quick_json(c: &Config) -> serde_json::Value {
     serde_json::json!({
         "mode": mode,
         "language": c.language,
-        "cleanup": if c.cleanup_enabled { c.cleanup_style.clone() } else { "off".to_string() },
+        // off | auto (style follows the focused app) | a concrete style.
+        "cleanup": if !c.cleanup_enabled {
+            "off".to_string()
+        } else if c.cleanup_auto_mode {
+            "auto".to_string()
+        } else {
+            c.cleanup_style.clone()
+        },
     })
 }
 
@@ -542,9 +582,15 @@ pub fn orb_set(
                 c.language = value.clone();
             }
             ("cleanup", "off") => c.cleanup_enabled = false,
+            // Auto-Mode: cleanup on, style picked per focused app/window.
+            ("cleanup", "auto") => {
+                c.cleanup_enabled = true;
+                c.cleanup_auto_mode = true;
+            }
             ("cleanup", "prompt") | ("cleanup", "email") | ("cleanup", "slack")
             | ("cleanup", "formal") => {
                 c.cleanup_enabled = true;
+                c.cleanup_auto_mode = false; // a concrete pick overrides Auto
                 c.cleanup_style = value.clone();
             }
             _ => return Err(format!("unknown orb setting {which}={value}")),
@@ -578,17 +624,9 @@ pub fn hardware_info() -> crate::hardware::HardwareInfo {
 /// the styled text; the frontend shows it without overwriting the raw transcript.
 /// Refreshes the cloud token first since meetings can sit for a while.
 #[tauri::command]
-pub fn process_meeting(app: AppHandle, index: usize, style: String) -> Result<String, String> {
+pub fn process_meeting(app: AppHandle, id: i64, style: String) -> Result<String, String> {
     let state = app.state::<AppState>();
-    let text = {
-        let c = state.config.lock();
-        c.meetings
-            .get(index)
-            .and_then(|m| m.get("text"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| "meeting not found".to_string())?
-    };
+    let text = crate::store::meeting_text(id).ok_or_else(|| "meeting not found".to_string())?;
     if text.trim().is_empty() {
         return Err("empty transcript".to_string());
     }
@@ -742,23 +780,13 @@ pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    {
-        let mut c = state.config.lock();
-        if !result.text.trim().is_empty() {
-            c.meetings.insert(
-                0,
-                serde_json::json!({
-                    "ts": now,
-                    "text": result.text,
-                    "quality_mode": result.quality_mode,
-                    "duration_s": duration_s as i64,
-                }),
-            );
-            if c.meetings.len() > 100 {
-                c.meetings.truncate(100);
-            }
-        }
-        let _ = c.save();
+    if !result.text.trim().is_empty() {
+        crate::store::add_meeting(&serde_json::json!({
+            "ts": now,
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "duration_s": duration_s as i64,
+        }));
     }
     let _ = app.emit("echo://meetings-updated", ());
     log::info!("meeting recording stopped + transcribed ({duration_s:.0}s)");

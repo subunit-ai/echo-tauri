@@ -65,6 +65,16 @@ pub fn list_models() -> Vec<ModelInfo> {
         .collect()
 }
 
+/// Whether a model is fully on disk (same >1 MB sanity check the fetcher and
+/// `list_models` use — a zero-byte aborted download doesn't count). Used by the
+/// cloud→local fallback, which must never trigger a download mid-dictation.
+#[cfg_attr(not(feature = "local-whisper"), allow(dead_code))]
+pub fn is_downloaded(model: &str) -> bool {
+    fs::metadata(model_path(model))
+        .map(|m| m.len() > 1_000_000)
+        .unwrap_or(false)
+}
+
 pub fn delete(model: &str) -> anyhow::Result<()> {
     let p = model_path(model);
     if p.exists() {

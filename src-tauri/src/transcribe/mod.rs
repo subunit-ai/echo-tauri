@@ -37,6 +37,20 @@ pub struct TranscriptResult {
     /// server returned it; `None` → the caller runs its own cleanup call.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cleaned_text: Option<String>,
+    /// Engine-phase latency (encode/STT). The full end-to-end breakdown is
+    /// assembled in `do_transcribe` and logged + stored with the history entry —
+    /// the measurement system we iterate latency work against.
+    pub timings: Timings,
+}
+
+/// Per-phase latency of one transcription, in milliseconds.
+#[derive(Debug, Clone, Copy, Serialize, Default)]
+pub struct Timings {
+    /// Downsample + Opus/WAV encode (cloud) — 0 for local.
+    pub encode_ms: u64,
+    /// Speech-to-text: cloud round-trip (upload + server STT, incl. the inline
+    /// cleanup when the combined round trip ran) or local inference.
+    pub stt_ms: u64,
 }
 
 /// Structured error across the IPC boundary so the frontend branches on `code`
@@ -77,21 +91,7 @@ pub fn run_opts(
     cleanup_style: Option<&str>,
 ) -> Result<TranscriptResult, EngineError> {
     match cfg.mode.as_str() {
-        "local" => {
-            #[cfg(feature = "local-whisper")]
-            {
-                local::run(cfg, samples, sample_rate, want_segments)
-                    .map_err(|e| EngineError::new("local", e.to_string()))
-            }
-            #[cfg(not(feature = "local-whisper"))]
-            {
-                let _ = (samples, sample_rate, want_segments);
-                Err(EngineError::new(
-                    "model_missing",
-                    "local engine not built — switch to Cloud",
-                ))
-            }
-        }
+        "local" => run_local(cfg, samples, sample_rate, want_segments),
         "subunit" => {
             // Downsample to 16 kHz BEFORE upload. Whisper runs at 16 kHz and the
             // server downsamples anything else with the same linear resample
@@ -100,18 +100,132 @@ pub fn run_opts(
             // a 48 kHz WAV is ~750 kbit/s, so a 70 s dictation = 6.5 MB and on a
             // modest uplink that dominated end-to-end latency (server transcribes
             // 70 s in ~3 s; the rest was the upload).
+            let t_enc = std::time::Instant::now();
             let (samples16, _) = downsample_to_16k(samples, sample_rate);
             // Then compress to Opus (~8× smaller again, ASR-transparent) when the
             // encoder is available; fall back to the 16 kHz WAV otherwise. The
             // server's ffmpeg path decodes the .ogg transparently.
             let (bytes, file_name) = encode_upload(&samples16)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
-            cloud::transcribe_subunit(cfg, bytes, file_name, want_segments, cleanup_style)
+            let encode_ms = t_enc.elapsed().as_millis() as u64;
+            let t_stt = std::time::Instant::now();
+            match cloud::transcribe_subunit(
+                cfg,
+                bytes,
+                file_name,
+                want_segments,
+                cleanup_style,
+            ) {
+                Ok(mut r) => {
+                    r.timings = Timings {
+                        encode_ms,
+                        stt_ms: t_stt.elapsed().as_millis() as u64,
+                    };
+                    Ok(r)
+                }
+                // Cloud unreachable/broken → transcribe on-device instead of failing,
+                // IF a local model is already on disk (never download mid-dictation).
+                // Auth/trial errors are NOT eligible: they need the user to see the
+                // login/paywall flow, not a silent workaround.
+                Err(e) if cloud_error_allows_fallback(&e) => {
+                    match local_fallback(cfg, samples, sample_rate, want_segments, &e) {
+                        Some(r) => Ok(r),
+                        None => Err(e),
+                    }
+                }
+                Err(e) => Err(e),
+            }
         }
         other => Err(EngineError::new(
             "unsupported",
             format!("mode `{other}` not implemented yet"),
         )),
+    }
+}
+
+/// On-device transcription (mode "local"), timed.
+fn run_local(
+    cfg: &Config,
+    samples: &[f32],
+    sample_rate: u32,
+    want_segments: bool,
+) -> Result<TranscriptResult, EngineError> {
+    #[cfg(feature = "local-whisper")]
+    {
+        let t_stt = std::time::Instant::now();
+        let mut r = local::run(cfg, samples, sample_rate, want_segments)
+            .map_err(|e| EngineError::new("local", e.to_string()))?;
+        r.timings = Timings {
+            encode_ms: 0,
+            stt_ms: t_stt.elapsed().as_millis() as u64,
+        };
+        Ok(r)
+    }
+    #[cfg(not(feature = "local-whisper"))]
+    {
+        let _ = (cfg, samples, sample_rate, want_segments);
+        Err(EngineError::new(
+            "model_missing",
+            "local engine not built — switch to Cloud",
+        ))
+    }
+}
+
+/// Cloud failures where falling back to the local engine is the right move:
+/// network problems and server-side errors. Auth ("auth") and billing
+/// ("trial_expired") must surface so the user can act on them.
+fn cloud_error_allows_fallback(e: &EngineError) -> bool {
+    matches!(e.code.as_str(), "network" | "server")
+}
+
+/// Try the on-device engine as a cloud fallback. Only when the build has the
+/// local engine AND the configured model is already downloaded — a dictation
+/// must never wait on a multi-GB model download. Returns None when ineligible
+/// or when local transcription also failed (the cloud error stays primary).
+fn local_fallback(
+    cfg: &Config,
+    samples: &[f32],
+    sample_rate: u32,
+    want_segments: bool,
+    cloud_err: &EngineError,
+) -> Option<TranscriptResult> {
+    #[cfg(feature = "local-whisper")]
+    {
+        if !crate::models::is_downloaded(&cfg.local_model) {
+            log::warn!(
+                "cloud failed ({}) and local model `{}` is not downloaded — no fallback",
+                cloud_err.code,
+                cfg.local_model
+            );
+            return None;
+        }
+        log::warn!(
+            "cloud failed ({}: {}) — falling back to local model `{}`",
+            cloud_err.code,
+            cloud_err.message,
+            cfg.local_model
+        );
+        let t_stt = std::time::Instant::now();
+        match local::run(cfg, samples, sample_rate, want_segments) {
+            Ok(mut r) => {
+                // Distinct tier so UI/history show this run came from the fallback.
+                r.quality_mode = "local-fallback".to_string();
+                r.timings = Timings {
+                    encode_ms: 0,
+                    stt_ms: t_stt.elapsed().as_millis() as u64,
+                };
+                Some(r)
+            }
+            Err(le) => {
+                log::warn!("local fallback also failed: {le}");
+                None
+            }
+        }
+    }
+    #[cfg(not(feature = "local-whisper"))]
+    {
+        let _ = (cfg, samples, sample_rate, want_segments, cloud_err);
+        None
     }
 }
 

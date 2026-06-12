@@ -130,6 +130,10 @@ pub struct Target {
     pub id: String,
     /// Window title (for Auto-Mode style selection). Best-effort.
     pub title: String,
+    /// Owning application name (for Auto-Mode). Best-effort; more stable than
+    /// the title — on macOS the title needs the Screen-Recording permission,
+    /// the app name doesn't.
+    pub app: String,
 }
 
 /// Privacy-safe one-liner about the text we're about to inject — COUNTS ONLY,
@@ -145,7 +149,6 @@ fn text_stats(text: &str) -> String {
 }
 
 /// Truncate a window title for logging (titles can carry document names).
-#[cfg_attr(target_os = "macos", allow(dead_code))] // macOS capture is a follow-up
 fn short_title(title: &str) -> String {
     let t: String = title.chars().take(80).collect();
     if title.chars().count() > 80 {
@@ -166,15 +169,23 @@ pub fn capture_active_window() -> Target {
             if out.status.success() {
                 let id = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !id.is_empty() {
-                    let title = std::process::Command::new("xdotool")
-                        .args(["getwindowname", &id])
-                        .output()
-                        .ok()
-                        .filter(|o| o.status.success())
-                        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                        .unwrap_or_default();
-                    log::debug!("capture: linux target id={id} title=\"{}\"", short_title(&title));
-                    return Target { id, title };
+                    let run = |args: &[&str]| {
+                        std::process::Command::new("xdotool")
+                            .args(args)
+                            .output()
+                            .ok()
+                            .filter(|o| o.status.success())
+                            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                            .unwrap_or_default()
+                    };
+                    let title = run(&["getwindowname", &id]);
+                    // WM_CLASS class name ≈ application ("Slack", "code", …).
+                    let app = run(&["getwindowclassname", &id]);
+                    log::debug!(
+                        "capture: linux target id={id} app=\"{app}\" title=\"{}\"",
+                        short_title(&title)
+                    );
+                    return Target { id, title, app };
                 }
             }
         }
@@ -196,14 +207,80 @@ pub fn capture_active_window() -> Target {
                 let id = (hwnd.0 as isize).to_string();
                 log::debug!("capture: win target hwnd={id} title=\"{}\"", short_title(&title));
                 // Encode the HWND pointer as a decimal string so Target stays Send.
-                return Target { id, title };
+                // App name: Windows titles conventionally end in "… - <App>", which
+                // Auto-Mode's title matching already covers.
+                return Target { id, title, app: String::new() };
             }
         }
         log::debug!("capture: no foreground window (win)");
     }
-    // macOS target capture is a follow-up (needs core-graphics / AX). The hotkey
-    // flow doesn't steal focus, so paste lands correctly there without it.
+    #[cfg(target_os = "macos")]
+    {
+        // Frontmost app + window via the CGWindowList — no focus stealing, no
+        // permission prompt. `kCGWindowOwnerName` (the app) is always readable;
+        // `kCGWindowName` (the title) only with the Screen-Recording permission,
+        // so Auto-Mode matching leans on the app name here. `id` stays empty:
+        // the hotkey flow never steals focus on macOS, so there is nothing to
+        // re-focus on paste.
+        let (app, title) = macos_front_window();
+        if !app.is_empty() || !title.is_empty() {
+            log::debug!(
+                "capture: macos target app=\"{app}\" title=\"{}\"",
+                short_title(&title)
+            );
+            return Target { id: String::new(), title, app };
+        }
+        log::debug!("capture: no front window (macos)");
+    }
     Target::default()
+}
+
+/// macOS: (app name, window title) of the frontmost normal window — the first
+/// layer-0 entry in the front-to-back CGWindowList, skipping Echo's own
+/// always-on-top windows by owner name (orb overlay / prompt console are on
+/// higher layers anyway; the main window is layer 0, hence the name check).
+#[cfg(target_os = "macos")]
+fn macos_front_window() -> (String, String) {
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::number::CFNumber;
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        copy_window_info, kCGNullWindowID, kCGWindowListExcludeDesktopElements,
+        kCGWindowListOptionOnScreenOnly,
+    };
+
+    let Some(list) = copy_window_info(
+        kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements,
+        kCGNullWindowID,
+    ) else {
+        return (String::new(), String::new());
+    };
+    for i in 0..list.len() {
+        let Some(item) = list.get(i) else { continue };
+        let dict: CFDictionary<CFString, CFType> =
+            unsafe { CFDictionary::wrap_under_get_rule(*item as *const _) };
+        let str_of = |key: &'static str| -> String {
+            dict.find(CFString::from_static_string(key))
+                .and_then(|v| v.downcast::<CFString>())
+                .map(|s| s.to_string())
+                .unwrap_or_default()
+        };
+        let layer = dict
+            .find(CFString::from_static_string("kCGWindowLayer"))
+            .and_then(|v| v.downcast::<CFNumber>())
+            .and_then(|n| n.to_i64())
+            .unwrap_or(-1);
+        if layer != 0 {
+            continue; // menu bar, dock, overlays — not a normal app window
+        }
+        let app = str_of("kCGWindowOwnerName");
+        if app == "Echo" {
+            continue; // never target ourselves (main window is layer 0)
+        }
+        return (app, str_of("kCGWindowName"));
+    }
+    (String::new(), String::new())
 }
 
 fn focus(target: &Target) {
@@ -640,5 +717,18 @@ mod win {
             let _ = unsafe { SendInput(&undo, core::mem::size_of::<INPUT>() as i32) };
         }
         anyhow::bail!("SendInput injected {n}/{} events (partial — erased)", inputs.len());
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests_macos {
+    /// Live smoke against the real CGWindowList — asserts nothing about content
+    /// (depends on the desktop), only that the call works and returns cleanly.
+    /// Run locally with `cargo test front_window -- --nocapture` to see the
+    /// captured frontmost app/title.
+    #[test]
+    fn front_window_smoke() {
+        let (app, title) = super::macos_front_window();
+        println!("MACOS_CAPTURE app=\"{app}\" title=\"{title}\"");
     }
 }

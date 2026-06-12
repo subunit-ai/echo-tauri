@@ -14,6 +14,7 @@ import {
   SPARKLES_PATHS,
   STAR4_PATHS,
   TERMINAL_PATHS,
+  WAND_PATHS,
   StrokeIcon,
 } from "../components/icons";
 import {
@@ -665,6 +666,13 @@ export function Orb() {
               label={t("common.off")}
               active={quick.cleanup === "off"}
               onClick={pick("cleanup", "off")}
+            />
+            {/* Auto — style follows the focused app (Auto-Mode) */}
+            <Row
+              icon={WAND_PATHS}
+              label={t("settings.autoMode")}
+              active={quick.cleanup === "auto"}
+              onClick={pick("cleanup", "auto")}
             />
             <Row
               icon={TERMINAL_PATHS}

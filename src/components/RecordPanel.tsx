@@ -10,6 +10,7 @@ export function RecordPanel() {
   const [state, setState] = useState<EngineState>("idle");
   const [detail, setDetail] = useState("");
   const [last, setLast] = useState("");
+  const [lastTier, setLastTier] = useState("");
   const [level, setLevel] = useState(0);
 
   const LABEL: Record<EngineState, string> = {
@@ -26,7 +27,10 @@ export function RecordPanel() {
         setState(p.state);
         setDetail(p.detail ?? "");
       }),
-      onTranscript((p) => setLast(p.text)),
+      onTranscript((p) => {
+        setLast(p.text);
+        setLastTier(p.quality_mode);
+      }),
     ];
     return () => {
       subs.forEach((s) => s.then((un) => un()));
@@ -96,6 +100,13 @@ export function RecordPanel() {
       {last && (
         <div className="history-item" style={{ marginTop: 14, marginBottom: 0 }}>
           <div className="text">{last}</div>
+          {/* The cloud was unreachable and the on-device engine stepped in —
+              say so, otherwise a degraded-quality transcript looks like a bug. */}
+          {lastTier === "local-fallback" && (
+            <div className="meta" style={{ marginTop: 6, color: "var(--muted)" }}>
+              {t("record.fallbackNote")}
+            </div>
+          )}
         </div>
       )}
     </div>
