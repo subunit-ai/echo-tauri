@@ -564,10 +564,19 @@ export function Settings() {
               <ColorSwatch value={c.orb_color_error} onChange={(v) => set("orb_color_error", v)} />
             </Row>
             <Row name={t("settings.orbPosition")}>
+              {/* After a drag the saved value is "custom-<x>-<y>", which matches
+                  no named option — without a visible "custom" entry the select
+                  rendered blank/first-option and re-picking an anchor felt like
+                  it did nothing. Show the truth, and make every named pick fire. */}
               <Sel
-                value={c.orb_position}
-                onChange={(v) => set("orb_position", v)}
+                value={c.orb_position.startsWith("custom") ? "custom" : c.orb_position}
+                onChange={(v) => {
+                  if (v !== "custom") set("orb_position", v);
+                }}
                 options={[
+                  ...(c.orb_position.startsWith("custom")
+                    ? [["custom", t("settings.posCustom")] as [string, string]]
+                    : []),
                   ["bottom-center", t("settings.posBottomCenter")],
                   ["bottom-left", t("settings.posBottomLeft")],
                   ["bottom-right", t("settings.posBottomRight")],
@@ -577,18 +586,20 @@ export function Settings() {
                 ]}
               />
             </Row>
-            <Row name={t("settings.orbSize")}>
-              <Sel
-                value={String(c.orb_overlay_size)}
-                onChange={(v) => set("orb_overlay_size", parseFloat(v))}
-                options={[
-                  ["0.5", "0.5×"],
-                  ["1", "1×"],
-                  ["1.5", "1.5×"],
-                  ["2", "2×"],
-                  ["3", "3×"],
-                ]}
-              />
+            <Row name={t("settings.orbSize")} hint={t("settings.orbSizeHint")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={3}
+                  step={0.05}
+                  value={c.orb_overlay_size ?? 1}
+                  onChange={(e) => set("orb_overlay_size", parseFloat(e.target.value))}
+                />
+                <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 42, fontSize: "0.8rem", opacity: 0.8 }}>
+                  {(c.orb_overlay_size ?? 1).toFixed(2)}×
+                </span>
+              </div>
             </Row>
             <Row name={t("settings.orbSpeed")} hint={t("settings.orbSpeedHint")}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

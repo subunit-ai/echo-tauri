@@ -818,10 +818,21 @@ export function Orb() {
   // is the ORB square's top-left (window + gutters) — the same coordinate the
   // pre-gutter builds saved, so old positions keep working. Debounced so we
   // save once the drag settles, not on every intermediate move event.
+  //
+  // Programmatic anchor placements (Rust position_window) announce themselves
+  // via `echo://orb-anchored` BEFORE moving — those moves must NOT be saved,
+  // or picking "bottom-center" in Settings would instantly be overwritten with
+  // a "custom-…" position and the named anchor would never stick.
   useEffect(() => {
     const win = getCurrentWindow();
     let timer: number | undefined;
+    let suppressUntil = 0;
+    const unAnchored = listen("echo://orb-anchored", () => {
+      suppressUntil = Date.now() + 800;
+      if (timer) window.clearTimeout(timer); // drop a pending drag-save too
+    });
     const un = win.onMoved(() => {
+      if (Date.now() < suppressUntil) return;
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(async () => {
         try {
@@ -836,6 +847,7 @@ export function Orb() {
     return () => {
       if (timer) window.clearTimeout(timer);
       un.then((f) => f());
+      unAnchored.then((f) => f());
     };
   }, []);
 

@@ -233,12 +233,19 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let (w, h) = window_size(dim);
 
     // Drag-set custom position: "custom-<x>-<y>" (orb top-left, logical px).
+    // x can itself be negative (monitor left of primary → "custom--12-300"), so
+    // a fixed split on the first '-' mis-parses; try every '-' as the separator
+    // until both halves parse as numbers.
     let custom = anchor.strip_prefix("custom-").and_then(|rest| {
-        let mut it = rest.splitn(2, '-');
-        match (it.next()?.parse::<f64>(), it.next()?.parse::<f64>()) {
-            (Ok(x), Ok(y)) => Some((x, y)),
-            _ => None,
-        }
+        rest.match_indices('-').find_map(|(i, _)| {
+            if i == 0 {
+                return None; // leading '-' is x's sign, not the separator
+            }
+            match (rest[..i].parse::<f64>(), rest[i + 1..].parse::<f64>()) {
+                (Ok(x), Ok(y)) => Some((x, y)),
+                _ => None,
+            }
+        })
     });
 
     let (orb_x, orb_y) = custom.unwrap_or_else(|| {
@@ -267,5 +274,10 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let y = (orb_y - GUTTER_TOP)
         .min(mpos.y + msize.height - h)
         .max(mpos.y);
+    // Tell the orb this move is OURS (anchor placement), not a user drag — its
+    // onMoved handler would otherwise debounce-save the new spot as "custom-…",
+    // silently overwriting a freshly-picked named anchor like "bottom-center"
+    // (the dropdown choice never stuck).
+    let _ = win.emit("echo://orb-anchored", ());
     let _ = win.set_position(LogicalPosition::new(x, y));
 }
