@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { keyName, modifierName, parseCombo } from "../../lib/hotkeys";
@@ -19,10 +20,12 @@ export function Finale({ finish }: SceneProps) {
   const { config } = useConfig();
   const [phase, setPhase] = useState<Phase>("idle");
   const [text, setText] = useState("");
+  const [partial, setPartial] = useState("");
   const [attempted, setAttempted] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  const hadPartial = useRef(false);
 
   const combo = useMemo(() => parseCombo(config?.hotkey ?? ""), [config?.hotkey]);
   const comboKey = combo.find((k) => !["ctrl", "shift", "alt", "cmd"].includes(k)) ?? "";
@@ -49,13 +52,19 @@ export function Finale({ finish }: SceneProps) {
       e.preventDefault();
       setErrMsg(null);
       setText("");
+      setPartial("");
+      hadPartial.current = false;
       setPhase("recording");
       invoke("start_recording").catch(() => {});
+      // Live partials: the growing recording is re-transcribed in the
+      // background and streams into the card while you're still speaking.
+      invoke("intro_stream_start").catch(() => {});
     };
 
     const stop = async () => {
       setPhase("transcribing");
       setAttempted(true);
+      invoke("intro_stream_stop").catch(() => {});
       try {
         const result = await invoke<string>("transcribe_preview");
         setText(result);
@@ -96,9 +105,23 @@ export function Finale({ finish }: SceneProps) {
     };
   }, [comboKey, comboMods, t]);
 
-  // Never strand a recording when the scene goes away.
+  // Live partials stream in while recording (ignored in any other phase —
+  // a request that was in flight on release must not overwrite the final).
+  useEffect(() => {
+    const sub = listen<string>("echo://intro-partial", (e) => {
+      if (phaseRef.current !== "recording") return;
+      hadPartial.current = true;
+      setPartial(e.payload);
+    });
+    return () => {
+      sub.then((un) => un());
+    };
+  }, []);
+
+  // Never strand a recording (or its partial stream) when the scene goes away.
   useEffect(
     () => () => {
+      invoke("intro_stream_stop").catch(() => {});
       if (phaseRef.current === "recording") {
         invoke("cancel_recording").catch(() => {});
       }
@@ -106,7 +129,9 @@ export function Finale({ finish }: SceneProps) {
     [],
   );
 
-  const typed = useTypewriter(phase === "done" ? text : "", { cps: 28 });
+  // Typewriter only when nothing streamed live — after watching your words
+  // appear in real time, re-typing the final text would feel like a rewind.
+  const typed = useTypewriter(phase === "done" && !hadPartial.current ? text : "", { cps: 28 });
   const pressedSet = useMemo(
     () => (phase === "recording" ? new Set(combo) : new Set<string>()),
     [phase, combo],
@@ -129,16 +154,32 @@ export function Finale({ finish }: SceneProps) {
         {t("intro.finaleHint2")}
       </p>
       <VoiceCanvas active={phase === "recording"} height={96} />
-      <div className={`intro-transcript ${text ? "" : "is-empty"}`}>
-        {phase === "recording"
-          ? t("intro.finaleListening")
-          : phase === "transcribing"
-            ? t("intro.finaleTranscribing")
-            : phase === "done"
-              ? typed.shown
-              : (errMsg ?? "…")}
+      <div className={`intro-transcript ${text || partial ? "" : "is-empty"}`}>
+        {phase === "recording" ? (
+          partial ? (
+            <span className="intro-caret">{partial}</span>
+          ) : (
+            t("intro.finaleListening")
+          )
+        ) : phase === "transcribing" ? (
+          // Keep the last live partial on screen while the final lands —
+          // the text "settles" instead of blinking through a status line.
+          partial ? (
+            <span className="intro-caret">{partial}</span>
+          ) : (
+            t("intro.finaleTranscribing")
+          )
+        ) : phase === "done" ? (
+          hadPartial.current ? (
+            text
+          ) : (
+            typed.shown
+          )
+        ) : (
+          (errMsg ?? "…")
+        )}
       </div>
-      {phase === "done" && typed.done && (
+      {phase === "done" && (hadPartial.current || typed.done) && (
         <p className="intro-hint intro-fade-late">{t("intro.finaleSuccess")}</p>
       )}
       {phase === "error" && <p className="intro-hint">{t("intro.finaleSkipHint")}</p>}

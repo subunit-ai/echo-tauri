@@ -152,6 +152,8 @@ pub fn run() {
             commands::meet_local_list,
             commands::meet_local_get,
             intro::transcribe_preview,
+            intro::intro_stream_start,
+            intro::intro_stream_stop,
             hotkey::hotkey_set_suspended,
         ])
         .setup(|app| {
