@@ -71,9 +71,7 @@
     "localTitle": "محلي",
     "localSub": "خاص 100%",
     "cloudTitle": "سحابي",
-    "cloudSub": "GDPR · خوادم ألمانيا",
-    "superfastTitle": "فائق السرعة",
-    "superfastSub": "سريع جدًا"
+    "cloudSub": "GDPR · خوادم ألمانيا"
   },
   "record": {
     "stateIdle": "جاهز",

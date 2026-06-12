@@ -15,8 +15,8 @@
     "hotkeyTitle": "Your hotkey",
     "hotkeyBody": "Hold your hotkey and speak. Releasing it finishes — the text lands straight in the active window.",
     "hotkeyChangeable": "Changeable any time in Settings.",
-    "modeTitle": "Local, Cloud or Superfast?",
-    "modeBody": "Local = 100% private · Cloud = GDPR servers · Superfast = ultra-fast."
+    "modeTitle": "Local or Cloud?",
+    "modeBody": "Local = 100% private · Cloud = GDPR servers."
   },
   "overlay": {
     "recording": "Recording",
@@ -74,9 +74,7 @@
     "localTitle": "Local",
     "localSub": "100% private",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · DE servers",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Ultra-fast"
+    "cloudSub": "GDPR · DE servers"
   },
   "record": {
     "stateIdle": "Ready",
@@ -232,7 +230,7 @@
     "language": "Language",
     "languageHint": "Interface language",
     "mode": "Mode",
-    "modeHint": "Local (private) · Cloud (GDPR) · Superfast",
+    "modeHint": "Local (private) · Cloud (GDPR)",
     "localModel": "Local model",
     "localModelHint": "Click to select + download the model (go big with a GPU — large-v3-turbo).",
     "transcriptionLanguage": "Transcription language",

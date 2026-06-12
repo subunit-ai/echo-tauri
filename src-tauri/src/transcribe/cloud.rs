@@ -17,7 +17,6 @@ pub fn transcribe_subunit(
     cfg: &Config,
     audio: Vec<u8>,
     file_name: &'static str,
-    superfast: bool,
     want_segments: bool,
     cleanup_style: Option<&str>,
 ) -> Result<TranscriptResult, EngineError> {
@@ -43,9 +42,6 @@ pub fn transcribe_subunit(
         let prompt = vocab::vocab_prompt(cfg);
         if !prompt.is_empty() {
             form = form.text("prompt", prompt);
-        }
-        if superfast {
-            form = form.text("provider", "superfast");
         }
         if want_segments {
             form = form.text("with_segments", "true");

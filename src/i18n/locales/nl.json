@@ -71,9 +71,7 @@
     "localTitle": "Lokaal",
     "localSub": "100% privé",
     "cloudTitle": "Cloud",
-    "cloudSub": "AVG · DE-servers",
-    "superfastTitle": "Supersnel",
-    "superfastSub": "Ultrasnel"
+    "cloudSub": "AVG · DE-servers"
   },
   "record": {
     "stateIdle": "Klaar",

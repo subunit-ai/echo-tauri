@@ -71,9 +71,7 @@
     "localTitle": "Lokalt",
     "localSub": "100 % privat",
     "cloudTitle": "Moln",
-    "cloudSub": "GDPR · DE-servrar",
-    "superfastTitle": "Supersnabbt",
-    "superfastSub": "Blixtsnabbt"
+    "cloudSub": "GDPR · DE-servrar"
   },
   "record": {
     "stateIdle": "Redo",

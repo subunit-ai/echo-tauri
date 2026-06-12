@@ -71,9 +71,7 @@
     "localTitle": "ローカル",
     "localSub": "完全プライベート",
     "cloudTitle": "クラウド",
-    "cloudSub": "GDPR · DE サーバー",
-    "superfastTitle": "超高速",
-    "superfastSub": "圧倒的スピード"
+    "cloudSub": "GDPR · DE サーバー"
   },
   "record": {
     "stateIdle": "準備完了",

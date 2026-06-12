@@ -440,13 +440,7 @@ pub fn set_orb_position(app: AppHandle, state: State<'_, AppState>, x: f64, y: f
 
 /// Current orb-satellite display state (UI mode / language / cleanup).
 pub(crate) fn orb_quick_json(c: &Config) -> serde_json::Value {
-    let mode = if c.mode == "local" {
-        "local"
-    } else if c.cloud_superfast {
-        "superfast"
-    } else {
-        "cloud"
-    };
+    let mode = if c.mode == "local" { "local" } else { "cloud" };
     serde_json::json!({
         "mode": mode,
         "language": c.language,
@@ -471,17 +465,13 @@ pub fn orb_cycle(
     let cfg = {
         let mut c = state.config.lock();
         match which.as_str() {
-            // local → cloud → superfast → local
+            // local → cloud → local
             "mode" => {
                 if c.mode == "local" {
                     c.mode = "subunit".to_string();
-                    c.cloud_superfast = false;
                     c.last_cloud_mode = "subunit".to_string();
-                } else if !c.cloud_superfast {
-                    c.cloud_superfast = true;
                 } else {
                     c.mode = "local".to_string();
-                    c.cloud_superfast = false;
                 }
             }
             // de → en → auto → de
@@ -541,14 +531,12 @@ pub fn orb_set(
         match (which.as_str(), value.as_str()) {
             ("mode", "local") => {
                 c.mode = "local".to_string();
-                c.cloud_superfast = false;
             }
-            ("mode", "cloud") | ("mode", "superfast") => {
+            ("mode", "cloud") => {
                 if c.mode == "local" {
                     c.mode = "subunit".to_string();
                 }
                 c.last_cloud_mode = c.mode.clone();
-                c.cloud_superfast = value == "superfast";
             }
             ("language", "de") | ("language", "en") | ("language", "auto") => {
                 c.language = value.clone();

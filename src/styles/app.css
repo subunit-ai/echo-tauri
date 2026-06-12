@@ -327,11 +327,11 @@ button {
   margin-top: 6px;
 }
 
-/* ---------- BigModeSwitch (LOCAL / CLOUD / SUPERFAST) ---------- */
+/* ---------- BigModeSwitch (LOCAL / CLOUD) ---------- */
 .mode-switch {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   /* 6px padding + 6px gap MUST match .mode-ind's inset/width math and the
      translateX step in BigModeSwitch.tsx — drift here = a misaligned pill.
      NO backdrop-filter: inside Settings the switch sits in a .card that
@@ -397,7 +397,7 @@ button {
   top: 6px;
   bottom: 6px;
   left: 6px;
-  width: calc((100% - 24px) / 3);
+  width: calc((100% - 18px) / 2);
   border-radius: 13px;
   transition: transform 0.4s var(--ease-spring), background 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out);
@@ -408,10 +408,6 @@ button {
 .mode-ind.cloud {
   background: linear-gradient(180deg, #5b8cff, #3b6ef0);
   box-shadow: 0 4px 14px rgba(59, 110, 240, 0.38);
-}
-.mode-ind.superfast {
-  background: linear-gradient(180deg, #ffbe57, #f5a623);
-  box-shadow: 0 4px 14px rgba(245, 166, 35, 0.38);
 }
 
 /* ---------- MeetLocal: Geräte-Scan (gate checklist) ---------- */

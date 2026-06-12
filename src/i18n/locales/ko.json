@@ -71,9 +71,7 @@
     "localTitle": "로컬",
     "localSub": "100% 비공개",
     "cloudTitle": "클라우드",
-    "cloudSub": "GDPR · 독일 서버",
-    "superfastTitle": "초고속",
-    "superfastSub": "매우 빠름"
+    "cloudSub": "GDPR · 독일 서버"
   },
   "record": {
     "stateIdle": "준비됨",

@@ -15,8 +15,8 @@
     "hotkeyTitle": "Tombol pintas Anda",
     "hotkeyBody": "Tahan tombol pintas lalu bicara. Lepaskan untuk menyelesaikan — teks langsung muncul di jendela aktif.",
     "hotkeyChangeable": "Bisa diubah kapan saja di Pengaturan.",
-    "modeTitle": "Lokal, Cloud, atau Superfast?",
-    "modeBody": "Lokal = 100% privat · Cloud = server GDPR · Superfast = ultra cepat."
+    "modeTitle": "Lokal atau Cloud?",
+    "modeBody": "Lokal = 100% privat · Cloud = server GDPR."
   },
   "overlay": {
     "recording": "Merekam",
@@ -71,9 +71,7 @@
     "localTitle": "Lokal",
     "localSub": "100% privat",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · server DE",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Ultra cepat"
+    "cloudSub": "GDPR · server DE"
   },
   "record": {
     "stateIdle": "Siap",
@@ -227,7 +225,7 @@
     "language": "Bahasa",
     "languageHint": "Bahasa antarmuka",
     "mode": "Mode",
-    "modeHint": "Lokal (privat) · Cloud (GDPR) · Superfast",
+    "modeHint": "Lokal (privat) · Cloud (GDPR)",
     "localModel": "Model lokal",
     "localModelHint": "Klik untuk memilih + mengunduh model (pakai yang besar jika ada GPU — large-v3-turbo).",
     "transcriptionLanguage": "Bahasa transkripsi",

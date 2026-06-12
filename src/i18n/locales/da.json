@@ -71,9 +71,7 @@
     "localTitle": "Lokal",
     "localSub": "100 % privat",
     "cloudTitle": "Sky",
-    "cloudSub": "GDPR · DE-servere",
-    "superfastTitle": "Lynhurtig",
-    "superfastSub": "Ultrahurtig"
+    "cloudSub": "GDPR · DE-servere"
   },
   "record": {
     "stateIdle": "Klar",

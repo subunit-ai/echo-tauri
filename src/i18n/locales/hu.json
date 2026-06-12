@@ -71,9 +71,7 @@
     "localTitle": "Helyi",
     "localSub": "100% privát",
     "cloudTitle": "Felhő",
-    "cloudSub": "GDPR · DE-szerverek",
-    "superfastTitle": "Szupergyors",
-    "superfastSub": "Villámgyors"
+    "cloudSub": "GDPR · DE-szerverek"
   },
   "record": {
     "stateIdle": "Kész",

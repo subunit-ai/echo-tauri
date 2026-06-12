@@ -71,9 +71,7 @@
     "localTitle": "লোকাল",
     "localSub": "১০০% প্রাইভেট",
     "cloudTitle": "ক্লাউড",
-    "cloudSub": "GDPR · DE সার্ভার",
-    "superfastTitle": "সুপারফাস্ট",
-    "superfastSub": "অতি দ্রুত"
+    "cloudSub": "GDPR · DE সার্ভার"
   },
   "record": {
     "stateIdle": "প্রস্তুত",

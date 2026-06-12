@@ -71,9 +71,7 @@
     "localTitle": "Lokalnie",
     "localSub": "100% prywatnie",
     "cloudTitle": "Chmura",
-    "cloudSub": "RODO · serwery DE",
-    "superfastTitle": "Superszybko",
-    "superfastSub": "Błyskawicznie"
+    "cloudSub": "RODO · serwery DE"
   },
   "record": {
     "stateIdle": "Gotowe",

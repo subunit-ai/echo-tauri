@@ -71,9 +71,7 @@
     "localTitle": "Локално",
     "localSub": "100% поверително",
     "cloudTitle": "Облак",
-    "cloudSub": "GDPR · сървъри в DE",
-    "superfastTitle": "Супербързо",
-    "superfastSub": "Свръхбързо"
+    "cloudSub": "GDPR · сървъри в DE"
   },
   "record": {
     "stateIdle": "Готово",

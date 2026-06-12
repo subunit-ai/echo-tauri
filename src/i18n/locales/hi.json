@@ -71,9 +71,7 @@
     "localTitle": "लोकल",
     "localSub": "100% निजी",
     "cloudTitle": "क्लाउड",
-    "cloudSub": "GDPR · DE सर्वर",
-    "superfastTitle": "सुपरफ़ास्ट",
-    "superfastSub": "बेहद तेज़"
+    "cloudSub": "GDPR · DE सर्वर"
   },
   "record": {
     "stateIdle": "तैयार",

@@ -15,8 +15,8 @@
     "hotkeyTitle": "Το πλήκτρο σας",
     "hotkeyBody": "Κρατήστε το πλήκτρο σας και μιλήστε. Με την απελευθέρωση ολοκληρώνεται — το κείμενο εμφανίζεται απευθείας στο ενεργό παράθυρο.",
     "hotkeyChangeable": "Αλλάζει ανά πάσα στιγμή στις Ρυθμίσεις.",
-    "modeTitle": "Τοπικά, Cloud ή Superfast;",
-    "modeBody": "Τοπικά = 100% ιδιωτικό · Cloud = διακομιστές GDPR · Superfast = εξαιρετικά γρήγορο."
+    "modeTitle": "Τοπικά ή Cloud;",
+    "modeBody": "Τοπικά = 100% ιδιωτικό · Cloud = διακομιστές GDPR."
   },
   "overlay": {
     "recording": "Εγγραφή",
@@ -71,9 +71,7 @@
     "localTitle": "Τοπικά",
     "localSub": "100% ιδιωτικό",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · διακομιστές DE",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Εξαιρετικά γρήγορο"
+    "cloudSub": "GDPR · διακομιστές DE"
   },
   "record": {
     "stateIdle": "Έτοιμο",
@@ -227,7 +225,7 @@
     "language": "Γλώσσα",
     "languageHint": "Γλώσσα διεπαφής",
     "mode": "Λειτουργία",
-    "modeHint": "Τοπικά (ιδιωτικό) · Cloud (GDPR) · Superfast",
+    "modeHint": "Τοπικά (ιδιωτικό) · Cloud (GDPR)",
     "localModel": "Τοπικό μοντέλο",
     "localModelHint": "Κάντε κλικ για επιλογή και λήψη του μοντέλου (επιλέξτε μεγάλο με GPU — large-v3-turbo).",
     "transcriptionLanguage": "Γλώσσα μεταγραφής",

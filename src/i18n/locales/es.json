@@ -71,9 +71,7 @@
     "localTitle": "Local",
     "localSub": "100 % privado",
     "cloudTitle": "Nube",
-    "cloudSub": "RGPD · servidores en DE",
-    "superfastTitle": "Superrápido",
-    "superfastSub": "Ultrarrápido"
+    "cloudSub": "RGPD · servidores en DE"
   },
   "record": {
     "stateIdle": "Listo",

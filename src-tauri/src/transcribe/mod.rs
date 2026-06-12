@@ -1,6 +1,6 @@
 //! Transcription dispatcher.
 //!
-//! Cloud (subunit, incl. the Groq-proxied "superfast") speaks the exact
+//! Cloud (subunit) speaks the exact
 //! `transcribe.subunit.ai/v1/transcribe` contract. Local (whisper.cpp via
 //! whisper-rs) is feature-gated behind `local-whisper`. These two are the only
 //! supported engines — config coerces any other mode to subunit on load.
@@ -106,7 +106,7 @@ pub fn run_opts(
             // server's ffmpeg path decodes the .ogg transparently.
             let (bytes, file_name) = encode_upload(&samples16)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
-            cloud::transcribe_subunit(cfg, bytes, file_name, cfg.cloud_superfast, want_segments, cleanup_style)
+            cloud::transcribe_subunit(cfg, bytes, file_name, want_segments, cleanup_style)
         }
         other => Err(EngineError::new(
             "unsupported",

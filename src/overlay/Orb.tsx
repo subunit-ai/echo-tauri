@@ -14,7 +14,6 @@ import {
   SPARKLES_PATHS,
   STAR4_PATHS,
   TERMINAL_PATHS,
-  ZAP_PATHS,
   StrokeIcon,
 } from "../components/icons";
 import {
@@ -57,7 +56,6 @@ const PANEL_W = GUTTER_X - GAP; // expanded island width — fills its gutter
 const MODE_COLOR: Record<string, string> = {
   local: "#22d3ee",
   cloud: "#5b9dff",
-  superfast: "#ff9f43",
 };
 
 // Liquid-Glass (dark, floats over arbitrary screen content). The overlay window
@@ -561,13 +559,7 @@ export function Orb() {
             }}
           >
             <StrokeIcon
-              paths={
-                quick.mode === "local"
-                  ? SHIELD_CHECK_PATHS
-                  : quick.mode === "superfast"
-                    ? ZAP_PATHS
-                    : CLOUD_PATHS
-              }
+              paths={quick.mode === "local" ? SHIELD_CHECK_PATHS : CLOUD_PATHS}
               size={17}
               strokeWidth={1.9}
             />
@@ -626,12 +618,6 @@ export function Orb() {
               label={t("mode.cloudTitle")}
               active={quick.mode === "cloud"}
               onClick={pick("mode", "cloud")}
-            />
-            <Row
-              icon={ZAP_PATHS}
-              label={t("mode.superfastTitle")}
-              active={quick.mode === "superfast"}
-              onClick={pick("mode", "superfast")}
             />
           </div>
           {/* Language — above the orb */}

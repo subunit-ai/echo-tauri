@@ -15,8 +15,8 @@
     "hotkeyTitle": "ปุ่มลัดของคุณ",
     "hotkeyBody": "กดปุ่มลัดค้างไว้แล้วพูด ปล่อยเมื่อพูดจบ — ข้อความจะปรากฏในหน้าต่างที่ใช้งานอยู่ทันที",
     "hotkeyChangeable": "เปลี่ยนได้ทุกเมื่อในการตั้งค่า",
-    "modeTitle": "Local, Cloud หรือ Superfast?",
-    "modeBody": "Local = เป็นส่วนตัว 100% · Cloud = เซิร์ฟเวอร์ตาม GDPR · Superfast = เร็วสุดขีด"
+    "modeTitle": "Local หรือ Cloud?",
+    "modeBody": "Local = เป็นส่วนตัว 100% · Cloud = เซิร์ฟเวอร์ตาม GDPR"
   },
   "overlay": {
     "recording": "กำลังบันทึก",
@@ -71,9 +71,7 @@
     "localTitle": "Local",
     "localSub": "เป็นส่วนตัว 100%",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · เซิร์ฟเวอร์ DE",
-    "superfastTitle": "Superfast",
-    "superfastSub": "เร็วสุดขีด"
+    "cloudSub": "GDPR · เซิร์ฟเวอร์ DE"
   },
   "record": {
     "stateIdle": "พร้อม",
@@ -227,7 +225,7 @@
     "language": "ภาษา",
     "languageHint": "ภาษาของอินเทอร์เฟซ",
     "mode": "โหมด",
-    "modeHint": "Local (ส่วนตัว) · Cloud (GDPR) · Superfast",
+    "modeHint": "Local (ส่วนตัว) · Cloud (GDPR)",
     "localModel": "โมเดลในเครื่อง",
     "localModelHint": "คลิกเพื่อเลือก + ดาวน์โหลดโมเดล (ถ้ามี GPU เลือกตัวใหญ่ได้เลย — large-v3-turbo)",
     "transcriptionLanguage": "ภาษาที่ถอดเสียง",

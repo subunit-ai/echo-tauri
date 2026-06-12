@@ -71,9 +71,7 @@
     "localTitle": "本地",
     "localSub": "100% 私密",
     "cloudTitle": "云端",
-    "cloudSub": "GDPR · 德国服务器",
-    "superfastTitle": "极速",
-    "superfastSub": "飞快"
+    "cloudSub": "GDPR · 德国服务器"
   },
   "record": {
     "stateIdle": "就绪",

@@ -71,9 +71,7 @@
     "localTitle": "מקומי",
     "localSub": "פרטי לחלוטין",
     "cloudTitle": "ענן",
-    "cloudSub": "GDPR · שרתי DE",
-    "superfastTitle": "מהיר במיוחד",
-    "superfastSub": "זריז במיוחד"
+    "cloudSub": "GDPR · שרתי DE"
   },
   "record": {
     "stateIdle": "מוכן",

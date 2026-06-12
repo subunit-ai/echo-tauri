@@ -15,8 +15,8 @@
     "hotkeyTitle": "Dein Hotkey",
     "hotkeyBody": "Halte deinen Hotkey gedrückt und sprich. Loslassen heißt fertig — der Text landet direkt im aktiven Fenster.",
     "hotkeyChangeable": "Jederzeit in den Einstellungen änderbar.",
-    "modeTitle": "Lokal, Cloud oder Superfast?",
-    "modeBody": "Lokal = 100% privat · Cloud = DSGVO-Server · Superfast = ultraschnell."
+    "modeTitle": "Lokal oder Cloud?",
+    "modeBody": "Lokal = 100% privat · Cloud = DSGVO-Server."
   },
   "overlay": {
     "recording": "Aufnahme",
@@ -74,9 +74,7 @@
     "localTitle": "Lokal",
     "localSub": "100% privat",
     "cloudTitle": "Cloud",
-    "cloudSub": "DSGVO · DE-Server",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Ultraschnell"
+    "cloudSub": "DSGVO · DE-Server"
   },
   "record": {
     "stateIdle": "Bereit",
@@ -232,7 +230,7 @@
     "language": "Sprache",
     "languageHint": "Sprache der Benutzeroberfläche",
     "mode": "Modus",
-    "modeHint": "Lokal (privat) · Cloud (DSGVO) · Superfast",
+    "modeHint": "Lokal (privat) · Cloud (DSGVO)",
     "localModel": "Lokales Modell",
     "localModelHint": "Klick wählt + lädt das Modell (mit GPU ruhig groß — large-v3-turbo).",
     "transcriptionLanguage": "Transkriptions-Sprache",

@@ -71,9 +71,7 @@
     "localTitle": "Yerel",
     "localSub": "%100 gizli",
     "cloudTitle": "Bulut",
-    "cloudSub": "KVKK · DE sunucular",
-    "superfastTitle": "Süper hızlı",
-    "superfastSub": "Çok hızlı"
+    "cloudSub": "KVKK · DE sunucular"
   },
   "record": {
     "stateIdle": "Hazır",

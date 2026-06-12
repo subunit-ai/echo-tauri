@@ -71,9 +71,7 @@
     "localTitle": "Lokálne",
     "localSub": "100 % súkromné",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · servery v DE",
-    "superfastTitle": "Superrýchlo",
-    "superfastSub": "Ultrarýchle"
+    "cloudSub": "GDPR · servery v DE"
   },
   "record": {
     "stateIdle": "Pripravené",

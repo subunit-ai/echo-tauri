@@ -19,16 +19,10 @@ function Icon({ kind }: { kind: UiMode }) {
         <path d="M9 12l2 2 4-4" />
       </svg>
     );
-  if (kind === "cloud")
-    return (
-      <svg {...common}>
-        <path d="M7 17a4 4 0 01-.4-7.98A5.5 5.5 0 0117.5 8.5 3.75 3.75 0 0117 17H7z" />
-      </svg>
-    );
-  // superfast — lightning
+  // cloud
   return (
-    <svg {...common} fill="currentColor" stroke="none">
-      <path d="M13 2L4.5 13.5H10l-1 8.5L19.5 10H13l1-8z" />
+    <svg {...common}>
+      <path d="M7 17a4 4 0 01-.4-7.98A5.5 5.5 0 0117.5 8.5 3.75 3.75 0 0117 17H7z" />
     </svg>
   );
 }
@@ -36,7 +30,6 @@ function Icon({ kind }: { kind: UiMode }) {
 const SEGS: { key: UiMode; titleKey: string; subKey: string }[] = [
   { key: "local", titleKey: "mode.localTitle", subKey: "mode.localSub" },
   { key: "cloud", titleKey: "mode.cloudTitle", subKey: "mode.cloudSub" },
-  { key: "superfast", titleKey: "mode.superfastTitle", subKey: "mode.superfastSub" },
 ];
 
 export function BigModeSwitch({

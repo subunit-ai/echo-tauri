@@ -11,7 +11,7 @@ export interface VocabEntry {
 
 export interface Config {
   hotkey: string;
-  mode: string; // local | subunit  (superfast = subunit + cloud_superfast)
+  mode: string; // local | subunit
   local_model: string;
   local_device: string;
   language: string;
@@ -76,7 +76,6 @@ export interface Config {
   cloud_quality_mode: string;
   gpu_aware_migrated: boolean;
   instant_live_typing: boolean;
-  cloud_superfast: boolean;
 
   sound_enabled: boolean;
   sound_volume: number;
@@ -110,7 +109,7 @@ export const setOrbPosition = (x: number, y: number) =>
 
 // ---- Orb satellites (inline quick controls around the overlay) ----
 export interface OrbQuick {
-  /** "local" | "cloud" | "superfast" */
+  /** "local" | "cloud" */
   mode: string;
   /** language code or "auto" */
   language: string;
@@ -234,11 +233,10 @@ export const onNeedsAccessibility = (cb: () => void): Promise<UnlistenFn> =>
   listen("echo://needs-accessibility", () => cb());
 
 // ---- Mode helpers (BigModeSwitch <-> config) ----
-export type UiMode = "local" | "cloud" | "superfast";
+export type UiMode = "local" | "cloud";
 
 export function uiModeOf(c: Config): UiMode {
-  if (c.mode === "local") return "local";
-  return c.cloud_superfast ? "superfast" : "cloud";
+  return c.mode === "local" ? "local" : "cloud";
 }
 
 export function patchForUiMode(m: UiMode): Partial<Config> {
@@ -246,9 +244,7 @@ export function patchForUiMode(m: UiMode): Partial<Config> {
     case "local":
       return { mode: "local" };
     case "cloud":
-      return { mode: "subunit", cloud_superfast: false, last_cloud_mode: "subunit" };
-    case "superfast":
-      return { mode: "subunit", cloud_superfast: true };
+      return { mode: "subunit", last_cloud_mode: "subunit" };
   }
 }
 

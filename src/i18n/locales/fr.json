@@ -15,8 +15,8 @@
     "hotkeyTitle": "Votre raccourci",
     "hotkeyBody": "Maintenez votre raccourci et parlez. En le relâchant, c'est terminé — le texte arrive directement dans la fenêtre active.",
     "hotkeyChangeable": "Modifiable à tout moment dans les Réglages.",
-    "modeTitle": "Local, Cloud ou Superfast ?",
-    "modeBody": "Local = 100 % privé · Cloud = serveurs RGPD · Superfast = ultra-rapide."
+    "modeTitle": "Local ou Cloud ?",
+    "modeBody": "Local = 100 % privé · Cloud = serveurs RGPD."
   },
   "overlay": {
     "recording": "Enregistrement",
@@ -71,9 +71,7 @@
     "localTitle": "Local",
     "localSub": "100 % privé",
     "cloudTitle": "Cloud",
-    "cloudSub": "RGPD · serveurs DE",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Ultra-rapide"
+    "cloudSub": "RGPD · serveurs DE"
   },
   "record": {
     "stateIdle": "Prêt",
@@ -227,7 +225,7 @@
     "language": "Langue",
     "languageHint": "Langue de l'interface",
     "mode": "Mode",
-    "modeHint": "Local (privé) · Cloud (RGPD) · Superfast",
+    "modeHint": "Local (privé) · Cloud (RGPD)",
     "localModel": "Modèle local",
     "localModelHint": "Cliquez pour sélectionner + télécharger le modèle (voyez grand avec un GPU — large-v3-turbo).",
     "transcriptionLanguage": "Langue de transcription",

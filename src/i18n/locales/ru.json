@@ -71,9 +71,7 @@
     "localTitle": "Локально",
     "localSub": "100% приватно",
     "cloudTitle": "Облако",
-    "cloudSub": "GDPR · серверы в Германии",
-    "superfastTitle": "Сверхбыстро",
-    "superfastSub": "Молниеносно"
+    "cloudSub": "GDPR · серверы в Германии"
   },
   "record": {
     "stateIdle": "Готово",

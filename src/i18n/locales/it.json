@@ -15,8 +15,8 @@
     "hotkeyTitle": "La tua scorciatoia",
     "hotkeyBody": "Tieni premuta la scorciatoia e parla. Rilasciandola finisci — il testo finisce direttamente nella finestra attiva.",
     "hotkeyChangeable": "Modificabile in qualsiasi momento nelle Impostazioni.",
-    "modeTitle": "Locale, Cloud o Superfast?",
-    "modeBody": "Locale = 100% privato · Cloud = server GDPR · Superfast = ultra-veloce."
+    "modeTitle": "Locale o Cloud?",
+    "modeBody": "Locale = 100% privato · Cloud = server GDPR."
   },
   "overlay": {
     "recording": "Registrazione",
@@ -71,9 +71,7 @@
     "localTitle": "Locale",
     "localSub": "100% privato",
     "cloudTitle": "Cloud",
-    "cloudSub": "GDPR · server DE",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Ultra-veloce"
+    "cloudSub": "GDPR · server DE"
   },
   "record": {
     "stateIdle": "Pronto",
@@ -227,7 +225,7 @@
     "language": "Lingua",
     "languageHint": "Lingua dell'interfaccia",
     "mode": "Modalità",
-    "modeHint": "Locale (privato) · Cloud (GDPR) · Superfast",
+    "modeHint": "Locale (privato) · Cloud (GDPR)",
     "localModel": "Modello locale",
     "localModelHint": "Clicca per selezionare e scaricare il modello (punta in alto con una GPU — large-v3-turbo).",
     "transcriptionLanguage": "Lingua di trascrizione",

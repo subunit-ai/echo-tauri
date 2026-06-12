@@ -15,8 +15,8 @@
     "hotkeyTitle": "Pikanäppäimesi",
     "hotkeyBody": "Pidä pikanäppäintä pohjassa ja puhu. Vapauttaminen lopettaa — teksti siirtyy suoraan aktiiviseen ikkunaan.",
     "hotkeyChangeable": "Muutettavissa milloin tahansa Asetuksissa.",
-    "modeTitle": "Paikallinen, Pilvi vai Superfast?",
-    "modeBody": "Paikallinen = 100 % yksityinen · Pilvi = GDPR-palvelimet · Superfast = erittäin nopea."
+    "modeTitle": "Paikallinen vai Pilvi?",
+    "modeBody": "Paikallinen = 100 % yksityinen · Pilvi = GDPR-palvelimet."
   },
   "overlay": {
     "recording": "Tallennetaan",
@@ -71,9 +71,7 @@
     "localTitle": "Paikallinen",
     "localSub": "100 % yksityinen",
     "cloudTitle": "Pilvi",
-    "cloudSub": "GDPR · DE-palvelimet",
-    "superfastTitle": "Superfast",
-    "superfastSub": "Erittäin nopea"
+    "cloudSub": "GDPR · DE-palvelimet"
   },
   "record": {
     "stateIdle": "Valmis",
@@ -227,7 +225,7 @@
     "language": "Kieli",
     "languageHint": "Käyttöliittymän kieli",
     "mode": "Tila",
-    "modeHint": "Paikallinen (yksityinen) · Pilvi (GDPR) · Superfast",
+    "modeHint": "Paikallinen (yksityinen) · Pilvi (GDPR)",
     "localModel": "Paikallinen malli",
     "localModelHint": "Napsauta valitaksesi + ladataksesi mallin (panosta isoon, jos sinulla on GPU — large-v3-turbo).",
     "transcriptionLanguage": "Litteroinnin kieli",

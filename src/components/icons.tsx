@@ -53,9 +53,6 @@ export const SHIELD_CHECK_PATHS = [
 /** Cloud-Modus. */
 export const CLOUD_PATHS = ["M7 17a4 4 0 01-.4-7.98A5.5 5.5 0 0117.5 8.5 3.75 3.75 0 0117 17H7z"];
 
-/** Superfast-Modus: Blitz. */
-export const ZAP_PATHS = ["M13 2L4.5 13.5H10l-1 8.5L19.5 10H13l1-8z"];
-
 /** Sprache: Globus. */
 export const GLOBE_PATHS = [
   "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z",

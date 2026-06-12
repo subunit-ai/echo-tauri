@@ -100,9 +100,9 @@ fn default_vocabulary() -> Vec<VocabEntry> {
 #[serde(default)]
 pub struct Config {
     pub hotkey: String,
-    /// "local" | "subunit" (incl. the Groq-proxied "superfast" via cloud_superfast).
-    /// Direct OpenAI/Groq/Custom providers were dropped — superfast covers Groq
-    /// server-side, and Subunit + Local are the supported engines.
+    /// "local" | "subunit". Subunit (the DSGVO cloud) and Local (on-device
+    /// whisper.cpp) are the supported engines. The former Groq-proxied
+    /// "superfast" tier was removed — that infrastructure was torn down.
     pub mode: String,
     pub local_model: String,
     pub local_device: String,
@@ -211,7 +211,6 @@ pub struct Config {
     /// "auto" | "instant" | "fast" | "quality"
     pub cloud_quality_mode: String,
     pub gpu_aware_migrated: bool,
-    pub cloud_superfast: bool,
 
     pub sound_enabled: bool,
     pub sound_volume: f32,
@@ -323,7 +322,6 @@ impl Default for Config {
 
             cloud_quality_mode: "quality".to_string(),
             gpu_aware_migrated: false,
-            cloud_superfast: false,
 
             sound_enabled: true,
             sound_volume: 0.6,

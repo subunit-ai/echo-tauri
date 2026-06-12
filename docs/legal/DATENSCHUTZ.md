@@ -15,7 +15,6 @@ werden, hängt vom gewählten **Modus** ab:
   Sprecher-Trennung laufen vollständig auf deinem Gerät. **Audio verlässt das Gerät nicht.**
 - **Cloud (DSGVO):** Die Audioaufnahme wird zur Transkription an `transcribe.subunit.ai`
   (Server in Deutschland) übertragen, dort verarbeitet und das Ergebnis zurückgesendet.
-- **Superfast:** wie Cloud, optimiert auf Geschwindigkeit.
 
 Du wählst den Modus in der App; der aktive Modus wird angezeigt.
 
