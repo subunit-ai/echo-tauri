@@ -1,9 +1,12 @@
+import { useI18n } from "../lib/i18n";
+
 /**
  * WELCOME — purer Splash (TJ 2026-06-12): NUR Logo + "Subunit Meet".
  * Ein Tap irgendwo fuehrt weiter (stiller Login steht dahinter schon bereit) —
  * Erstnutzer landen auf der Login-Subpage. Idle-Pings laufen weiter.
  */
 export function Welcome({ onContinue }: { onContinue: () => void }) {
+  const { t } = useI18n();
   return (
     <div
       className="wrap welcome-splash"
@@ -37,6 +40,7 @@ export function Welcome({ onContinue }: { onContinue: () => void }) {
           <b>Subunit</b> <span className="meet">Meet</span>
         </div>
       </div>
+      <span className="splash-hint" aria-hidden="true">{t("Zum Starten tippen")}</span>
     </div>
   );
 }

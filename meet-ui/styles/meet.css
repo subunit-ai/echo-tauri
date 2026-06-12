@@ -700,5 +700,9 @@ button:focus-visible,.codebig:focus-visible,.seg-btn:focus-visible,.tile:focus-v
 @keyframes bootpulse{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes bootline-in{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 
-/* Welcome-Splash (TJ 2026-06-12): ganze Seite ist der Klick */
-.welcome-splash{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+/* Welcome-Splash (TJ 2026-06-12): ganze Seite ist der Klick — fixed ueber den
+   VOLLEN Screen (hebt die .wrap-Begrenzung auf), Chips/Brand liegen per z-index drueber */
+.welcome-splash{position:fixed;inset:0;width:100%;max-width:none;max-height:none;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.splash-hint{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 58px);left:50%;transform:translateX(-50%);font-size:12px;font-weight:550;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);pointer-events:none;white-space:nowrap;animation:hintpulse 2.8s ease-in-out infinite}
+@keyframes hintpulse{0%,100%{opacity:.22}50%{opacity:.75}}
+@media (prefers-reduced-motion:reduce){.splash-hint{animation:none;opacity:.5}}
