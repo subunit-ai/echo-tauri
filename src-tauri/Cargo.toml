@@ -57,15 +57,13 @@ regex = "1"
 enigo = "0.2"
 arboard = "3"
 # Opus speech compression for cloud uploads (~8× smaller again than the 16 kHz
-# WAV, ASR-transparent). macOS + Linux ONLY: `audiopus_sys` builds libopus from
-# its vendored source via autotools and links it STATICALLY (verified: no dynamic
-# libopus, so the shipped app is self-contained). CI needs autoconf/automake/
-# libtool + `LIBOPUS_NO_PKG=1` (forces the vendored static build, never a dynamic
-# system lib). Windows is excluded — there audiopus_sys only offers a dynamic
-# prebuilt opus.dll (x86/x64; no ARM64), which would mean shipping a DLL or just
-# crash. Windows keeps the 16 kHz WAV path (already 3× smaller than 48 kHz).
-[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
-audiopus = "0.2"
+# WAV, ASR-transparent). ALL platforms incl. Windows ARM64 (Erik): `opusic-sys`
+# builds libopus from its vendored source via CMake (default `bundled` feature)
+# and links it STATICALLY — so the shipped app is self-contained and CMake (which
+# CI already has for whisper.cpp, with clang-cl on Win-ARM) handles every target,
+# unlike audiopus_sys (autotools on unix, dynamic prebuilt DLL on Windows, no
+# ARM64). `ogg` is the pure-Rust container muxer. Raw FFI — see opus_enc.rs.
+opusic-sys = "0.7"
 ogg = "0.9"
 # OAuth loopback CSRF state + JWT email claim decode.
 rand = "0.8"

@@ -8,9 +8,8 @@
 mod cloud;
 #[cfg(feature = "local-whisper")]
 mod local;
-// Opus speech compression for uploads — macOS + Linux only (Windows keeps the
-// 16 kHz WAV; see Cargo.toml for why libopus isn't viable there).
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+// Opus speech compression for uploads — all platforms (libopus via opusic-sys,
+// CMake-built from vendored source; see Cargo.toml).
 mod opus_enc;
 pub mod vocab;
 
@@ -138,11 +137,10 @@ fn downsample_to_16k(input: &[f32], sr: u32) -> (Vec<f32>, u32) {
     (out, 16_000)
 }
 
-/// Build the upload payload from 16 kHz mono samples: Opus-in-Ogg when the
-/// encoder is available (~8× smaller, ASR-transparent), else a 16 kHz WAV.
+/// Build the upload payload from 16 kHz mono samples: Opus-in-Ogg (~8× smaller,
+/// ASR-transparent) with a 16 kHz WAV fallback if the encoder ever errors.
 /// Returns the bytes plus the filename whose extension tells the server which
-/// decoder to use. Opus failure is non-fatal — it falls back to the WAV.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+/// decoder to use.
 fn encode_upload(samples16: &[f32]) -> anyhow::Result<(Vec<u8>, &'static str)> {
     match opus_enc::encode_ogg_opus(samples16) {
         Ok(ogg) => Ok((ogg, "audio.ogg")),
@@ -151,13 +149,6 @@ fn encode_upload(samples16: &[f32]) -> anyhow::Result<(Vec<u8>, &'static str)> {
             Ok((samples_to_wav(samples16, 16_000)?, "audio.wav"))
         }
     }
-}
-
-/// Windows: no Opus (libopus only ships a dynamic prebuilt there) — the 16 kHz
-/// WAV is already 3× smaller than the old 48 kHz upload.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn encode_upload(samples16: &[f32]) -> anyhow::Result<(Vec<u8>, &'static str)> {
-    Ok((samples_to_wav(samples16, 16_000)?, "audio.wav"))
 }
 
 /// Encode mono f32 samples as 16-bit PCM WAV bytes (in-memory).

@@ -3,11 +3,11 @@
 //! 16 kHz PCM to Opus-in-Ogg (~8× smaller than the WAV, ASR-transparent at this
 //! bitrate) and send `audio.ogg`, which the server's ffmpeg path already decodes.
 //!
-//! Excluded on Windows-ARM (see Cargo.toml) — that target keeps the 16 kHz WAV.
-//! Any failure here is non-fatal: the caller falls back to the WAV.
+//! libopus is reached through `opusic-sys` (raw FFI) so it builds from vendored
+//! source via CMake on EVERY platform incl. Windows ARM64. Any failure here is
+//! non-fatal: the caller falls back to the WAV.
 
 use anyhow::Context;
-use audiopus::{coder::Encoder, Application, Bitrate, Channels, SampleRate};
 use ogg::writing::{PacketWriteEndInfo, PacketWriter};
 
 // 20 ms frame @ 16 kHz = 320 samples. Opus always presents at 48 kHz, so each
@@ -19,14 +19,53 @@ const BITRATE: i32 = 24_000;
 // Fixed Ogg logical-stream serial (single stream; value is arbitrary).
 const SERIAL: u32 = 0x00ec_0a01;
 
+/// RAII wrapper over the libopus encoder (raw `opusic-sys` FFI). Mono, 16 kHz,
+/// VoIP mode. `opus_encoder_destroy` runs on drop.
+struct Encoder {
+    st: *mut opusic_sys::OpusEncoder,
+}
+
+impl Encoder {
+    fn new() -> anyhow::Result<Self> {
+        let mut err: i32 = 0;
+        // 16 kHz, 1 channel, VoIP application (tuned for speech).
+        let st = unsafe {
+            opusic_sys::opus_encoder_create(16_000, 1, opusic_sys::OPUS_APPLICATION_VOIP as i32, &mut err)
+        };
+        if st.is_null() || err != opusic_sys::OPUS_OK as i32 {
+            anyhow::bail!("opus_encoder_create failed: {err}");
+        }
+        // Best-effort bitrate (variadic ctl). A failure here just keeps the default.
+        unsafe {
+            opusic_sys::opus_encoder_ctl(st, opusic_sys::OPUS_SET_BITRATE_REQUEST as i32, BITRATE);
+        }
+        Ok(Self { st })
+    }
+
+    /// Encode one frame of `i16` PCM into `out`; returns the packet length.
+    fn encode(&mut self, pcm: &[i16], out: &mut [u8]) -> anyhow::Result<usize> {
+        let n = unsafe {
+            opusic_sys::opus_encode(self.st, pcm.as_ptr(), pcm.len() as i32, out.as_mut_ptr(), out.len() as i32)
+        };
+        if n < 0 {
+            anyhow::bail!("opus_encode failed: {n}");
+        }
+        Ok(n as usize)
+    }
+}
+
+impl Drop for Encoder {
+    fn drop(&mut self) {
+        unsafe { opusic_sys::opus_encoder_destroy(self.st) };
+    }
+}
+
 /// Encode 16 kHz mono f32 samples (range -1..1) to an Ogg/Opus byte stream.
 pub fn encode_ogg_opus(samples_16k: &[f32]) -> anyhow::Result<Vec<u8>> {
     if samples_16k.is_empty() {
         anyhow::bail!("no samples");
     }
-    let mut enc = Encoder::new(SampleRate::Hz16000, Channels::Mono, Application::Voip)
-        .context("opus encoder init")?;
-    let _ = enc.set_bitrate(Bitrate::BitsPerSecond(BITRATE));
+    let mut enc = Encoder::new().context("opus encoder init")?;
 
     let pcm: Vec<i16> = samples_16k
         .iter()
