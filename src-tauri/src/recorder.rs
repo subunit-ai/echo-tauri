@@ -305,7 +305,16 @@ fn ingest(
     }
     if n > 0 {
         let rms = (sum_sq / n as f32).sqrt();
-        let boosted = (rms * 4.0).min(1.0); // 4x boost for UI punch (parity with recorder.py)
+        // Perceptual VU mapping so normal speaking/prompting volume visibly deflects
+        // the orb meters (a flat `rms * 4` left quiet speech near the floor). Three
+        // stages: (1) a tiny noise gate so true silence stays at rest, (2) a strong
+        // linear gain, (3) a gamma < 1 that expands the quiet→mid range — the band
+        // an actual voice lives in — while still saturating to 1.0 when you're loud.
+        const NOISE_FLOOR: f32 = 0.01;
+        const GAIN: f32 = 7.5;
+        const GAMMA: f32 = 0.55;
+        let gated = (rms - NOISE_FLOOR).max(0.0);
+        let boosted = (gated * GAIN).min(1.0).powf(GAMMA);
         level.store(boosted.to_bits(), Ordering::Relaxed);
     }
 }

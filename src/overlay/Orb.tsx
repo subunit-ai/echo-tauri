@@ -322,7 +322,7 @@ export function Orb() {
             // shimmer so it reads as a live VU meter, not a self-running animation.
             // Otherwise (idle/transcribing) keep the gentle breathing.
             const amp = speaking
-              ? Math.min(1, 0.05 + lvl * center * 1.2)
+              ? Math.min(1, 0.05 + lvl * center * 1.55)
               : energy * center + 0.08;
             const shimmer = speaking
               ? 0.9 + 0.1 * Math.sin(ph * 0.5 + i)
@@ -347,7 +347,7 @@ export function Orb() {
           const amp = idleStill
             ? size * 0.015
             : speaking
-              ? size * (0.02 + lvl * 0.3)
+              ? size * (0.02 + lvl * 0.42)
               : size * 0.18 * (0.15 + energy);
           ctx.lineWidth = Math.max(2, size * 0.02);
           ctx.strokeStyle = hexA(base, 0.9);
