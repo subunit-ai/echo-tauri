@@ -75,6 +75,9 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync", "fs"] }
 # Hardware probe (RAM/cores) for the recommended local-model hint.
 sysinfo = { version = "0.31", default-features = false, features = ["system"] }
+# History + meetings store (~/.config/echo/echo.db). `bundled` compiles SQLite
+# from source — no system lib needed, works on every target incl. Windows ARM64.
+rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-autostart = "2.5.1"
 

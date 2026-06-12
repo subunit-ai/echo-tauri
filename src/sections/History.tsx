@@ -1,26 +1,52 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { clearHistory, copyText, deleteHistoryEntry } from "../lib/ipc";
+import {
+  clearHistory,
+  copyText,
+  deleteHistoryEntry,
+  historyList,
+  onHistoryChanged,
+  type HistoryEntry,
+} from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { useToast } from "../state/ToastContext";
 
 export function History() {
-  const { config, reload } = useConfig();
+  const { config } = useConfig();
   const toast = useToast();
   const { t } = useTranslation();
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [query, setQuery] = useState("");
   const [copied, setCopied] = useState<number | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // History lives in the SQLite store — fetch on mount + search, refresh live
+  // when a dictation lands (echo://history-changed).
+  const refresh = useCallback(
+    (q: string) => {
+      historyList(q).then(setEntries).catch(() => setEntries([]));
+    },
+    [],
+  );
+  useEffect(() => refresh(query), [query, refresh]);
+  useEffect(() => {
+    const un = onHistoryChanged(() => refresh(query));
+    return () => {
+      un.then((f) => f());
+    };
+  }, [query, refresh]);
+
   if (!config) return null;
 
-  const onCopy = async (text: string, i: number) => {
+  const onCopy = async (text: string, id: number) => {
     await copyText(text).catch(() => toast(t("history.copyFailed"), "error"));
-    setCopied(i);
-    window.setTimeout(() => setCopied((c) => (c === i ? null : c)), 1200);
+    setCopied(id);
+    window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1200);
   };
-  const onDelete = async (i: number) => {
+  const onDelete = async (id: number) => {
     try {
-      await deleteHistoryEntry(i);
-      await reload();
+      await deleteHistoryEntry(id);
+      refresh(query);
     } catch {
       toast(t("history.deleteEntryFailed"), "error");
     }
@@ -29,7 +55,7 @@ export function History() {
     setConfirmingClear(false);
     try {
       await clearHistory();
-      await reload();
+      refresh(query);
       toast(t("history.cleared"), "success");
     } catch {
       toast(t("history.clearFailed"), "error");
@@ -40,7 +66,7 @@ export function History() {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h1 className="section-title">{t("history.title")}</h1>
-        {config.history.length > 0 &&
+        {entries.length > 0 &&
           (confirmingClear ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>{t("history.confirmClear")}</span>
@@ -63,15 +89,22 @@ export function History() {
           : t("history.subDisabled")}
       </p>
 
-      {config.history.length === 0 ? (
-        <div className="empty">{t("history.empty")}</div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={t("history.searchPlaceholder")}
+        style={{ marginBottom: 14, maxWidth: 360 }}
+      />
+
+      {entries.length === 0 ? (
+        <div className="empty">{query ? t("history.noResults") : t("history.empty")}</div>
       ) : (
-        config.history.map((e, i) => {
-          const tier = String(e.quality_mode ?? "") || "local";
-          const text = String(e.text ?? "");
+        entries.map((e) => {
+          const tier = e.quality_mode || "local";
           return (
-            <div key={i} className="history-item">
-              <div className="text">{text}</div>
+            <div key={e.id} className="history-item">
+              <div className="text">{e.text}</div>
               <div
                 className="meta"
                 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
@@ -89,10 +122,10 @@ export function History() {
                   </span>
                 )}
                 <span style={{ flex: 1 }} />
-                <button className="sub-tab" onClick={() => onCopy(text, i)}>
-                  {copied === i ? t("common.copied") : t("common.copy")}
+                <button className="sub-tab" onClick={() => onCopy(e.text, e.id)}>
+                  {copied === e.id ? t("common.copied") : t("common.copy")}
                 </button>
-                <button className="sub-tab" onClick={() => onDelete(i)}>
+                <button className="sub-tab" onClick={() => onDelete(e.id)}>
                   {t("common.delete")}
                 </button>
               </div>

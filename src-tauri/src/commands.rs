@@ -290,43 +290,38 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    // Stats + history.
-    {
+    // Stats (config) + history/meetings (SQLite store).
+    let (history_enabled, history_size) = {
         let mut c = state.config.lock();
         c.total_transcriptions += 1;
         c.total_audio_seconds += duration_s;
-        if c.history_enabled && !result.text.trim().is_empty() {
-            let entry = serde_json::json!({
-                "text": result.text,
-                "quality_mode": result.quality_mode,
-                "ts": now,
-                // Latency breakdown + applied style, so the History UI can show
-                // them and we can mine real-world numbers from exported configs.
-                "latency_ms": total_ms,
-                "stt_ms": result.timings.stt_ms,
-                "cleanup_ms": cleanup_ms,
-                "style": style,
-                "duration_s": duration_s,
-            });
-            c.history.insert(0, entry);
-            let max = c.history_size.max(0) as usize;
-            if c.history.len() > max {
-                c.history.truncate(max);
-            }
-        }
-        if is_long && !result.text.trim().is_empty() {
-            let m = serde_json::json!({
-                "ts": now,
-                "text": result.text,
-                "quality_mode": result.quality_mode,
-                "duration_s": duration_s as i64,
-            });
-            c.meetings.insert(0, m);
-            if c.meetings.len() > 100 {
-                c.meetings.truncate(100);
-            }
-        }
         let _ = c.save();
+        (c.history_enabled, c.history_size.max(0) as usize)
+    };
+    if history_enabled && !result.text.trim().is_empty() {
+        let entry = serde_json::json!({
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "ts": now,
+            // Latency breakdown + applied style — the History UI shows them and
+            // we mine real-world numbers from them.
+            "latency_ms": total_ms,
+            "stt_ms": result.timings.stt_ms,
+            "cleanup_ms": cleanup_ms,
+            "style": style,
+            "duration_s": duration_s,
+        });
+        crate::store::add_history(&entry, history_size);
+        use tauri::Emitter;
+        let _ = app.emit("echo://history-changed", ());
+    }
+    if is_long && !result.text.trim().is_empty() {
+        crate::store::add_meeting(&serde_json::json!({
+            "ts": now,
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "duration_s": duration_s as i64,
+        }));
     }
 
     // Long-form diarization: detached (can take up to ~120s) so it never delays
@@ -340,20 +335,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 if let Some(speaker_text) =
                     crate::diarize::speaker_transcript(&cfg2, wav, &segments)
                 {
-                    let state = app2.state::<AppState>();
-                    {
-                        let mut c = state.config.lock();
-                        if let Some(m) = c
-                            .meetings
-                            .iter_mut()
-                            .find(|m| m.get("ts").and_then(|v| v.as_u64()) == Some(now))
-                        {
-                            if let Some(obj) = m.as_object_mut() {
-                                obj.insert("speaker_text".into(), serde_json::json!(speaker_text));
-                            }
-                        }
-                        let _ = c.save();
-                    }
+                    crate::store::update_meeting_by_ts(now as i64, "speaker_text", &speaker_text);
                     let _ = app2.emit("echo://meetings-updated", ());
                 }
             });
@@ -438,26 +420,37 @@ pub fn open_external(url: String) {
 
 /// Delete one history entry by index (newest = 0), then persist.
 #[tauri::command]
-pub fn delete_history_entry(state: State<'_, AppState>, index: usize) -> Result<(), String> {
-    let cfg = {
-        let mut c = state.config.lock();
-        if index < c.history.len() {
-            c.history.remove(index);
-        }
-        c.clone()
-    };
-    cfg.save().map_err(|e| e.to_string())
+pub fn delete_history_entry(id: i64) {
+    crate::store::delete_history(id);
 }
 
-/// Clear the whole transcription history, then persist.
+/// Clear the whole transcription history.
 #[tauri::command]
-pub fn clear_history(state: State<'_, AppState>) -> Result<(), String> {
-    let cfg = {
-        let mut c = state.config.lock();
-        c.history.clear();
-        c.clone()
-    };
-    cfg.save().map_err(|e| e.to_string())
+pub fn clear_history() {
+    crate::store::clear_history();
+}
+
+/// Newest-first history page from the store. `query` = case-insensitive
+/// substring search on the transcript text; empty = everything.
+#[tauri::command]
+pub fn history_list(query: Option<String>, limit: Option<u32>, offset: Option<u32>) -> Vec<serde_json::Value> {
+    crate::store::list_history(
+        query.as_deref().unwrap_or(""),
+        limit.unwrap_or(200).min(1000),
+        offset.unwrap_or(0),
+    )
+}
+
+/// Total number of stored history entries (Home stat card).
+#[tauri::command]
+pub fn history_count() -> i64 {
+    crate::store::count_history()
+}
+
+/// All stored meetings, newest first (each with its store `id`).
+#[tauri::command]
+pub fn meetings_list() -> Vec<serde_json::Value> {
+    crate::store::list_meetings()
 }
 
 /// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
@@ -643,17 +636,9 @@ pub fn hardware_info() -> crate::hardware::HardwareInfo {
 /// the styled text; the frontend shows it without overwriting the raw transcript.
 /// Refreshes the cloud token first since meetings can sit for a while.
 #[tauri::command]
-pub fn process_meeting(app: AppHandle, index: usize, style: String) -> Result<String, String> {
+pub fn process_meeting(app: AppHandle, id: i64, style: String) -> Result<String, String> {
     let state = app.state::<AppState>();
-    let text = {
-        let c = state.config.lock();
-        c.meetings
-            .get(index)
-            .and_then(|m| m.get("text"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| "meeting not found".to_string())?
-    };
+    let text = crate::store::meeting_text(id).ok_or_else(|| "meeting not found".to_string())?;
     if text.trim().is_empty() {
         return Err("empty transcript".to_string());
     }
@@ -807,23 +792,13 @@ pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    {
-        let mut c = state.config.lock();
-        if !result.text.trim().is_empty() {
-            c.meetings.insert(
-                0,
-                serde_json::json!({
-                    "ts": now,
-                    "text": result.text,
-                    "quality_mode": result.quality_mode,
-                    "duration_s": duration_s as i64,
-                }),
-            );
-            if c.meetings.len() > 100 {
-                c.meetings.truncate(100);
-            }
-        }
-        let _ = c.save();
+    if !result.text.trim().is_empty() {
+        crate::store::add_meeting(&serde_json::json!({
+            "ts": now,
+            "text": result.text,
+            "quality_mode": result.quality_mode,
+            "duration_s": duration_s as i64,
+        }));
     }
     let _ = app.emit("echo://meetings-updated", ());
     log::info!("meeting recording stopped + transcribed ({duration_s:.0}s)");

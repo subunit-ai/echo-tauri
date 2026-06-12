@@ -152,7 +152,9 @@
     "deleteEntryFailed": "Eintrag konnte nicht gelöscht werden.",
     "cleared": "Verlauf gelöscht.",
     "clearFailed": "Verlauf konnte nicht gelöscht werden.",
-    "latencyHint": "Latenz: Aufnahme-Stopp bis Text eingefügt"
+    "latencyHint": "Latenz: Aufnahme-Stopp bis Text eingefügt",
+    "searchPlaceholder": "History durchsuchen…",
+    "noResults": "Keine Treffer"
   },
   "meetings": {
     "title": "Meetings",

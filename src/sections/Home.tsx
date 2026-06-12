@@ -1,15 +1,36 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { MicIcon } from "../components/icons";
 import { RecordPanel } from "../components/RecordPanel";
-import { patchForUiMode, uiModeOf } from "../lib/ipc";
+import {
+  historyCount,
+  historyList,
+  onHistoryChanged,
+  patchForUiMode,
+  uiModeOf,
+  type HistoryEntry,
+} from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
 export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
   const { t } = useTranslation();
   const { config, patch } = useConfig();
+  // Recent dictations + count from the SQLite store, refreshed live.
+  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const refresh = () => {
+      historyList("", 5).then(setRecent).catch(() => {});
+      historyCount().then(setCount).catch(() => {});
+    };
+    refresh();
+    const un = onHistoryChanged(refresh);
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
   if (!config) return null;
-  const recent = config.history.slice(0, 5);
 
   return (
     <div>
@@ -41,7 +62,7 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
         </div>
         <div className="card stat-card">
           <div className="label">{t("home.statInHistory")}</div>
-          <div className="value">{config.history.length}</div>
+          <div className="value">{count}</div>
         </div>
         <div className="card stat-card">
           <div className="label">{t("home.statAudioMin")}</div>
@@ -60,11 +81,11 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
       {recent.length === 0 ? (
         <div className="empty">{t("home.emptyHistory")}</div>
       ) : (
-        recent.map((e, i) => (
-          <div key={i} className="history-item">
-            <div className="text">{String(e.text ?? "")}</div>
+        recent.map((e) => (
+          <div key={e.id} className="history-item">
+            <div className="text">{e.text}</div>
             <div className="meta" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span className="tier-badge">{String(e.quality_mode ?? "") || "local"}</span>
+              <span className="tier-badge">{e.quality_mode || "local"}</span>
               {e.ts != null && (
                 <span style={{ fontSize: 11, opacity: 0.6 }}>
                   {new Date(Number(e.ts) * 1000).toLocaleString("de-DE")}

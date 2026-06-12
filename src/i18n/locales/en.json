@@ -152,7 +152,9 @@
     "deleteEntryFailed": "Couldn't delete entry.",
     "cleared": "History cleared.",
     "clearFailed": "Couldn't clear history.",
-    "latencyHint": "Latency: recording stop until text inserted"
+    "latencyHint": "Latency: recording stop until text inserted",
+    "searchPlaceholder": "Search history…",
+    "noResults": "No matches"
   },
   "meetings": {
     "title": "Meetings",

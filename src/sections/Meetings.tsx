@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { copyText, processMeeting } from "../lib/ipc";
+import { copyText, meetingsList, processMeeting, type MeetingEntry } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { MeetLocal } from "./MeetLocal";
 
@@ -17,39 +17,40 @@ const ACTIONS: { style: string; labelKey: string }[] = [
 
 export function Meetings() {
   const { t } = useTranslation();
-  const { config, reload } = useConfig();
+  const { config } = useConfig();
   // Zwei Segmente (TJ 2026-06-12): "Lokales Meeting" (Pro, Default — startet direkt in den
   // Flow) und "Aufnahmen" (Archiv + Nachverarbeitung). Live-Meeting wohnt in der Sidebar.
   const [tab, setTab] = useState<"local" | "recordings">("local");
+  const [list, setList] = useState<MeetingEntry[]>([]);
   const [open, setOpen] = useState<number | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // `${i}:${style}`
+  const [busy, setBusy] = useState<string | null>(null); // `${id}:${style}`
   const [result, setResult] = useState<Record<number, { label: string; text: string }>>({});
   const [copied, setCopied] = useState(false);
 
-  // Diarization finishes on a background thread → reload when it tags a meeting.
+  // Meetings live in the SQLite store; diarization finishes on a background
+  // thread → refetch when it tags a meeting.
   useEffect(() => {
-    const un = listen("echo://meetings-updated", () => {
-      reload().catch(() => {});
-    });
+    const refresh = () => meetingsList().then(setList).catch(() => {});
+    refresh();
+    const un = listen("echo://meetings-updated", refresh);
     return () => {
       un.then((f) => f());
     };
-  }, [reload]);
+  }, []);
 
   if (!config) return null;
 
-  const list = config.meetings;
   const thresholdMin = Math.round(config.long_form_threshold_seconds / 60);
 
-  const run = async (i: number, style: string, label: string) => {
-    setBusy(`${i}:${style}`);
+  const run = async (id: number, style: string, label: string) => {
+    setBusy(`${id}:${style}`);
     try {
-      const text = await processMeeting(i, style);
-      setResult((r) => ({ ...r, [i]: { label, text } }));
+      const text = await processMeeting(id, style);
+      setResult((r) => ({ ...r, [id]: { label, text } }));
     } catch (e) {
       setResult((r) => ({
         ...r,
-        [i]: { label, text: t("meetings.processError", { error: String(e) }) },
+        [id]: { label, text: t("meetings.processError", { error: String(e) }) },
       }));
     } finally {
       setBusy(null);
@@ -85,17 +86,17 @@ export function Meetings() {
           {list.length === 0 ? (
         <div className="empty">{t("meetings.empty")}</div>
       ) : (
-        list.map((m, i) => {
+        list.map((m) => {
           const text = String(m.text ?? "");
           const speakerText = m.speaker_text ? String(m.speaker_text) : "";
           const dur = Number(m.duration_s ?? 0);
-          const isOpen = open === i;
-          const res = result[i];
+          const isOpen = open === m.id;
+          const res = result[m.id];
           return (
-            <div key={i} className="history-item">
+            <div key={m.id} className="history-item">
               <div
                 style={{ cursor: "pointer" }}
-                onClick={() => setOpen(isOpen ? null : i)}
+                onClick={() => setOpen(isOpen ? null : m.id)}
               >
                 <div className="meta" style={{ marginTop: 0, marginBottom: 6 }}>
                   <span className="tier-badge">{String(m.quality_mode ?? "") || "local"}</span>
@@ -145,9 +146,9 @@ export function Meetings() {
                       key={a.style}
                       className="sub-tab"
                       disabled={busy !== null}
-                      onClick={() => run(i, a.style, label)}
+                      onClick={() => run(m.id, a.style, label)}
                     >
-                      {busy === `${i}:${a.style}` ? "…" : label}
+                      {busy === `${m.id}:${a.style}` ? "…" : label}
                     </button>
                   );
                 })}

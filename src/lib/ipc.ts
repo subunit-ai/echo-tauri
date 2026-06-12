@@ -131,14 +131,43 @@ export const copyText = (text: string) => invoke<void>("copy_text", { text });
 export const openConfigDir = () => invoke<void>("open_config_dir");
 /** Open an external URL in the default browser. */
 export const openExternal = (url: string) => invoke<void>("open_external", { url });
-/** Delete one history entry by index (newest = 0). */
-export const deleteHistoryEntry = (index: number) =>
-  invoke<void>("delete_history_entry", { index });
+// ---- History + meetings (SQLite store, echo.db) ----
+export interface HistoryEntry {
+  id: number;
+  ts: number;
+  text: string;
+  quality_mode: string;
+  style: string;
+  latency_ms: number | null;
+  duration_s: number | null;
+}
+/** Newest-first history page; `query` = substring search on the text. */
+export const historyList = (query = "", limit = 200, offset = 0) =>
+  invoke<HistoryEntry[]>("history_list", { query, limit, offset });
+/** Total stored history entries. */
+export const historyCount = () => invoke<number>("history_count");
+/** Delete one history entry by its store id. */
+export const deleteHistoryEntry = (id: number) =>
+  invoke<void>("delete_history_entry", { id });
 /** Clear the whole transcription history. */
 export const clearHistory = () => invoke<void>("clear_history");
+/** Fired after a transcription lands in the store — refresh history views. */
+export const onHistoryChanged = (cb: () => void): Promise<UnlistenFn> =>
+  listen("echo://history-changed", () => cb());
+
+export interface MeetingEntry {
+  id: number;
+  ts: number;
+  text: string;
+  quality_mode?: string;
+  duration_s?: number;
+  speaker_text?: string;
+}
+/** All stored meetings, newest first. */
+export const meetingsList = () => invoke<MeetingEntry[]>("meetings_list");
 /** Re-process a stored meeting with a cleanup style → returns the styled text. */
-export const processMeeting = (index: number, style: string) =>
-  invoke<string>("process_meeting", { index, style });
+export const processMeeting = (id: number, style: string) =>
+  invoke<string>("process_meeting", { id, style });
 
 // ---- Local whisper models ----
 export interface ModelInfo {
