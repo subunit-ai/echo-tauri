@@ -14,7 +14,8 @@ use crate::config::Config;
 
 pub fn transcribe_subunit(
     cfg: &Config,
-    wav: Vec<u8>,
+    audio: Vec<u8>,
+    file_name: &'static str,
     superfast: bool,
     want_segments: bool,
 ) -> Result<TranscriptResult, EngineError> {
@@ -23,9 +24,12 @@ pub fn transcribe_subunit(
         .build()
         .map_err(|e| EngineError::new("internal", e.to_string()))?;
 
-    let part = multipart::Part::bytes(wav)
-        .file_name("audio.wav")
-        .mime_str("audio/wav")
+    // MIME by extension — the server routes WAV through its fast path and any
+    // other container (Ogg/Opus) through the ffmpeg decode fallback.
+    let mime = if file_name.ends_with(".ogg") { "audio/ogg" } else { "audio/wav" };
+    let part = multipart::Part::bytes(audio)
+        .file_name(file_name)
+        .mime_str(mime)
         .map_err(|e| EngineError::new("internal", e.to_string()))?;
     let mut form = multipart::Form::new()
         .part("file", part)

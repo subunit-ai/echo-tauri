@@ -51,8 +51,21 @@ jobs:
             libsoup-3.0-dev librsvg2-dev libayatana-appindicator3-dev \
             libasound2-dev libxdo-dev libssl-dev patchelf \
             build-essential clang libclang-dev cmake \
-            libvulkan-dev glslc
+            libvulkan-dev glslc \
+            autoconf automake libtool
           echo "VULKAN_SDK=/usr" >> "$GITHUB_ENV"
+          # Force audiopus_sys to build libopus from its vendored source and link
+          # it statically (never a dynamic system lib) — see Cargo.toml.
+          echo "LIBOPUS_NO_PKG=1" >> "$GITHUB_ENV"
+
+      - name: Opus build deps (macOS — autotools for the vendored static libopus)
+        if: matrix.platform == 'macos-14'
+        run: |
+          brew install autoconf automake libtool
+          # gnubin so libopus's autotools build finds GNU libtoolize, and force the
+          # vendored static build (no dynamic system libopus in the shipped app).
+          echo "/opt/homebrew/opt/libtool/libexec/gnubin" >> "$GITHUB_PATH"
+          echo "LIBOPUS_NO_PKG=1" >> "$GITHUB_ENV"
 
       - name: LLVM x64 + CMake + Ninja (Windows x64)
         if: matrix.platform == 'windows-latest'

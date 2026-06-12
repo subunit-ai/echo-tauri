@@ -56,6 +56,17 @@ regex = "1"
 # Synthetic input (paste-back / Unicode-type) + clipboard.
 enigo = "0.2"
 arboard = "3"
+# Opus speech compression for cloud uploads (~8× smaller again than the 16 kHz
+# WAV, ASR-transparent). macOS + Linux ONLY: `audiopus_sys` builds libopus from
+# its vendored source via autotools and links it STATICALLY (verified: no dynamic
+# libopus, so the shipped app is self-contained). CI needs autoconf/automake/
+# libtool + `LIBOPUS_NO_PKG=1` (forces the vendored static build, never a dynamic
+# system lib). Windows is excluded — there audiopus_sys only offers a dynamic
+# prebuilt opus.dll (x86/x64; no ARM64), which would mean shipping a DLL or just
+# crash. Windows keeps the 16 kHz WAV path (already 3× smaller than 48 kHz).
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+audiopus = "0.2"
+ogg = "0.9"
 # OAuth loopback CSRF state + JWT email claim decode.
 rand = "0.8"
 base64 = "0.22"

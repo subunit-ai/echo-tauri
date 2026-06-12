@@ -8,6 +8,10 @@
 mod cloud;
 #[cfg(feature = "local-whisper")]
 mod local;
+// Opus speech compression for uploads — macOS + Linux only (Windows keeps the
+// 16 kHz WAV; see Cargo.toml for why libopus isn't viable there).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod opus_enc;
 pub mod vocab;
 
 use crate::config::Config;
@@ -87,11 +91,14 @@ pub fn run_opts(
             // (mics capture at 48 kHz). The upload, not the GPU, was the bottleneck:
             // a 48 kHz WAV is ~750 kbit/s, so a 70 s dictation = 6.5 MB and on a
             // modest uplink that dominated end-to-end latency (server transcribes
-            // 70 s in ~3 s; the rest was the upload). See resample_to_16k.
-            let (samples16, sr16) = downsample_to_16k(samples, sample_rate);
-            let wav = samples_to_wav(&samples16, sr16)
+            // 70 s in ~3 s; the rest was the upload).
+            let (samples16, _) = downsample_to_16k(samples, sample_rate);
+            // Then compress to Opus (~8× smaller again, ASR-transparent) when the
+            // encoder is available; fall back to the 16 kHz WAV otherwise. The
+            // server's ffmpeg path decodes the .ogg transparently.
+            let (bytes, file_name) = encode_upload(&samples16)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
-            cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast, want_segments)
+            cloud::transcribe_subunit(cfg, bytes, file_name, cfg.cloud_superfast, want_segments)
         }
         other => Err(EngineError::new(
             "unsupported",
@@ -120,6 +127,28 @@ fn downsample_to_16k(input: &[f32], sr: u32) -> (Vec<f32>, u32) {
         out.push(a + (b - a) * frac);
     }
     (out, 16_000)
+}
+
+/// Build the upload payload from 16 kHz mono samples: Opus-in-Ogg when the
+/// encoder is available (~8× smaller, ASR-transparent), else a 16 kHz WAV.
+/// Returns the bytes plus the filename whose extension tells the server which
+/// decoder to use. Opus failure is non-fatal — it falls back to the WAV.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn encode_upload(samples16: &[f32]) -> anyhow::Result<(Vec<u8>, &'static str)> {
+    match opus_enc::encode_ogg_opus(samples16) {
+        Ok(ogg) => Ok((ogg, "audio.ogg")),
+        Err(e) => {
+            log::warn!("opus encode failed ({e}) — falling back to 16 kHz WAV");
+            Ok((samples_to_wav(samples16, 16_000)?, "audio.wav"))
+        }
+    }
+}
+
+/// Windows: no Opus (libopus only ships a dynamic prebuilt there) — the 16 kHz
+/// WAV is already 3× smaller than the old 48 kHz upload.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn encode_upload(samples16: &[f32]) -> anyhow::Result<(Vec<u8>, &'static str)> {
+    Ok((samples_to_wav(samples16, 16_000)?, "audio.wav"))
 }
 
 /// Encode mono f32 samples as 16-bit PCM WAV bytes (in-memory).
