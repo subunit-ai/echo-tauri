@@ -1,9 +1,10 @@
 //! Subunit cloud transcriber — POST multipart to `/v1/transcribe`.
 //!
 //! Exact contract (must stay in sync with the FastAPI server):
-//!   multipart: file=audio.wav, language, quality_mode, prompt?, provider?
+//!   multipart: file=audio.{wav,ogg}, language, quality_mode, prompt?, provider?,
+//!              cleanup_style? (combined transcribe+cleanup)
 //!   auth:      Authorization: Bearer <jwt>  (primary) | X-API-Key (legacy)
-//!   response:  { text, quality_mode, ... }   402 => trial expired
+//!   response:  { text, quality_mode, cleaned_text?, ... }   402 => trial expired
 
 use std::time::Duration;
 
@@ -18,45 +19,72 @@ pub fn transcribe_subunit(
     file_name: &'static str,
     superfast: bool,
     want_segments: bool,
+    cleanup_style: Option<&str>,
 ) -> Result<TranscriptResult, EngineError> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .map_err(|e| EngineError::new("internal", e.to_string()))?;
+    // Shared pooled client (prewarmed at record-start) — no TLS handshake here.
+    let client = crate::http::client();
 
     // MIME by extension — the server routes WAV through its fast path and any
     // other container (Ogg/Opus) through the ffmpeg decode fallback.
     let mime = if file_name.ends_with(".ogg") { "audio/ogg" } else { "audio/wav" };
-    let part = multipart::Part::bytes(audio)
-        .file_name(file_name)
-        .mime_str(mime)
-        .map_err(|e| EngineError::new("internal", e.to_string()))?;
-    let mut form = multipart::Form::new()
-        .part("file", part)
-        .text("language", cfg.language.clone())
-        .text("quality_mode", cfg.cloud_quality_mode.clone());
 
-    let prompt = vocab::vocab_prompt(cfg);
-    if !prompt.is_empty() {
-        form = form.text("prompt", prompt);
-    }
-    if superfast {
-        form = form.text("provider", "superfast");
-    }
-    if want_segments {
-        form = form.text("with_segments", "true");
-    }
+    // The multipart form is consumed by send(), so build it per attempt (so a
+    // transient-failure retry can resend the same bytes).
+    let build_request = |audio: Vec<u8>| -> Result<reqwest::blocking::RequestBuilder, EngineError> {
+        let part = multipart::Part::bytes(audio)
+            .file_name(file_name)
+            .mime_str(mime)
+            .map_err(|e| EngineError::new("internal", e.to_string()))?;
+        let mut form = multipart::Form::new()
+            .part("file", part)
+            .text("language", cfg.language.clone())
+            .text("quality_mode", cfg.cloud_quality_mode.clone());
 
-    let mut req = client.post(&cfg.subunit_endpoint).multipart(form);
-    if !cfg.subunit_access_token.is_empty() {
-        req = req.bearer_auth(&cfg.subunit_access_token);
-    } else if !cfg.subunit_api_key.is_empty() {
-        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
-    }
+        let prompt = vocab::vocab_prompt(cfg);
+        if !prompt.is_empty() {
+            form = form.text("prompt", prompt);
+        }
+        if superfast {
+            form = form.text("provider", "superfast");
+        }
+        if want_segments {
+            form = form.text("with_segments", "true");
+        }
+        // Combined transcribe+cleanup: the server runs the AI cleanup and returns
+        // `cleaned_text` in the same response — no second round trip before the
+        // paste. Old servers ignore the field; the caller falls back to its own
+        // /v1/cleanup call when `cleaned_text` is absent.
+        if let Some(style) = cleanup_style {
+            if !style.is_empty() && style != "raw" {
+                form = form.text("cleanup_style", style.to_string());
+            }
+        }
 
-    let resp = req
-        .send()
-        .map_err(|e| EngineError::new("network", e.to_string()))?;
+        let mut req = client
+            .post(&cfg.subunit_endpoint)
+            .timeout(Duration::from_secs(120))
+            .multipart(form);
+        if !cfg.subunit_access_token.is_empty() {
+            req = req.bearer_auth(&cfg.subunit_access_token);
+        } else if !cfg.subunit_api_key.is_empty() {
+            req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+        }
+        Ok(req)
+    };
+
+    // One immediate retry on transport-level failures (connection refused/reset,
+    // or a stale pooled connection the server closed while idle). The request is
+    // idempotent; without this a single dropped connection loses the dictation.
+    let resp = match build_request(audio.clone())?.send() {
+        Ok(r) => r,
+        Err(e) if crate::http::is_transient(&e) => {
+            log::warn!("transcribe: transient transport error, retrying once: {e}");
+            build_request(audio)?
+                .send()
+                .map_err(|e| EngineError::new("network", e.to_string()))?
+        }
+        Err(e) => return Err(EngineError::new("network", e.to_string())),
+    };
     let status = resp.status();
     match status.as_u16() {
         402 => return Err(EngineError::new("trial_expired", "Testzeitraum abgelaufen")),
@@ -108,9 +136,18 @@ pub fn transcribe_subunit(
         })
         .unwrap_or_default();
 
+    // Server-side cleanup result (combined round trip), when requested + present.
+    // Vocab post-replace applies here too — the server cleans the raw transcript,
+    // the vocabulary fixes (whole-word, case-insensitive) are a client concern.
+    let cleaned_text = json
+        .get("cleaned_text")
+        .and_then(|v| v.as_str())
+        .map(|t| vocab::apply_vocab_replace(t.trim(), cfg));
+
     Ok(TranscriptResult {
         text: vocab::apply_vocab_replace(&text, cfg),
         quality_mode,
         segments,
+        cleaned_text,
     })
 }
