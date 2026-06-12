@@ -12,6 +12,7 @@ mod hardware;
 mod hotkey;
 mod http; // shared pooled HTTP client + prewarm for the cloud path
 mod inject;
+mod intro; // first-run intro: dictation preview without injection
 mod loopback; // system-audio loopback capture (meeting "other side"); pairs with recorder.rs
 mod meet;
 mod meet_local; // lokales Meet-Backend (Pro): geteilte Diarisierung aus crates/meet-core
@@ -154,6 +155,10 @@ pub fn run() {
             commands::meet_local_dismiss,
             commands::meet_local_list,
             commands::meet_local_get,
+            intro::transcribe_preview,
+            intro::intro_stream_start,
+            intro::intro_stream_stop,
+            hotkey::hotkey_set_suspended,
         ])
         .setup(|app| {
             // Version/platform banner — first line in every log, mirrors the old
