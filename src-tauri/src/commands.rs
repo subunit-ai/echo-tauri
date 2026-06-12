@@ -493,6 +493,55 @@ pub fn orb_cycle(
     Ok(orb_quick_json(&cfg))
 }
 
+/// Set one orb satellite directly (`which` = "mode" | "language" | "cleanup",
+/// `value` = the option key) — the expanded island panels pick a value instead
+/// of cycling. Persists and returns the new quick state, mirroring `orb_cycle`'s
+/// side effects (overlay restyle + main-window refresh).
+#[tauri::command]
+pub fn orb_set(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    which: String,
+    value: String,
+) -> Result<serde_json::Value, String> {
+    let cfg = {
+        let mut c = state.config.lock();
+        match (which.as_str(), value.as_str()) {
+            ("mode", "local") => {
+                c.mode = "local".to_string();
+                c.cloud_superfast = false;
+            }
+            ("mode", "cloud") | ("mode", "superfast") => {
+                if c.mode == "local" {
+                    c.mode = "subunit".to_string();
+                }
+                c.last_cloud_mode = c.mode.clone();
+                c.cloud_superfast = value == "superfast";
+            }
+            ("language", "de") | ("language", "en") | ("language", "auto") => {
+                c.language = value.clone();
+            }
+            ("cleanup", "off") => c.cleanup_enabled = false,
+            ("cleanup", "prompt") | ("cleanup", "email") | ("cleanup", "slack")
+            | ("cleanup", "formal") => {
+                c.cleanup_enabled = true;
+                c.cleanup_style = value.clone();
+            }
+            _ => return Err(format!("unknown orb setting {which}={value}")),
+        }
+        c.clone()
+    };
+    cfg.save().map_err(|e| e.to_string())?;
+    // Mode change can flip the overlay's state colour mapping; keep it in sync.
+    crate::overlay::apply_config(&app);
+    // Tell the main window to refresh — see orb_cycle.
+    {
+        use tauri::Emitter;
+        let _ = app.emit("echo://config-changed", ());
+    }
+    Ok(orb_quick_json(&cfg))
+}
+
 #[tauri::command]
 pub fn list_audio_devices() -> Vec<String> {
     crate::recorder::list_input_devices()

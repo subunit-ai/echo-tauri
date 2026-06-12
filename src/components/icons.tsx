@@ -42,6 +42,57 @@ export const MIC_PATHS = [
   "M12 19v3",
 ];
 
+// ---- Orb-Overlay-Inseln (Modus / Sprache / Cleanup / Konsole) ----
+
+/** Lokal-Modus: Schild mit Haken (wie BigModeSwitch). */
+export const SHIELD_CHECK_PATHS = [
+  "M12 3l7 3v5c0 4.2-2.9 7.3-7 8.4-4.1-1.1-7-4.2-7-8.4V6l7-3z",
+  "M9 12l2 2 4-4",
+];
+
+/** Cloud-Modus. */
+export const CLOUD_PATHS = ["M7 17a4 4 0 01-.4-7.98A5.5 5.5 0 0117.5 8.5 3.75 3.75 0 0117 17H7z"];
+
+/** Superfast-Modus: Blitz. */
+export const ZAP_PATHS = ["M13 2L4.5 13.5H10l-1 8.5L19.5 10H13l1-8z"];
+
+/** Sprache: Globus. */
+export const GLOBE_PATHS = [
+  "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z",
+  "M3 12h18",
+  "M12 3c2.4 2.4 3.7 5.6 3.7 9s-1.3 6.6-3.7 9c-2.4-2.4-3.7-5.6-3.7-9s1.3-6.6 3.7-9Z",
+];
+
+/** KI-Cleanup: Funkeln (großer + kleiner Stern). */
+export const SPARKLES_PATHS = [
+  "M11 4l1.7 4.3L17 10l-4.3 1.7L11 16l-1.7-4.3L5 10l4.3-1.7L11 4Z",
+  "M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z",
+];
+
+/** Cleanup aus: durchgestrichener Kreis. */
+export const BAN_PATHS = ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M5.8 5.8l12.4 12.4"];
+
+/** Prompt-Stil: Terminal-Chevron. */
+export const TERMINAL_PATHS = ["M4 17l6-5-6-5", "M12 19h8"];
+
+/** E-Mail-Stil: Briefumschlag. */
+export const MAIL_PATHS = [
+  "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z",
+  "m3 7 9 6 9-6",
+];
+
+/** Slack-Stil: Raute. */
+export const HASH_PATHS = ["M10 3 8 21", "M16 3l-2 18", "M4 9h17", "M3 15h17"];
+
+/** Formell-Stil: Aktentasche. */
+export const BRIEFCASE_PATHS = [
+  "M4 8h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z",
+  "M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2",
+];
+
+/** Prompt-Konsole: Vierzack-Stern (ersetzt das ✦-Textzeichen). */
+export const STAR4_PATHS = ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z"];
+
 export function MicIcon({ size = 15 }: { size?: number }) {
   return <StrokeIcon paths={MIC_PATHS} size={size} />;
 }

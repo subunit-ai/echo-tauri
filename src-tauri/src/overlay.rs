@@ -1,7 +1,14 @@
 //! The floating orb overlay window: transparent, always-on-top, with a cursor
-//! hit-test so only the orb's circular area catches the mouse — clicks on the
-//! transparent corners pass through to the app underneath. The bubble fallback
-//! is a pure visual indicator (always click-through).
+//! hit-test so the overlay only catches the mouse while the user engages the
+//! orb — everywhere else, clicks pass through to the app underneath. The bubble
+//! fallback is a pure visual indicator (always click-through).
+//!
+//! Window anatomy (the 2026-06 remodel): the orb canvas is a `dim × dim` square
+//! sitting bottom-center, surrounded by transparent GUTTERS that give the
+//! satellite islands room to live BESIDE the orb (left / right / above / below)
+//! instead of on top of its drawing — so wide canvas styles (bars, wave) are
+//! never covered. Hovering the orb engages the whole window (islands become
+//! interactive); leaving the window rect disengages back to click-through.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -13,12 +20,27 @@ use tauri::{
 
 use crate::commands::AppState;
 
+// Transparent space around the orb square for the satellite islands, in logical
+// px. KEEP IN SYNC with the same constants in src/overlay/Orb.tsx — the React
+// side lays the canvas + islands out against these exact insets.
+pub const GUTTER_X: f64 = 168.0;
+pub const GUTTER_TOP: f64 = 168.0;
+pub const GUTTER_BOTTOM: f64 = 64.0;
+
+/// Overlay window size for a given orb diameter (logical px).
+fn window_size(dim: f64) -> (f64, f64) {
+    (dim + 2.0 * GUTTER_X, dim + GUTTER_TOP + GUTTER_BOTTOM)
+}
+
 /// Start the cursor hit-test loop (idempotent via `hit_test_active`). While the
-/// orb is shown it polls the global cursor against the orb window's inscribed
-/// circle and toggles `set_ignore_cursor_events`: inside the circle → interactive
-/// (drag + satellites work), over the transparent corners → click-through so the
-/// underlying app still gets the click. Exits (and restores click-through) when
-/// the orb is hidden or the window closes.
+/// orb is shown it polls the global cursor and runs a small engage state machine:
+/// disengaged → the only hot zone is the orb's inscribed circle (bottom-center
+/// of the window); touching it engages the WHOLE window so the satellite islands
+/// in the gutters are reachable. Moving outside the window rect disengages back
+/// to click-through. Every transition is pushed to the webview via
+/// `echo://orb-hover`, which is what shows/hides the islands (the webview gets
+/// no mouse events while click-through, so it can't track hover itself). Exits
+/// (and restores click-through) when the orb is hidden or the window closes.
 pub fn ensure_hit_test(app: &AppHandle) {
     if app
         .state::<AppState>()
@@ -31,6 +53,7 @@ pub fn ensure_hit_test(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_millis(50));
         let mut last_ignore: Option<bool> = None;
+        let mut engaged = false;
         loop {
             tick.tick().await;
             let orb_on = app.state::<AppState>().config.lock().use_orb_overlay;
@@ -46,21 +69,39 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 app.cursor_position(),
                 win.outer_position(),
                 win.outer_size(),
+                win.scale_factor(),
             ) {
-                (Ok(cur), Ok(pos), Ok(size)) => {
-                    let cx = pos.x as f64 + size.width as f64 / 2.0;
-                    let cy = pos.y as f64 + size.height as f64 / 2.0;
-                    let r = size.width.min(size.height) as f64 / 2.0;
-                    let (dx, dy) = (cur.x - cx, cur.y - cy);
-                    dx * dx + dy * dy <= r * r
+                (Ok(cur), Ok(pos), Ok(size), Ok(scale)) => {
+                    let (px, py) = (pos.x as f64, pos.y as f64);
+                    let (w, h) = (size.width as f64, size.height as f64);
+                    if engaged {
+                        // Stay engaged anywhere inside the window rect.
+                        cur.x >= px && cur.x <= px + w && cur.y >= py && cur.y <= py + h
+                    } else {
+                        // Engage only via the orb circle (bottom-center square).
+                        let orb_d = (w - 2.0 * GUTTER_X * scale).max(1.0);
+                        let cx = px + w / 2.0;
+                        let cy = py + GUTTER_TOP * scale + orb_d / 2.0;
+                        let r = orb_d / 2.0;
+                        let (dx, dy) = (cur.x - cx, cur.y - cy);
+                        dx * dx + dy * dy <= r * r
+                    }
                 }
                 _ => false,
             };
-            let ignore = !inside;
+            if inside != engaged {
+                engaged = inside;
+                let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": engaged }));
+            }
+            let ignore = !engaged;
             if last_ignore != Some(ignore) {
                 let _ = win.set_ignore_cursor_events(ignore);
                 last_ignore = Some(ignore);
             }
+        }
+        if engaged {
+            // The loop can exit mid-engage (orb toggled off) — hide the islands.
+            let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": false }));
         }
         app.state::<AppState>()
             .hit_test_active
@@ -78,10 +119,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         (c.orb_overlay_size as f64, c.orb_position.clone(), c.use_orb_overlay)
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
+    let (w, h) = window_size(dim);
 
     let win = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
         .title("Echo Overlay")
-        .inner_size(dim, dim)
+        .inner_size(w, h)
         .decorations(false)
         .transparent(true)
         .always_on_top(true)
@@ -145,7 +187,8 @@ pub fn apply_config(app: &AppHandle) {
         return;
     };
     let dim = (150.0 * size_mult).clamp(80.0, 480.0);
-    let _ = win.set_size(LogicalSize::new(dim, dim));
+    let (w, h) = window_size(dim);
+    let _ = win.set_size(LogicalSize::new(w, h));
     // Orb = dynamic cursor hit-test (idempotent), bubble = always click-through.
     if orb_mode {
         ensure_hit_test(app);
@@ -172,6 +215,11 @@ pub fn apply_config(app: &AppHandle) {
     );
 }
 
+/// Place the overlay so the ORB (not the window) sits at the anchor. The anchor
+/// string — including drag-saved "custom-<x>-<y>" values from before the gutter
+/// remodel — always describes the orb square's top-left in logical screen px;
+/// the window extends beyond it by the gutters. The final window position is
+/// clamped fully on-screen so the satellite islands always have room to open.
 fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let monitor = match win.current_monitor() {
         Ok(Some(m)) => m,
@@ -180,31 +228,42 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let scale = monitor.scale_factor();
     let msize = monitor.size().to_logical::<f64>(scale);
     let mpos = monitor.position().to_logical::<f64>(scale);
+    let (w, h) = window_size(dim);
 
-    // Drag-set custom position: "custom-<x>-<y>" (screen-relative logical px).
-    if let Some(rest) = anchor.strip_prefix("custom-") {
+    // Drag-set custom position: "custom-<x>-<y>" (orb top-left, logical px).
+    let custom = anchor.strip_prefix("custom-").and_then(|rest| {
         let mut it = rest.splitn(2, '-');
-        if let (Some(x), Some(y)) = (it.next(), it.next()) {
-            if let (Ok(x), Ok(y)) = (x.parse::<f64>(), y.parse::<f64>()) {
-                let _ = win.set_position(LogicalPosition::new(x, y));
-                return;
-            }
+        match (it.next()?.parse::<f64>(), it.next()?.parse::<f64>()) {
+            (Ok(x), Ok(y)) => Some((x, y)),
+            _ => None,
         }
-    }
+    });
 
-    let margin = 40.0;
-    let bottom_margin = 64.0; // clear the taskbar/dock
-    let x = if anchor.contains("left") {
-        mpos.x + margin
-    } else if anchor.contains("right") {
-        mpos.x + msize.width - dim - margin
-    } else {
-        mpos.x + (msize.width - dim) / 2.0
-    };
-    let y = if anchor.contains("top") {
-        mpos.y + margin
-    } else {
-        mpos.y + msize.height - dim - bottom_margin
-    };
+    let (orb_x, orb_y) = custom.unwrap_or_else(|| {
+        let margin = 40.0;
+        let bottom_margin = 64.0; // clear the taskbar/dock
+        let x = if anchor.contains("left") {
+            mpos.x + margin
+        } else if anchor.contains("right") {
+            mpos.x + msize.width - dim - margin
+        } else {
+            mpos.x + (msize.width - dim) / 2.0
+        };
+        let y = if anchor.contains("top") {
+            mpos.y + margin
+        } else {
+            mpos.y + msize.height - dim - bottom_margin
+        };
+        (x, y)
+    });
+
+    // Orb anchor → window top-left, clamped into the monitor (min wins when the
+    // monitor is somehow smaller than the window).
+    let x = (orb_x - GUTTER_X)
+        .min(mpos.x + msize.width - w)
+        .max(mpos.x);
+    let y = (orb_y - GUTTER_TOP)
+        .min(mpos.y + msize.height - h)
+        .max(mpos.y);
     let _ = win.set_position(LogicalPosition::new(x, y));
 }
