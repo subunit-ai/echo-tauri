@@ -90,6 +90,18 @@ export const BRIEFCASE_PATHS = [
   "M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2",
 ];
 
+/** Auto-Modus (Stil folgt der fokussierten App): Zauberstab mit Funken. */
+export const WAND_PATHS = [
+  "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z",
+  "m14 7 3 3",
+  "M5 6v4",
+  "M19 14v4",
+  "M10 2v2",
+  "M7 8H3",
+  "M21 16h-4",
+  "M11 3H9",
+];
+
 /** Prompt-Konsole: Vierzack-Stern (ersetzt das ✦-Textzeichen). */
 export const STAR4_PATHS = ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z"];
 

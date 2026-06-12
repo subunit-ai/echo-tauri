@@ -86,9 +86,10 @@ pub fn do_start(app: &AppHandle) {
     if mode == "subunit" {
         std::thread::spawn(move || crate::http::prewarm(&endpoint));
     }
-    if lock {
-        *state.target.lock() = Some(crate::inject::capture_active_window());
-    }
+    // ALWAYS capture the focused window — Auto-Mode picks the cleanup style
+    // from it. Re-focusing on paste still happens only with target_lock on
+    // (deliver() gates that internally).
+    *state.target.lock() = Some(crate::inject::capture_active_window());
     // Wait for the recorder to actually open the mic. A failure here (no device /
     // busy / permission) must surface as an error — never a phantom "recording"
     // state where the user talks into nothing.
@@ -153,16 +154,25 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // The cleanup style (long-form > auto-mode > config) is known BEFORE we call
     // out — the target window was captured at record-start — so it can ride along
     // on the transcribe request (combined transcribe+cleanup, one round trip less).
-    let title = state
-        .target
-        .lock()
-        .as_ref()
-        .map(|t| t.title.clone())
-        .unwrap_or_default();
+    let (app_name, title) = {
+        let t = state.target.lock();
+        (
+            t.as_ref().map(|t| t.app.clone()).unwrap_or_default(),
+            t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+        )
+    };
     let style = if is_long {
         cfg.long_form_cleanup_style.clone()
     } else if cfg.cleanup_auto_mode {
-        crate::auto_mode::pick_style(&title, &cfg.auto_mode_overrides, &cfg.cleanup_style)
+        let (style, source) = crate::auto_mode::pick_style(
+            &app_name,
+            &title,
+            &cfg.auto_mode_overrides,
+            &cfg.cleanup_style,
+        );
+        // App name only at info (titles can carry document names → debug).
+        log::info!("auto-mode: style={style} source={source} app=\"{app_name}\"");
+        style
     } else {
         cfg.cleanup_style.clone()
     };
@@ -480,7 +490,14 @@ pub(crate) fn orb_quick_json(c: &Config) -> serde_json::Value {
     serde_json::json!({
         "mode": mode,
         "language": c.language,
-        "cleanup": if c.cleanup_enabled { c.cleanup_style.clone() } else { "off".to_string() },
+        // off | auto (style follows the focused app) | a concrete style.
+        "cleanup": if !c.cleanup_enabled {
+            "off".to_string()
+        } else if c.cleanup_auto_mode {
+            "auto".to_string()
+        } else {
+            c.cleanup_style.clone()
+        },
     })
 }
 
@@ -584,9 +601,15 @@ pub fn orb_set(
                 c.language = value.clone();
             }
             ("cleanup", "off") => c.cleanup_enabled = false,
+            // Auto-Mode: cleanup on, style picked per focused app/window.
+            ("cleanup", "auto") => {
+                c.cleanup_enabled = true;
+                c.cleanup_auto_mode = true;
+            }
             ("cleanup", "prompt") | ("cleanup", "email") | ("cleanup", "slack")
             | ("cleanup", "formal") => {
                 c.cleanup_enabled = true;
+                c.cleanup_auto_mode = false; // a concrete pick overrides Auto
                 c.cleanup_style = value.clone();
             }
             _ => return Err(format!("unknown orb setting {which}={value}")),

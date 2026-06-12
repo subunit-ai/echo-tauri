@@ -85,7 +85,8 @@ version = "0.16"
 optional = true
 
 # Windows-only: capture + refocus the foreground window for target-locked
-# paste-back (inject.rs). Linux uses xdotool; macOS is a follow-up.
+# paste-back (inject.rs). Linux uses xdotool; macOS reads the frontmost
+# app/window via core-graphics' CGWindowList (no refocus needed there).
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
   "Win32_Foundation",
