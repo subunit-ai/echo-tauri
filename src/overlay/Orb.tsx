@@ -504,12 +504,15 @@ export function Orb() {
           ctx.fill();
           break;
         }
-        case "bars2": {
+        case "bars2":
+        case "bars3": {
           // Bars V2 — a 13-band spectrum with slowly-falling peak-hold caps
           // (classic VU peaks), mirrored around the centre line. Same live-VU
           // contract as "bars": height IS the mic level while recording.
-          const n = 13;
-          const bw = size * 0.028;
+          // Bars V3 — the same look at the HYBRID density: 9 bands, sitting
+          // between "bars" (5) and "bars2" (13), with slightly wider bars.
+          const n = style.current === "bars3" ? 9 : 13;
+          const bw = size * (n === 9 ? 0.038 : 0.028);
           const gap = bw * 0.65;
           const total = n * bw + (n - 1) * gap;
           for (let i = 0; i < n; i++) {
@@ -536,6 +539,66 @@ export function Orb() {
               ctx.fill();
               ctx.beginPath();
               ctx.roundRect(x, cy + peaks[i] / 2 - bw * 0.05, bw, bw * 0.55, bw * 0.28);
+              ctx.fill();
+            }
+          }
+          break;
+        }
+        case "duobars":
+        case "duobars2":
+        case "duobars3": {
+          // Duo Bars — a visible centre baseline with bars swinging BOTH ways
+          // from it: the top and bottom lobes of each bar run on different
+          // phases, so they deflect independently (like a waveform editor)
+          // instead of one mirrored pill. Same live-VU contract as "bars":
+          // lobe height IS the mic level while recording, with only a small
+          // per-lobe shimmer. Three densities: V1 = 5 bars (like "bars"),
+          // V2 = 13 (like "bars2"), V3 = 9 (the hybrid middle).
+          const n = style.current === "duobars" ? 5 : style.current === "duobars2" ? 13 : 9;
+          const bw = size * (n === 5 ? 0.055 : n === 13 ? 0.026 : 0.038);
+          const gap = bw * 0.7;
+          const total = n * bw + (n - 1) * gap;
+          const lobeMax = size * 0.24;
+          const pad = Math.max(1.5, size * 0.014); // air between baseline and lobes
+          // the centrally-placed element the lobes swing from
+          ctx.lineCap = "round";
+          ctx.strokeStyle = hexA(base, 0.4);
+          ctx.lineWidth = Math.max(1.5, size * 0.012);
+          ctx.beginPath();
+          ctx.moveTo(cx - total / 2 - bw * 0.6, cy);
+          ctx.lineTo(cx + total / 2 + bw * 0.6, cy);
+          ctx.stroke();
+          ctx.lineCap = "butt";
+          for (let i = 0; i < n; i++) {
+            const k = Math.abs(i - (n - 1) / 2) / Math.max(1, (n - 1) / 2);
+            const profile = 1 - k * k * 0.7; // centre-weighted, tallest in the middle
+            const x = cx - total / 2 + i * (bw + gap);
+            // top (dir -1) and bottom (dir 1) on different frequencies/offsets —
+            // that asymmetry is what makes it read "up AND down", not mirrored.
+            const lobes: [number, number][] = [
+              [
+                speaking
+                  ? 0.72 + 0.28 * Math.abs(Math.sin(ph * 0.45 + i * 1.7))
+                  : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.16 + i * 1.7)),
+                -1,
+              ],
+              [
+                speaking
+                  ? 0.72 + 0.28 * Math.abs(Math.sin(ph * 0.37 + i * 2.3 + 2.1))
+                  : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.13 + i * 2.3 + 2.1)),
+                1,
+              ],
+            ];
+            for (const [shimmer, dir] of lobes) {
+              const amp = speaking
+                ? Math.min(1, (0.05 + lvl * 1.5) * profile) * shimmer
+                : (energy * profile + 0.07) * shimmer;
+              // At rest with idle animation OFF, both lobes collapse to small
+              // dots hugging the baseline (height == width → circle).
+              const bh = idleStill ? bw : Math.max(bw, lobeMax * amp);
+              ctx.fillStyle = hexA(base, 0.9);
+              ctx.beginPath();
+              ctx.roundRect(x, dir < 0 ? cy - pad - bh : cy + pad, bw, bh, bw / 2);
               ctx.fill();
             }
           }

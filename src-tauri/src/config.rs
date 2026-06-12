@@ -130,6 +130,8 @@ pub struct Config {
     pub orb_idle_pulse: bool,
     /// ping | sphere | sonar | bars | wave | classic
     /// | ping2 | sonar2 | bars2 | wave2 (V2 remodels) | halo | orbit | aurora | spectrum
+    /// | bars3 (hybrid 9-band EQ) | duobars | duobars2 | duobars3 (centre-baseline,
+    ///   independent top/bottom lobes — V1 = 5 bars, V2 = 13, V3 = 9)
     pub orb_overlay_style: String,
     /// One-time guard: sets the default orb style to "sonar" ONCE for existing
     /// installs (see migrate()); afterwards the user's chosen style sticks.
