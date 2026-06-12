@@ -10,6 +10,7 @@ import { Guest } from "./screens/Guest";
 import { Enroll } from "./screens/Enroll";
 import { Ended } from "./screens/Ended";
 import { Welcome } from "./screens/Welcome";
+import { Login } from "./screens/Login";
 import { useMeeting } from "./store";
 import { handleSsoCallback, identityFromToken, decodeJwt } from "./lib/auth";
 import { meetingInfo } from "./lib/api";
@@ -252,11 +253,18 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       )}
       {m.screen === "welcome" && (
         <Welcome
+          onContinue={() => {
+            // Ein Tap: gespeicherter Login/Gast geht direkt rein, Erstnutzer zur Anmelde-Subpage.
+            if (m.identity?.jwt || guest) m.go("landing");
+            else m.go("login");
+          }}
+        />
+      )}
+      {m.screen === "login" && (
+        <Login
           onLogin={() => {
             try { localStorage.removeItem("meet_guest"); } catch { /* ignore */ }
             setGuest(false);
-            // Eingeloggt (persistierte Identity) → Landing ("Meeting aufnehmen"), NICHT direkt
-            // in die Einrichtung durchreichen (TJ-Bug 2026-06-11). Ohne Identity → SSO-Redirect.
             if (m.identity?.jwt) m.go("landing");
             else m.hostEntry();
           }}
