@@ -85,7 +85,8 @@
     "holdToRecord": "Gedrückt halten zum Aufnehmen",
     "errorTrialExpired": "Testzeitraum abgelaufen — bitte Plan upgraden.",
     "errorNotSignedIn": "Nicht angemeldet — in den Einstellungen anmelden.",
-    "errorModelMissing": "Lokale Engine nicht verfügbar — auf Cloud umstellen."
+    "errorModelMissing": "Lokale Engine nicht verfügbar — auf Cloud umstellen.",
+    "fallbackNote": "Cloud nicht erreichbar – lokal transkribiert"
   },
   "models": {
     "recommendedLabel": "Empfohlen:",
@@ -150,7 +151,8 @@
     "copyFailed": "Konnte nicht kopieren.",
     "deleteEntryFailed": "Eintrag konnte nicht gelöscht werden.",
     "cleared": "Verlauf gelöscht.",
-    "clearFailed": "Verlauf konnte nicht gelöscht werden."
+    "clearFailed": "Verlauf konnte nicht gelöscht werden.",
+    "latencyHint": "Latenz: Aufnahme-Stopp bis Text eingefügt"
   },
   "meetings": {
     "title": "Meetings",

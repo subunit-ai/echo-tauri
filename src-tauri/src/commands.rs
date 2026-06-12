@@ -131,6 +131,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     emit_state(app, EngineState::Transcribing, None);
 
+    // Latency measurement system: t_total spans recorder-stop → text delivered.
+    // Per-phase numbers (encode/stt from the engine, cleanup/inject here) are
+    // logged as ONE greppable line and stored with the history entry, so we can
+    // iterate on latency against real field data instead of feelings.
+    let t_total = std::time::Instant::now();
+
     // Cloud path: refresh the access token if it's expired before we call out.
     if state.config.lock().mode == "subunit" {
         crate::auth::ensure_fresh(app);
@@ -201,7 +207,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     // Post-process: prefer the server-side cleanup from the combined round trip;
     // fall back to the separate /v1/cleanup call (old server, local engine, or
-    // long-form). Then DACH formatting. "raw" = passthrough.
+    // long-form). Then DACH formatting. "raw" = passthrough. cleanup_ms times
+    // only the separate call — the inline path already sits inside stt_ms.
+    let t_cleanup = std::time::Instant::now();
     let mut text = match result.cleaned_text {
         Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
         _ if cfg.cleanup_enabled && style != "raw" => {
@@ -212,11 +220,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     if cfg.dach_format_enabled {
         text = crate::dach::dach_format(&text);
     }
+    let cleanup_ms = t_cleanup.elapsed().as_millis() as u64;
     let result = TranscriptResult {
         text,
         quality_mode: result.quality_mode,
         segments: Vec::new(),
         cleaned_text: None,
+        timings: result.timings,
     };
 
     // The recording had audio but transcribed to nothing (silence / a mic that
@@ -236,6 +246,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // "Konsole als Ziel": the transcript belongs to the Prompt Console, not the
     // app behind. Still copy it so a manual paste works everywhere. Otherwise:
     // paste-back into the captured target window (clipboard + paste per config).
+    let t_inject = std::time::Instant::now();
     if cfg.prompt_console_as_target {
         if let Err(e) = crate::inject::set_clipboard(&result.text) {
             log::warn!("clipboard failed: {e}");
@@ -244,6 +255,18 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
         log::warn!("inject failed: {e}");
     }
+    let inject_ms = t_inject.elapsed().as_millis() as u64;
+
+    // The one latency line we iterate against (counts only — never content).
+    let total_ms = t_total.elapsed().as_millis() as u64;
+    log::info!(
+        "latency: total={total_ms}ms encode={}ms stt={}ms cleanup={cleanup_ms}ms inject={inject_ms}ms \
+         tier={} style={style} audio={duration_s:.1}s chars={}",
+        result.timings.encode_ms,
+        result.timings.stt_ms,
+        result.quality_mode,
+        result.text.chars().count()
+    );
 
     // Best-effort push to the Synapse knowledge base (detached so the up-to-5s
     // round-trip never delays the user). No-op unless synapse_save_enabled.
@@ -267,6 +290,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 "text": result.text,
                 "quality_mode": result.quality_mode,
                 "ts": now,
+                // Latency breakdown + applied style, so the History UI can show
+                // them and we can mine real-world numbers from exported configs.
+                "latency_ms": total_ms,
+                "stt_ms": result.timings.stt_ms,
+                "cleanup_ms": cleanup_ms,
+                "style": style,
+                "duration_s": duration_s,
             });
             c.history.insert(0, entry);
             let max = c.history_size.max(0) as usize;

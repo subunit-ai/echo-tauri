@@ -104,6 +104,7 @@ pub fn run(
         quality_mode: "local".to_string(),
         segments,
         cleaned_text: None, // local engine has no combined cleanup round trip
+        timings: Default::default(), // filled by the dispatcher, which times this call
     })
 }
 

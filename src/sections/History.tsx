@@ -80,6 +80,14 @@ export function History() {
                 {e.ts != null && (
                   <span>{new Date(Number(e.ts) * 1000).toLocaleString("de-DE")}</span>
                 )}
+                {e.latency_ms != null && (
+                  <span title={t("history.latencyHint")}>
+                    {(Number(e.latency_ms) / 1000).toLocaleString(undefined, {
+                      maximumFractionDigits: 1,
+                    })}{" "}
+                    s
+                  </span>
+                )}
                 <span style={{ flex: 1 }} />
                 <button className="sub-tab" onClick={() => onCopy(text, i)}>
                   {copied === i ? t("common.copied") : t("common.copy")}

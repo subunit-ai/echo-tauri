@@ -85,7 +85,8 @@
     "holdToRecord": "Hold to record",
     "errorTrialExpired": "Trial expired — please upgrade your plan.",
     "errorNotSignedIn": "Not signed in — sign in from Settings.",
-    "errorModelMissing": "Local engine unavailable — switch to Cloud."
+    "errorModelMissing": "Local engine unavailable — switch to Cloud.",
+    "fallbackNote": "Cloud unreachable – transcribed on-device"
   },
   "models": {
     "recommendedLabel": "Recommended:",
@@ -150,7 +151,8 @@
     "copyFailed": "Couldn't copy.",
     "deleteEntryFailed": "Couldn't delete entry.",
     "cleared": "History cleared.",
-    "clearFailed": "Couldn't clear history."
+    "clearFailed": "Couldn't clear history.",
+    "latencyHint": "Latency: recording stop until text inserted"
   },
   "meetings": {
     "title": "Meetings",

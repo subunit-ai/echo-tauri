@@ -149,5 +149,6 @@ pub fn transcribe_subunit(
         quality_mode,
         segments,
         cleaned_text,
+        timings: Default::default(), // filled by the dispatcher, which times this call
     })
 }
