@@ -25,8 +25,13 @@ jobs:
             args: "--features local-whisper-gpu"
           - platform: windows-latest      # Windows x86_64 — Vulkan GPU local whisper
             args: "--features local-whisper-gpu"
-          - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper (ARM64 libclang)
-            args: "--features local-whisper"
+          - platform: windows-11-arm      # Windows ARM64 (Erik) — CPU local whisper + local-meet
+            # local-meet adds the wespeaker voiceprint embedder (meet-core/embedder →
+            # the `ort` onnxruntime crate). ort ships PREBUILT onnxruntime binaries for
+            # aarch64-pc-windows-msvc (statically linked — no DLL to bundle), so Erik's
+            # ARM Surface gets the Pro local-meeting pipeline too, same as macOS. Needs
+            # the recent Win11 + VS2022 the windows-11-arm runner already provides.
+            args: "--features local-meet"
           - platform: macos-14            # macOS Apple Silicon (M1) — CPU local whisper
             # Ad-hoc signed ("-" from tauri.conf.json) — the known-good path that builds.
             # The stable self-signed cert (APPLE_* secrets) is disabled in the env block
