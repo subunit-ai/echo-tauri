@@ -717,3 +717,12 @@ button:focus-visible,.codebig:focus-visible,.seg-btn:focus-visible,.tile:focus-v
 
 /* Native App nimmt im Hintergrund weiter auf (UIBackgroundModes audio, TJ 2026-06-12) — Sperr-Warnung nur noch Web/PWA */
 html.native-app .lockwarn{display:none}
+
+/* Ein-Geraet-Runde (TJ 2026-06-12): Host traegt Teilnehmer ohne QR selbst ein */
+.padd{margin:2px 0 4px}
+.padd-row{display:flex;gap:8px;align-items:stretch}
+.padd-row .fld{flex:1;min-width:0;margin-top:0}
+.padd-btn{flex:0 0 auto;white-space:nowrap}
+.padd-btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.padd-hint{margin-top:7px;font-size:12px}
+.padd .err{margin-top:4px;min-height:0}

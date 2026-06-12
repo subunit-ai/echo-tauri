@@ -77,6 +77,7 @@ interface MeetingState {
   hostEntry: () => void;
   createMeeting: (setup: Setup) => Promise<{ ok: boolean; error?: string }>;
   approve: (token: string, ok: boolean) => void;
+  addParticipant: (name: string) => Promise<{ ok: boolean; error?: string }>;
   hostStartRec: () => Promise<{ ok: boolean; error?: string }>;
   scheduleStart: (delayMs: number) => void;
   hostEnd: () => Promise<void>;
@@ -446,6 +447,22 @@ export function MeetingProvider({
     },
     [pollParticipants],
   );
+
+  // Ein-Geraet-Runde (TJ 2026-06-12): der Host traegt Teilnehmer ohne QR selbst ein.
+  // Join + sofortige Freigabe ueber den Host-Token — danach steht die Person ganz
+  // normal im Roster und bekommt beim Stimm-Check-In ihre Zahl am Host-Geraet.
+  const addParticipant = useCallback(async (name: string): Promise<{ ok: boolean; error?: string }> => {
+    const nm = name.trim();
+    if (!nm) return { ok: false, error: "Bitte Namen eingeben." };
+    const jr = await api.joinMeeting(s.current.code, { name: nm, email: "", source: "host-add", ui_lang: UI_LANG() });
+    if (!jr.ok || !jr.data.join_token) {
+      return { ok: false, error: (jr.data.detail && (jr.data.detail.message || jr.data.detail)) || "Hinzufügen fehlgeschlagen." };
+    }
+    await api.approveParticipant(s.current.code, s.current.hostToken, jr.data.join_token, true);
+    const d = await api.participants(s.current.code, s.current.hostToken);
+    if (d) setParticipants(d.participants || []);
+    return { ok: true };
+  }, []);
 
   // ---- Host create ----
   const createMeeting = useCallback(
@@ -948,7 +965,7 @@ export function MeetingProvider({
     guestStartVisible, guestHint, guestRecText, waitSub,
     endTitle, endSub, endSpin, stageText, result, canRecap, canIntel,
     enroll, hostEnroll, enrolling, podGuest, podRecording, pendingJoinCode, resumeRecording, peekHost, singleHint,
-    setIdentity, go, goJoin, openRecapView, hostEntry, createMeeting, approve, hostStartRec, scheduleStart, hostEnd,
+    setIdentity, go, goJoin, openRecapView, hostEntry, createMeeting, approve, addParticipant, hostStartRec, scheduleStart, hostEnd,
     peekMeeting, guestJoin, guestStartRec, toggleMute, leave, resumeHost, resumeGuest,
     hostEnrollStart, hostEnrollMark, setMicDevice,
     translateProtocol, recapParticipants, sendRecapTo, runIntel,

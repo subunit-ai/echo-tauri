@@ -97,6 +97,7 @@ export function Host() {
             </button>
           </div>
           <div className="sect">{t("Teilnehmer")}</div>
+          {m.deviceMode === "pod" && !m.recOn && <AddParticipant />}
           <ul className="plist" id="host-plist">
             <Participants />
           </ul>
@@ -210,6 +211,51 @@ function HostEnroll() {
   );
 }
 
+/** Ein-Geraet-Runde (TJ 2026-06-12): der Host traegt die Teilnehmer selbst ein —
+ *  ganz ohne QR-Check-in. Sie landen normal im Roster, der Stimm-Check-In laeuft
+ *  danach komplett ueber das Host-Mikro. */
+function AddParticipant() {
+  const { t } = useI18n();
+  const m = useMeeting();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const add = async () => {
+    const nm = name.trim();
+    if (!nm || busy) return;
+    setBusy(true);
+    setErr("");
+    const r = await m.addParticipant(nm);
+    if (r.ok) setName("");
+    else setErr(r.error || "");
+    setBusy(false);
+  };
+  return (
+    <div className="padd">
+      <div className="padd-row">
+        <input
+          className="fld"
+          maxLength={80}
+          placeholder={t("Name eintragen …")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") add();
+          }}
+        />
+        <button className="btn btn-ghost minibtn padd-btn" disabled={busy || !name.trim()} onClick={add}>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          {t("Hinzufügen")}
+        </button>
+      </div>
+      <div className="hint padd-hint">{t("Alle an einem Gerät? Trag die Runde hier ein — der Stimm-Check-In läuft dann über dein Mikro, ganz ohne QR.")}</div>
+      {err && <div className="err">{err}</div>}
+    </div>
+  );
+}
+
 /** Participant rows — 1:1 port of renderParticipants. */
 function Participants() {
   const m = useMeeting();
@@ -235,6 +281,13 @@ function Participants() {
                 Freigeben
               </button>
               <button className="btn rej minibtn" onClick={() => m.approve(p.token, false)}>
+                ✕
+              </button>
+            </>
+          ) : p.source === "host-add" ? (
+            <>
+              <span className="pill wait">am Tisch</span>
+              <button className="btn rej minibtn" title="Entfernen" onClick={() => m.approve(p.token, false)}>
                 ✕
               </button>
             </>
