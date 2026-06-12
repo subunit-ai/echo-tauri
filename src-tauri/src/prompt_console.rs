@@ -67,7 +67,9 @@ fn build_window(app: &AppHandle, effects: bool) -> tauri::Result<WebviewWindow> 
     #[cfg(target_os = "macos")]
     if effects {
         use tauri::window::{Effect, EffectsBuilder};
-        b = b.effects(EffectsBuilder::new().effect(Effect::HudWindow).radius(20.0).build());
+        // Radius matches the CSS shell's border-radius (22px) so the native
+        // blur layer never peeks past the rounded corners.
+        b = b.effects(EffectsBuilder::new().effect(Effect::HudWindow).radius(22.0).build());
     }
     #[cfg(target_os = "windows")]
     if effects {

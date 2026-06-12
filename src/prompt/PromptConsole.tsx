@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { getConfig, setConfig } from "../lib/ipc";
 import { setLanguage } from "../i18n";
@@ -59,7 +59,19 @@ const ICONS = {
   bolt: ["M13 2L4.5 13.5H10l-1 8.5L19.5 10H13l1-8z"],
   lib: ["M4 19.5A2.5 2.5 0 0 1 6.5 17H20", "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"],
   trash: ["M3 6h18", "M8 6V4h8v2", "M19 6l-1 14H6L5 6", "M10 11v6", "M14 11v6"],
+  drop: ["M12 2.7s6 6.4 6 11a6 6 0 0 1-12 0c0-4.6 6-11 6-11z"],
+  copy: ["M9 9h11v11H9z", "M5 15H4V4h11v1"],
+  search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M21 21l-4.8-4.8"],
 };
+
+/** Glass intensity levels — cycled from the header droplet. The CSS multiplies
+ *  every shell/chip tint alpha by --pc-glass, so "clear" is genuinely more
+ *  see-through, not just dimmer. */
+const GLASS_LEVELS = ["clear", "regular", "rich"] as const;
+type GlassLevel = (typeof GLASS_LEVELS)[number];
+const GLASS_MUL: Record<GlassLevel, number> = { clear: 0.45, regular: 0.9, rich: 1.5 };
+const asGlass = (v: string): GlassLevel =>
+  (GLASS_LEVELS as readonly string[]).includes(v) ? (v as GlassLevel) : "clear";
 
 const newDraft = (text = ""): Draft => ({
   id: crypto.randomUUID(),
@@ -122,10 +134,16 @@ export function PromptConsole() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [pinned, setPinned] = useState(true);
   const [asTarget, setAsTarget] = useState(false);
+  const [glass, setGlass] = useState<GlassLevel>("clear");
   const [copied, setCopied] = useState(false);
+  const [libQuery, setLibQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+
+  /** Latest copy/insert actions for the global shortcut handler (the keydown
+   *  listener is mounted once, so it can't close over fresh state). */
+  const actions = useRef<{ insert: () => void; copy: () => void } | null>(null);
 
   // ---- Persistence: debounce every change; flush on blur/hide. ----
   const latest = useRef<PromptData | null>(null);
@@ -185,6 +203,7 @@ export function PromptConsole() {
       .then((c) => {
         setLanguage(c.ui_language || "de");
         setAsTarget(!!c.prompt_console_as_target);
+        setGlass(asGlass(c.prompt_console_glass));
       })
       .catch(() => {});
 
@@ -192,10 +211,21 @@ export function PromptConsole() {
     drainPending(); // anything queued while this webview was booting
 
     // ESC hides (never destroys) the console; flush the draft first.
+    // ⌘/Ctrl+Enter inserts into the app behind, ⌘/Ctrl+K copies.
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         flushNow();
         invoke("prompt_console_toggle").catch(() => {});
+        return;
+      }
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          actions.current?.insert();
+        } else if (e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          actions.current?.copy();
+        }
       }
     };
     const onBlurOrHide = () => flushNow();
@@ -219,6 +249,10 @@ export function PromptConsole() {
   const checks = analyzePrompt(active.text);
   const metCount = COACH_KEYS.filter((k) => checks[k]).length;
   const score = Math.round((metCount / COACH_KEYS.length) * 100);
+  const q = libQuery.trim().toLowerCase();
+  const libFiltered = q
+    ? data.library.filter((e) => (e.title + " " + e.text).toLowerCase().includes(q))
+    : data.library;
 
   // ---- Actions ----
   const setText = (text: string) =>
@@ -267,6 +301,10 @@ export function PromptConsole() {
     invoke("prompt_insert", { text: active.text }).catch(() => {});
   };
 
+  actions.current = { insert, copy };
+
+  const copyEntry = (text: string) => invoke("copy_text", { text }).catch(() => {});
+
   const saveToLibrary = () => {
     if (!active.text.trim()) return;
     update((d) => ({
@@ -300,6 +338,15 @@ export function PromptConsole() {
     getCurrentWindow().setAlwaysOnTop(next).catch(() => {});
   };
 
+  /** Cycle the glass intensity: clear → regular → rich. Persisted in config. */
+  const cycleGlass = () => {
+    const next = GLASS_LEVELS[(GLASS_LEVELS.indexOf(glass) + 1) % GLASS_LEVELS.length];
+    setGlass(next);
+    getConfig()
+      .then((c) => setConfig({ ...c, prompt_console_glass: next }))
+      .catch(() => {});
+  };
+
   const toggleTarget = () => {
     const next = !asTarget;
     setAsTarget(next);
@@ -314,11 +361,14 @@ export function PromptConsole() {
   };
 
   return (
-    <div className="pc-shell">
+    <div className="pc-shell" data-glass={glass} style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}>
       <header className="pc-head" data-tauri-drag-region>
         <span className="pc-glyph" data-tauri-drag-region>✦</span>
         <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
         <div className="pc-head-actions">
+          <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
+            <Ico paths={ICONS.drop} />
+          </button>
           <button
             className={`pc-icon ${asTarget ? "on" : ""}`}
             title={t("prompt.targetHint")}
@@ -406,17 +456,24 @@ export function PromptConsole() {
             </div>
             <div className="pc-coach-list">
               {score === 100 && <div className="pc-coach-all">✓ {t("prompt.coach.allGood")}</div>}
-              {COACH_KEYS.filter((k) => !checks[k]).map((k) => (
-                <div key={k} className="pc-coach-row">
-                  <span className="pc-coach-q">{t(`prompt.coach.q.${k}`)}</span>
-                  <button className="pc-btn" onClick={() => addCoachTemplate(k)}>
-                    {t("prompt.coach.add")}
-                  </button>
-                </div>
-              ))}
-              {COACH_KEYS.filter((k) => checks[k]).map((k) => (
-                <div key={k} className="pc-coach-row met">
-                  <span className="pc-check">✓</span> {t(`prompt.coach.ok.${k}`)}
+              {/* All 7 building blocks, ALWAYS in the same order — rows change
+                  state in place instead of jumping between sections while the
+                  user types. */}
+              {COACH_KEYS.map((k) => (
+                <div key={k} className={`pc-coach-row ${checks[k] ? "met" : ""}`}>
+                  <div className="pc-coach-top">
+                    <span className="pc-coach-name">{t(`prompt.coach.name.${k}`)}</span>
+                    {checks[k] ? (
+                      <span className="pc-coach-ok">
+                        <span className="pc-check">✓</span> {t(`prompt.coach.ok.${k}`)}
+                      </span>
+                    ) : (
+                      <button className="pc-btn" onClick={() => addCoachTemplate(k)}>
+                        {t("prompt.coach.add")}
+                      </button>
+                    )}
+                  </div>
+                  {!checks[k] && <div className="pc-coach-q">{t(`prompt.coach.q.${k}`)}</div>}
                 </div>
               ))}
             </div>
@@ -426,13 +483,25 @@ export function PromptConsole() {
           <div className="pc-lib">
             <div className="pc-lib-head">
               <span>{t("prompt.library")}</span>
+              <div className="pc-lib-search">
+                <Ico paths={ICONS.search} size={11} />
+                <input
+                  value={libQuery}
+                  placeholder={t("prompt.librarySearch")}
+                  spellCheck={false}
+                  onChange={(e) => setLibQuery(e.target.value)}
+                />
+              </div>
               <button className="pc-btn" onClick={saveToLibrary} disabled={!active.text.trim()}>
                 {t("prompt.saveToLibrary")}
               </button>
             </div>
             <div className="pc-lib-list">
               {data.library.length === 0 && <div className="pc-lib-empty">{t("prompt.libraryEmpty")}</div>}
-              {data.library.map((e) => (
+              {data.library.length > 0 && libFiltered.length === 0 && (
+                <div className="pc-lib-empty">{t("prompt.libraryNoMatch")}</div>
+              )}
+              {libFiltered.map((e) => (
                 <div key={e.id} className="pc-lib-row" onClick={() => loadFromLibrary(e)} title={e.text.slice(0, 400)}>
                   <div className="pc-lib-meta">
                     <span className="pc-lib-title">{e.title || t("prompt.tabUntitled")}</span>
@@ -440,6 +509,16 @@ export function PromptConsole() {
                       {e.text.length} · {new Date(e.updatedAt).toLocaleDateString()}
                     </span>
                   </div>
+                  <button
+                    className="pc-icon"
+                    title={t("prompt.libraryCopy")}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      copyEntry(e.text);
+                    }}
+                  >
+                    <Ico paths={ICONS.copy} size={12} />
+                  </button>
                   <button
                     className="pc-icon"
                     title={t("prompt.libraryDelete")}
@@ -470,7 +549,12 @@ export function PromptConsole() {
               setLibOpen(false);
             }}
           >
-            <Ico paths={ICONS.bolt} filled size={11} /> {score}
+            <span className="pc-dots">
+              {COACH_KEYS.map((k) => (
+                <i key={k} className={checks[k] ? "on" : ""} />
+              ))}
+            </span>
+            {score}%
           </button>
           <button
             className={`pc-btn ${libOpen ? "on" : ""}`}
@@ -482,7 +566,7 @@ export function PromptConsole() {
           >
             <Ico paths={ICONS.lib} size={12} />
           </button>
-          <button className="pc-btn" onClick={copy} disabled={!active.text}>
+          <button className="pc-btn" onClick={copy} disabled={!active.text} title={t("prompt.copyHint")}>
             {copied ? t("prompt.copied") : t("prompt.copy")}
           </button>
           <button className="pc-btn primary" onClick={insert} disabled={!active.text.trim()} title={t("prompt.insertHint")}>

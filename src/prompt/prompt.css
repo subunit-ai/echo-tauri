@@ -34,17 +34,21 @@ body {
   /* Real Liquid Glass: the macOS HudWindow vibrancy behind the window does the
      frosting — so the tint is kept VERY light (the desktop genuinely shimmers
      through) and we add a top-down sheen so it reads as a curved glass pane,
-     not a flat scrim. A brighter inner rim sells the glass edge. */
+     not a flat scrim. A brighter inner rim sells the glass edge.
+     --pc-glass scales EVERY tint alpha (set inline from config; the header
+     droplet cycles clear → regular → rich), so "clear" is genuinely
+     see-through instead of merely darker. */
+  --pc-glass: 0.45;
   background: linear-gradient(
     160deg,
-    rgba(36, 58, 92, 0.22) 0%,
-    rgba(10, 22, 42, 0.14) 46%,
-    rgba(8, 18, 36, 0.18) 100%
+    rgb(36 58 92 / calc(0.3 * var(--pc-glass))) 0%,
+    rgb(10 22 42 / calc(0.2 * var(--pc-glass))) 46%,
+    rgb(8 18 36 / calc(0.26 * var(--pc-glass))) 100%
   );
   border: 1px solid var(--glass-edge);
   border-radius: 22px;
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(190, 215, 245, 0.28),
-    inset 0 0 0 1px rgba(140, 175, 220, 0.06);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(190, 215, 245, 0.32),
+    inset 0 0 0 1px rgba(140, 175, 220, 0.07);
   overflow: hidden;
 }
 
@@ -58,6 +62,12 @@ body {
 .is-windows .pc-coach {
   background: #0e1c30;
 }
+.is-windows .pc-icon,
+.is-windows .pc-tab,
+.is-windows .pc-btn,
+.is-windows .pc-lib-search {
+  background: rgba(28, 48, 78, 0.45);
+}
 
 /* Soft specular highlight across the top — the "liquid" catch-light. */
 .pc-shell::before {
@@ -66,7 +76,20 @@ body {
   inset: 0 0 auto 0;
   height: 44%;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
+}
+
+/* Cyan caustic pooling at the bottom edge — light refracting through the
+   pane. Kept faint; it should be felt, not seen. */
+.pc-shell::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 38%;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 18% 115%, rgba(34, 211, 238, 0.09), transparent 60%),
+    linear-gradient(0deg, rgba(160, 200, 245, 0.045), transparent);
 }
 
 /* ---- Header (drag region) ---- */
@@ -106,7 +129,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(28, 48, 78, 0.18);
+  background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
   border-radius: 8px;
   color: var(--ink2);
@@ -148,7 +171,7 @@ body {
   gap: 6px;
   max-width: 150px;
   padding: 4px 8px 4px 10px;
-  background: rgba(28, 48, 78, 0.18);
+  background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
   border-radius: 9px;
   color: var(--ink3);
@@ -258,7 +281,9 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(11, 24, 44, 0.84);
+  /* Glassy drawer: enough tint to read on top of the editor, but scaled by
+     --pc-glass so the desktop still glows through on "clear". */
+  background: rgb(10 22 42 / calc(0.35 + 0.3 * var(--pc-glass)));
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
   animation: pc-rise 0.18s ease;
@@ -279,12 +304,45 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   font-size: 12px;
   font-weight: 700;
   color: var(--ink2);
   flex: none;
+}
+
+.pc-lib-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 9px;
+  background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
+  border: 1px solid var(--glass-edge);
+  border-radius: 9px;
+  color: var(--ink3);
+}
+
+.pc-lib-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.pc-lib-search input::placeholder {
+  color: var(--ink3);
+}
+
+.pc-lib-search:focus-within {
+  border-color: rgba(34, 211, 238, 0.4);
 }
 
 .pc-lib-list {
@@ -344,7 +402,7 @@ body {
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(11, 24, 44, 0.84);
+  background: rgb(10 22 42 / calc(0.35 + 0.3 * var(--pc-glass)));
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
   animation: pc-rise 0.18s ease;
@@ -395,18 +453,40 @@ body {
   gap: 6px;
 }
 
+/* One row per building block, fixed order. Open blocks carry the question;
+   met blocks collapse to a quiet ✓ line — the row changes state in place. */
 .pc-coach-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 11px;
   border-radius: 10px;
   background: var(--fill-weak);
   border: 1px solid var(--glass-edge);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.pc-coach-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pc-coach-name {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+
+.pc-coach-ok {
+  font-size: 11px;
+  color: var(--ink3);
 }
 
 .pc-coach-q {
-  flex: 1;
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--ink);
@@ -415,12 +495,14 @@ body {
 .pc-coach-row.met {
   background: transparent;
   border-color: transparent;
-  color: var(--ink3);
-  font-size: 11px;
-  padding: 4px 11px;
+  padding: 3px 11px;
 }
 
-.pc-coach-row.met .pc-check {
+.pc-coach-row.met .pc-coach-name {
+  color: var(--ink3);
+}
+
+.pc-check {
   color: var(--ok);
 }
 
@@ -460,7 +542,7 @@ body {
   justify-content: center;
   gap: 5px;
   padding: 5px 11px;
-  background: rgba(28, 48, 78, 0.18);
+  background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
   border-radius: 9px;
   color: var(--ink2);
@@ -484,6 +566,25 @@ body {
 .pc-btn.on {
   color: var(--cyan);
   border-color: rgba(34, 211, 238, 0.45);
+}
+
+/* Coach progress dots in the footer toggle — one per building block, in the
+   same fixed order as the coach list. */
+.pc-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.pc-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(150, 185, 225, 0.28);
+}
+
+.pc-dots i.on {
+  background: var(--cyan);
+  box-shadow: 0 0 5px rgba(34, 211, 238, 0.6);
 }
 
 .pc-btn.primary {
