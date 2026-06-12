@@ -714,3 +714,6 @@ button:focus-visible,.codebig:focus-visible,.seg-btn:focus-visible,.tile:focus-v
 .welcome-splash.leaving{animation:splashleave .85s cubic-bezier(.4,0,.2,1) forwards;pointer-events:none}
 @keyframes splashleave{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.045)}}
 @media (prefers-reduced-motion:reduce){.wrap{animation:none}.welcome-splash.leaving{animation:none;opacity:0}}
+
+/* Native App nimmt im Hintergrund weiter auf (UIBackgroundModes audio, TJ 2026-06-12) — Sperr-Warnung nur noch Web/PWA */
+html.native-app .lockwarn{display:none}
