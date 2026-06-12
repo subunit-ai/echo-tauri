@@ -197,3 +197,28 @@ export async function myMeetings(jwt: string): Promise<Json[]> {
     return [];
   }
 }
+
+/** 👑 Sonar-Ping Easter-Egg: Logo-Taps account-basiert zaehlen (fire-and-forget, gebatcht). */
+export async function pingTap(jwt: string, count: number): Promise<void> {
+  try {
+    await fetch(API + "/v1/ping-tap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt },
+      body: JSON.stringify({ count }),
+      keepalive: true,
+    });
+  } catch {
+    /* Easter-Egg — Fehler sind egal */
+  }
+}
+
+/** Verraet NUR dem Caller selbst, ob er Platz 1 im geheimen Ping-Ranking ist. */
+export async function pingRank(jwt: string): Promise<{ leader: boolean; count: number }> {
+  try {
+    const r = await fetch(API + "/v1/ping-rank", { headers: { Authorization: "Bearer " + jwt } });
+    if (!r.ok) return { leader: false, count: 0 };
+    return await r.json();
+  } catch {
+    return { leader: false, count: 0 };
+  }
+}

@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toggleTheme } from "../lib/theme";
 import { useI18n, type Lang } from "../lib/i18n";
 import { useMeeting } from "../store";
+import { pingTap, pingRank } from "../lib/api";
 import { fmtDate } from "../lib/format";
 
 const LANGS: { l: Lang; label: string }[] = [
@@ -34,6 +35,44 @@ export function Chrome() {
   const [histOpen, setHistOpen] = useState(false);
   const [histList, setHistList] = useState<any[] | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  // Easter Egg (TJ 2026-06-12): Platz 1 im geheimen Ping-Ranking traegt eine Mini-Krone
+  // am Account-Chip — sonst nirgends sichtbar.
+  const [crown, setCrown] = useState<number | null>(null);
+  useEffect(() => {
+    const jwt = identity?.jwt;
+    if (!jwt) { setCrown(null); return; }
+    let dead = false;
+    pingRank(jwt).then((r) => {
+      if (!dead) setCrown(r.leader ? r.count : null);
+    }).catch(() => {});
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity?.jwt]);
+  // 👆 Brand-Logo-Ping auf JEDER Seite (TJ 2026-06-12): Tap → One-Shot-Ring + zaehlt
+  // ins geheime Leaderboard (gebatcht, nur mit Identity — Gaeste pingen nur optisch).
+  const [brandPings, setBrandPings] = useState<number[]>([]);
+  const pingPend = useRef(0);
+  const pingTimer = useRef<number | null>(null);
+  const pingJwt = useRef<string | null>(null);
+  pingJwt.current = identity?.jwt || null;
+  const flushBrandPings = () => {
+    const n = pingPend.current;
+    pingPend.current = 0;
+    pingTimer.current = null;
+    if (n > 0 && pingJwt.current) pingTap(pingJwt.current, n);
+  };
+  useEffect(() => {
+    return () => {
+      if (pingTimer.current) window.clearTimeout(pingTimer.current);
+      flushBrandPings();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const fireBrandPing = () => {
+    setBrandPings((p) => [...p, Date.now()]);
+    pingPend.current += 1;
+    if (!pingTimer.current) pingTimer.current = window.setTimeout(flushBrandPings, 1200);
+  };
   // Meeting-Verlassen-X nur in aktiven Meeting-Screens (nicht Setup/Landing/Join/Ended).
   const inMeeting = screen === "host" || screen === "waiting" || screen === "guest" || screen === "enroll";
 
@@ -110,12 +149,17 @@ export function Chrome() {
       <a
         id="acctchip"
         className="acctchip"
-        href={"https://auth.subunit.ai/account?return=" + encodeURIComponent(window.location.origin + window.location.pathname)}
+        href={"https://auth.subunit.ai/account?lang=" + lang + "&return=" + encodeURIComponent(window.location.origin + window.location.pathname)}
         title="Konto & Abmelden"
         style={identity?.email ? { display: "flex" } : undefined}
       >
         <span id="acctini" className="ini">
           {(identity?.email?.[0] || "").toUpperCase()}
+          {crown !== null && (
+            <span className="acct-crown" title={"Sonar-Champion — " + crown + " Pings"} aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 7.5l4.7 3.8L12 4.5l4.3 6.8L21 7.5l-1.8 10a1.5 1.5 0 0 1-1.5 1.2H6.3a1.5 1.5 0 0 1-1.5-1.2L3 7.5z" /></svg>
+            </span>
+          )}
         </span>
         <span id="acctmail" className="ml">
           {identity?.email || ""}
@@ -157,12 +201,30 @@ export function Chrome() {
         </svg>
       </button>
 
+      {screen !== "welcome" && (
       <div className="brand">
         <b>Subunit</b>
-        <span className="echo">
+        <span
+          className="echo"
+          role="button"
+          tabIndex={0}
+          aria-label="Ping senden"
+          onClick={fireBrandPing}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") fireBrandPing();
+          }}
+        >
           <i aria-hidden="true"></i>
           <i aria-hidden="true"></i>
           <i aria-hidden="true"></i>
+          {brandPings.map((id) => (
+            <i
+              key={id}
+              className="ping-once"
+              aria-hidden="true"
+              onAnimationEnd={() => setBrandPings((p) => p.filter((x) => x !== id))}
+            ></i>
+          ))}
           <svg viewBox="0 0 96 96" aria-label="Echo">
             <circle cx="48" cy="48" r="32" fill="none" stroke="#06b6d4" strokeWidth="2.4" opacity=".3" />
             <circle cx="48" cy="48" r="22" fill="none" stroke="#06b6d4" strokeWidth="2.8" opacity=".55" />
@@ -177,6 +239,7 @@ export function Chrome() {
         </span>
         <span className="meet">Meet</span>
       </div>
+      )}
 
       {cancelOpen && (
         <div className="ddm center">
@@ -206,6 +269,7 @@ function HistoryModal({
   onClose: () => void;
   onPick: (m: any) => void;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
@@ -224,11 +288,11 @@ function HistoryModal({
         <button className="ddm-x" onClick={onClose} aria-label="Schließen">
           ✕
         </button>
-        <div className="ddm-title">Deine Meetings</div>
+        <div className="ddm-title">{t("Deine Meetings")}</div>
         {list === null ? (
-          <div className="hist-empty">Lade…</div>
+          <div className="hist-empty">{t("Lade…")}</div>
         ) : list.length === 0 ? (
-          <div className="hist-empty">Noch keine Meetings.</div>
+          <div className="hist-empty">{t("Noch keine Meetings.")}</div>
         ) : (
           <ul className="hist-list">
             {list.map((mtg) => (
