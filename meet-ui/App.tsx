@@ -133,11 +133,33 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
     // Dauer-Watchdog (TJ 2026-06-12): iOS pausiert das BG-Video auch bei
     // Audio-Session-Wechseln (Mikro-Permission/getUserMedia im Setup, Anruf, Siri) —
     // dafuer gibt es KEIN visibility-Event. Alle 4s pruefen: sichtbar + pausiert → ensure().
+    // Watchdog v2 (TJ 2026-06-12): faengt auch den stillen Decoder-Tod — Element meldet
+    // "playing", aber currentTime steht. Eskalation: play() -> Zeit-Nudge -> load(),
+    // letzteres hart auf 1x/30s limitiert (nie wieder Reload-Schleife).
+    let wdLastT = -1;
+    let wdStuck = 0;
+    let wdLastLoad = 0;
     const watchdog = window.setInterval(() => {
       if (document.hidden) return;
       const v = document.getElementById("bgvid") as HTMLVideoElement | null;
-      if (v && v.paused) ensure();
-    }, 4000);
+      if (!v) return;
+      if (v.paused) { wdStuck = 0; wdLastT = -1; ensure(); return; }
+      if (Math.abs(v.currentTime - wdLastT) < 0.01) {
+        wdStuck++;
+        if (wdStuck === 2) {
+          try { v.currentTime = 0.01; } catch { /* ignore */ }
+          v.play().catch(() => {});
+        } else if (wdStuck >= 4 && performance.now() - wdLastLoad > 30000) {
+          wdLastLoad = performance.now();
+          wdStuck = 0;
+          try { v.load(); } catch { /* ignore */ }
+          v.play().catch(() => {});
+        }
+      } else {
+        wdStuck = 0;
+      }
+      wdLastT = v.currentTime;
+    }, 3000);
     const resume = () => {
       if (!document.hidden) ensure();
     };
@@ -163,9 +185,10 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
   return (
     <>
       {/* 🎥 Fester Video-Hintergrund (Adobe-Stock Partikel-Welle, TJ 2026-06-11) — nur Dark-Mode (CSS), Mesh bleibt Fallback/Poster */}
-      <video id="bgvid" autoPlay muted loop playsInline preload="auto" poster="/bg-wave-poster.jpg" aria-hidden="true">
-        <source src="/bg-wave5-1080.mp4" type="video/mp4" />
-      </video>
+      {/* Quelle adaptiv (TJ 2026-06-12): grosse Screens kriegen den 4K-Encode (laeuft
+          dort ueber die volle Breite), Mobile den 1080p — beide 0.6x in der Datei. */}
+      <video id="bgvid" autoPlay muted loop playsInline preload="auto" poster="/bg-wave-poster.jpg" aria-hidden="true"
+        src={window.innerWidth >= 1000 ? "/bg-wave6-2160.mp4" : "/bg-wave6-1080.mp4"} />
       {m.connLost && (
         <div id="connlost" className="connlost">
           ⚠️ Verbindung unterbrochen — bleib in dieser App, ich verbinde automatisch neu …

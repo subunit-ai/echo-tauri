@@ -139,6 +139,11 @@ html.native-app body::after{display:none}
    Raender via radialem Mask in den BG verschmolzen — kein Zoom, keine Matsch-Skalierung. */
 #bgvid{position:fixed;left:50%;top:50%;transform:translate(-50%,calc(-50% - 20px));width:min(100vw,1400px);aspect-ratio:16/9;height:auto;object-fit:contain;z-index:-3;pointer-events:none;display:none;-webkit-mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%);mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%)}
 html.dark #bgvid{display:block}
+/* Light Mode (TJ 2026-06-12): Welle auch im hellen Theme — invertiert (dunkles Navy ->
+   helles Eis), Farbton zurueckgedreht, dezent abgeschwaecht */
+html:not(.dark) #bgvid{display:block;filter:invert(1) hue-rotate(195deg) saturate(1.15);opacity:.5}
+/* Desktop/Laptop (TJ 2026-06-12): Animation ueber die VOLLE Breite, 4K-Encode traegt die Qualitaet */
+@media (min-width:1000px){#bgvid{width:100vw;max-width:none}}
 @media (prefers-reduced-motion:reduce){#bgvid{display:none!important}}
 /* Dark-Mode: Mesh-Orbs dezenter ueber dem Video (Tiefe statt Konkurrenz) */
 html.dark body::before{opacity:.55}
@@ -638,6 +643,9 @@ button:focus-visible,.codebig:focus-visible,.seg-btn:focus-visible,.tile:focus-v
 
 /* Tap-Ping (TJ 2026-06-11): Logo antippen → einzelner kraeftiger Ring, raeumt sich via onAnimationEnd auf */
 .welcome-logo i.ping-once{animation:brandping 1.5s cubic-bezier(.2,.55,.35,1) 1 forwards;border-width:2px;opacity:.85}
+/* Kleinere iPhones (TJ 2026-06-12, Eriks 13er): Logo weniger hochziehen, sonst
+   verschwinden die Ping-Ringe in der Notch. Pro-Max-Layout (>=920pt) unveraendert. */
+@media (max-height:920px){.welcome-logo{transform:translateY(-4vh)}}
 
 /* 👑 Krone-Slider (Sonar-Champion, Platz 1 im geheimen Ping-Ranking) */
 /* Easter-Egg-Krone am Account-Chip (nur Platz 1 im geheimen Ping-Ranking) — TJ 2026-06-12 */
