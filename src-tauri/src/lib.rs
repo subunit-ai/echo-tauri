@@ -115,6 +115,7 @@ pub fn run() {
             commands::set_orb_position,
             commands::orb_quick,
             commands::orb_cycle,
+            commands::orb_set,
             prompt_console::prompt_console_toggle,
             prompt_console::prompts_load,
             prompt_console::prompts_save,

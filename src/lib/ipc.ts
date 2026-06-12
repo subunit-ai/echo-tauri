@@ -120,6 +120,9 @@ export interface OrbQuick {
 export const orbQuick = () => invoke<OrbQuick>("orb_quick");
 export const orbCycle = (which: "mode" | "language" | "cleanup") =>
   invoke<OrbQuick>("orb_cycle", { which });
+/** Set one satellite directly (expanded island panels pick instead of cycling). */
+export const orbSet = (which: "mode" | "language" | "cleanup", value: string) =>
+  invoke<OrbQuick>("orb_set", { which, value });
 export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 /** Copy text to the clipboard (History action). */

@@ -24,7 +24,8 @@
     "tooltipMode": "Modus: {{value}}",
     "tooltipLanguage": "Sprache: {{value}}",
     "tooltipCleanup": "Cleanup: {{value}}",
-    "tooltipPrompt": "Prompt-Konsole öffnen"
+    "tooltipPrompt": "Prompt-Konsole öffnen",
+    "langAuto": "Automatisch"
   },
   "common": {
     "save": "Speichern",

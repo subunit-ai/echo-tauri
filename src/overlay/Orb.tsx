@@ -1,12 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  BAN_PATHS,
+  BRIEFCASE_PATHS,
+  CLOUD_PATHS,
+  GLOBE_PATHS,
+  HASH_PATHS,
+  MAIL_PATHS,
+  SHIELD_CHECK_PATHS,
+  SPARKLES_PATHS,
+  STAR4_PATHS,
+  TERMINAL_PATHS,
+  ZAP_PATHS,
+  StrokeIcon,
+} from "../components/icons";
+import {
   onState,
-  orbCycle,
   orbQuick,
+  orbSet,
   setOrbPosition,
   type EngineState,
   type OrbQuick,
@@ -29,29 +43,98 @@ function hexA(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-/**
- * The floating orb. A transparent, click-through overlay window renders this.
- * It reflects the engine state (idle/recording/transcribing/done/error) and
- * reacts to the mic level, in one of six styles.
- */
-const MODE_LABEL: Record<string, string> = { local: "LOK", cloud: "CLD", superfast: "FAST" };
+// ---- Island layout --------------------------------------------------------
+// The window is the orb square PLUS transparent gutters where the islands live
+// (left / right / above / below) so they never cover the canvas drawing.
+// KEEP IN SYNC with GUTTER_* in src-tauri/src/overlay.rs.
+const GUTTER_X = 168;
+const GUTTER_TOP = 168;
+const GUTTER_BOTTOM = 64;
+const GAP = 18; // clear air between the orb canvas and an island
+const CHIP = 38; // collapsed island (icon chip) diameter
+const PANEL_W = GUTTER_X - GAP; // expanded island width — fills its gutter
+
 const MODE_COLOR: Record<string, string> = {
   local: "#22d3ee",
   cloud: "#5b9dff",
   superfast: "#ff9f43",
 };
-const CLEANUP_LABEL: Record<string, string> = {
-  off: "—",
-  prompt: "PR",
-  email: "@",
-  slack: "#",
-  formal: "FM",
-};
-const langLabel = (l: string) => (l === "auto" ? "AUTO" : l.toUpperCase());
 
+// Liquid-Glass (dark, floats over arbitrary screen content — no real backdrop
+// to blur, so the glass is a high-opacity navy fill + hairline + top rim).
+const glassSurface: CSSProperties = {
+  background: "rgba(10,22,40,0.92)",
+  border: "1px solid rgba(150,185,225,0.18)",
+  boxShadow:
+    "inset 0 1px 0 rgba(190,215,245,0.14), 0 18px 40px -18px rgba(0,0,0,0.65)",
+};
+
+const EASE = "cubic-bezier(.2,.8,.2,1)";
+
+const rowStyle = (active: boolean): CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  height: 34,
+  padding: "0 10px",
+  borderRadius: 12,
+  border: `1px solid ${active ? "rgba(34,211,238,0.5)" : "transparent"}`,
+  background: active ? "rgba(34,211,238,0.14)" : "transparent",
+  color: active ? "#67e8f9" : "#cfe0f2",
+  fontSize: 12.5,
+  fontWeight: 600,
+  letterSpacing: "0.01em",
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+  userSelect: "none",
+  textAlign: "left",
+  width: "100%",
+});
+
+/** One option inside an expanded island: icon + label, cyan when active. */
+function Row({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: string[];
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      style={rowStyle(active)}
+      onClick={onClick}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "transparent";
+      }}
+    >
+      <StrokeIcon paths={icon} size={15} strokeWidth={1.9} />
+      {label}
+    </button>
+  );
+}
+
+/**
+ * The floating orb. A transparent, click-through overlay window renders this;
+ * the Rust hit-test loop reports engagement via `echo://orb-hover` (the webview
+ * gets no mouse events while click-through, so it can't track hover itself).
+ *
+ * Engaged → three icon-only glass chips appear around the orb (mode left,
+ * language above, cleanup right) plus the ✦ console chip below. Hovering ANY
+ * chip blooms all three into full option panels — every value visible, one
+ * click to set (`orb_set`). Returning to the orb collapses them back to chips;
+ * leaving the window hides everything.
+ */
 export function Orb() {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const state = useRef<EngineState>("idle");
   const level = useRef(0);
   const style = useRef("ping");
@@ -63,6 +146,7 @@ export function Orb() {
   const speed = useRef(0.6);
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
@@ -104,22 +188,32 @@ export function Orb() {
       if (typeof p.speed === "number") speed.current = p.speed;
       if (p.quick) setQuick(p.quick);
     });
+    // Engagement from the Rust hit-test loop: shows/hides the islands. On
+    // disengage the panels also fold back so the next hover starts calm.
+    const unHover = listen<{ hover: boolean }>("echo://orb-hover", (e) => {
+      setHover(e.payload.hover);
+      if (!e.payload.hover) setExpanded(false);
+    });
     return () => {
       un.then((f) => f());
       unCfg.then((f) => f());
+      unHover.then((f) => f());
     };
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const box = boxRef.current;
+    if (!canvas || !box) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // The canvas covers ONLY the orb square (the gutters belong to the islands),
+    // so it sizes against its box, not the window.
     const dpr = window.devicePixelRatio || 1;
     const resize = () => {
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.width = Math.floor(box.clientWidth * dpr);
+      canvas.height = Math.floor(box.clientHeight * dpr);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -341,7 +435,9 @@ export function Orb() {
   }, []);
 
   // Persist the position after the user drags the orb (the canvas is a
-  // data-tauri-drag-region, so dragging it moves this window). Debounced so we
+  // data-tauri-drag-region, so dragging it moves this window). The saved value
+  // is the ORB square's top-left (window + gutters) — the same coordinate the
+  // pre-gutter builds saved, so old positions keep working. Debounced so we
   // save once the drag settles, not on every intermediate move event.
   useEffect(() => {
     const win = getCurrentWindow();
@@ -352,7 +448,7 @@ export function Orb() {
         try {
           const pos = await win.outerPosition();
           const sf = await win.scaleFactor();
-          await setOrbPosition(pos.x / sf, pos.y / sf);
+          await setOrbPosition(pos.x / sf + GUTTER_X, pos.y / sf + GUTTER_TOP);
         } catch {
           /* ignore */
         }
@@ -364,91 +460,252 @@ export function Orb() {
     };
   }, []);
 
-  const cycle = (which: "mode" | "language" | "cleanup") => (e: ReactMouseEvent) => {
-    e.stopPropagation();
-    orbCycle(which).then(setQuick).catch(() => {});
+  const pick = (which: "mode" | "language" | "cleanup", value: string) => () => {
+    orbSet(which, value).then(setQuick).catch(() => {});
   };
 
-  const satBase: CSSProperties = {
+  // Vertical center of the orb square, as a CSS calc (the orb sits between the
+  // top and bottom gutters; its box height is only known to CSS).
+  const orbMidY = `calc(${GUTTER_TOP}px + (100% - ${GUTTER_TOP + GUTTER_BOTTOM}px) / 2)`;
+
+  const chipBase: CSSProperties = {
+    ...glassSurface,
     position: "absolute",
-    minWidth: 26,
-    height: 22,
-    padding: "0 6px",
-    border: "1px solid rgba(34,211,238,0.45)",
+    width: CHIP,
+    height: CHIP,
     borderRadius: 999,
-    background: "rgba(8,16,30,0.92)",
-    color: "#cfeefb",
-    fontSize: 10,
-    fontWeight: 800,
-    letterSpacing: "0.02em",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    color: "#cfe0f2",
     cursor: "pointer",
     userSelect: "none",
-    opacity: hover ? 1 : 0,
-    transition: "opacity 0.18s ease",
-    pointerEvents: hover ? "auto" : "none",
-    boxShadow: "0 4px 12px -4px rgba(0,0,0,0.5)",
+    padding: 0,
+    transition: `opacity 0.18s ease, transform 0.22s ${EASE}`,
   };
+  // Chips show while engaged-but-collapsed; panels replace them when expanded.
+  const chipVis = (vis: boolean): CSSProperties => ({
+    opacity: vis ? 1 : 0,
+    transform: vis ? "scale(1)" : "scale(0.7)",
+    pointerEvents: vis ? "auto" : "none",
+  });
+  const chipsVisible = hover && !expanded;
+
+  const panelBase: CSSProperties = {
+    ...glassSurface,
+    position: "absolute",
+    width: PANEL_W,
+    borderRadius: 18,
+    padding: 6,
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    transition: `opacity 0.22s ${EASE}, transform 0.22s ${EASE}`,
+  };
+  const panelVis = (origin: string): CSSProperties => ({
+    opacity: expanded && hover ? 1 : 0,
+    transform: expanded && hover ? "scale(1)" : "scale(0.72)",
+    transformOrigin: origin,
+    pointerEvents: expanded && hover ? "auto" : "none",
+  });
 
   return (
-    <div
-      style={{ position: "relative", width: "100%", height: "100%" }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      <canvas
-        ref={canvasRef}
-        data-tauri-drag-region
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
-      />
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      {/* Orb square between the gutters. Returning here folds the panels back. */}
+      <div
+        ref={boxRef}
+        onMouseEnter={() => setExpanded(false)}
+        style={{
+          position: "absolute",
+          left: GUTTER_X,
+          right: GUTTER_X,
+          top: GUTTER_TOP,
+          bottom: GUTTER_BOTTOM,
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          data-tauri-drag-region
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        />
+      </div>
+
       {quick && (
         <>
+          {/* ---- Collapsed chips: icon-only, floating clear of the orb.
+               Hovering ANY of them blooms all three option panels. ---- */}
           {/* W — transcription mode */}
           <button
             title={t("overlay.tooltipMode", { value: quick.mode })}
-            onClick={cycle("mode")}
+            onMouseEnter={() => setExpanded(true)}
             style={{
-              ...satBase,
-              left: 0,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: MODE_COLOR[quick.mode] ?? "#cfeefb",
-              borderColor: `${MODE_COLOR[quick.mode] ?? "#22d3ee"}88`,
+              ...chipBase,
+              ...chipVis(chipsVisible),
+              left: GUTTER_X - GAP - CHIP,
+              top: orbMidY,
+              marginTop: -CHIP / 2,
+              color: MODE_COLOR[quick.mode] ?? "#cfe0f2",
             }}
           >
-            {MODE_LABEL[quick.mode] ?? quick.mode}
+            <StrokeIcon
+              paths={
+                quick.mode === "local"
+                  ? SHIELD_CHECK_PATHS
+                  : quick.mode === "superfast"
+                    ? ZAP_PATHS
+                    : CLOUD_PATHS
+              }
+              size={17}
+              strokeWidth={1.9}
+            />
           </button>
           {/* N — language */}
           <button
             title={t("overlay.tooltipLanguage", { value: quick.language })}
-            onClick={cycle("language")}
-            style={{ ...satBase, top: 0, left: "50%", transform: "translateX(-50%)" }}
+            onMouseEnter={() => setExpanded(true)}
+            style={{
+              ...chipBase,
+              ...chipVis(chipsVisible),
+              left: `calc(50% - ${CHIP / 2}px)`,
+              top: GUTTER_TOP - GAP - CHIP,
+            }}
           >
-            {langLabel(quick.language)}
+            <StrokeIcon paths={GLOBE_PATHS} size={17} strokeWidth={1.9} />
           </button>
           {/* E — cleanup style */}
           <button
             title={t("overlay.tooltipCleanup", { value: quick.cleanup })}
-            onClick={cycle("cleanup")}
-            style={{ ...satBase, right: 0, top: "50%", transform: "translateY(-50%)" }}
-          >
-            {CLEANUP_LABEL[quick.cleanup] ?? quick.cleanup.slice(0, 2).toUpperCase()}
-          </button>
-          {/* S — Prompt Console (floating Liquid-Glass prompt window) */}
-          <button
-            title={t("overlay.tooltipPrompt")}
-            onClick={(e) => {
-              e.stopPropagation();
-              invoke("prompt_console_toggle").catch(() => {});
+            onMouseEnter={() => setExpanded(true)}
+            style={{
+              ...chipBase,
+              ...chipVis(chipsVisible),
+              left: `calc(100% - ${GUTTER_X - GAP}px)`,
+              top: orbMidY,
+              marginTop: -CHIP / 2,
+              color: quick.cleanup === "off" ? "#7d8da3" : "#22d3ee",
             }}
-            style={{ ...satBase, bottom: 0, left: "50%", transform: "translateX(-50%)" }}
           >
-            ✦
+            <StrokeIcon paths={SPARKLES_PATHS} size={17} strokeWidth={1.9} />
           </button>
+
+          {/* ---- Expanded islands: all three bloom together on chip hover ---- */}
+          {/* Mode — left of the orb */}
+          <div
+            style={{
+              ...panelBase,
+              ...panelVis("right center"),
+              left: 0,
+              top: orbMidY,
+              translate: "0 -50%",
+            }}
+          >
+            <Row
+              icon={SHIELD_CHECK_PATHS}
+              label={t("mode.localTitle")}
+              active={quick.mode === "local"}
+              onClick={pick("mode", "local")}
+            />
+            <Row
+              icon={CLOUD_PATHS}
+              label={t("mode.cloudTitle")}
+              active={quick.mode === "cloud"}
+              onClick={pick("mode", "cloud")}
+            />
+            <Row
+              icon={ZAP_PATHS}
+              label={t("mode.superfastTitle")}
+              active={quick.mode === "superfast"}
+              onClick={pick("mode", "superfast")}
+            />
+          </div>
+          {/* Language — above the orb */}
+          <div
+            style={{
+              ...panelBase,
+              ...panelVis("center bottom"),
+              left: `calc(50% - ${PANEL_W / 2}px)`,
+              bottom: `calc(100% - ${GUTTER_TOP - GAP}px)`,
+            }}
+          >
+            <Row
+              icon={GLOBE_PATHS}
+              label="Deutsch"
+              active={quick.language === "de"}
+              onClick={pick("language", "de")}
+            />
+            <Row
+              icon={GLOBE_PATHS}
+              label="English"
+              active={quick.language === "en"}
+              onClick={pick("language", "en")}
+            />
+            <Row
+              icon={GLOBE_PATHS}
+              label={t("overlay.langAuto")}
+              active={quick.language === "auto"}
+              onClick={pick("language", "auto")}
+            />
+          </div>
+          {/* Cleanup — right of the orb */}
+          <div
+            style={{
+              ...panelBase,
+              ...panelVis("left center"),
+              left: `calc(100% - ${PANEL_W}px)`,
+              top: orbMidY,
+              translate: "0 -50%",
+            }}
+          >
+            <Row
+              icon={BAN_PATHS}
+              label={t("common.off")}
+              active={quick.cleanup === "off"}
+              onClick={pick("cleanup", "off")}
+            />
+            <Row
+              icon={TERMINAL_PATHS}
+              label={t("settings.cleanupStylePrompt")}
+              active={quick.cleanup === "prompt"}
+              onClick={pick("cleanup", "prompt")}
+            />
+            <Row
+              icon={MAIL_PATHS}
+              label={t("settings.cleanupStyleEmail")}
+              active={quick.cleanup === "email"}
+              onClick={pick("cleanup", "email")}
+            />
+            <Row
+              icon={HASH_PATHS}
+              label={t("settings.cleanupStyleSlack")}
+              active={quick.cleanup === "slack"}
+              onClick={pick("cleanup", "slack")}
+            />
+            <Row
+              icon={BRIEFCASE_PATHS}
+              label={t("settings.cleanupStyleFormal")}
+              active={quick.cleanup === "formal"}
+              onClick={pick("cleanup", "formal")}
+            />
+          </div>
         </>
       )}
+
+      {/* S — Prompt Console (action chip, stays a chip in both stages) */}
+      <button
+        title={t("overlay.tooltipPrompt")}
+        onClick={() => {
+          invoke("prompt_console_toggle").catch(() => {});
+        }}
+        style={{
+          ...chipBase,
+          ...chipVis(hover),
+          left: `calc(50% - ${CHIP / 2}px)`,
+          top: `calc(100% - ${GUTTER_BOTTOM - 14}px)`,
+          color: "#a78bfa",
+        }}
+      >
+        <StrokeIcon paths={STAR4_PATHS} size={16} strokeWidth={1.9} />
+      </button>
     </div>
   );
 }

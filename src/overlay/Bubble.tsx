@@ -129,10 +129,15 @@ export function Bubble() {
   }, []);
 
   return (
+    // Centered in the ORB zone (the window is larger than the orb by the island
+    // gutters — see Orb.tsx GUTTER_*), so the pill shows up where the orb would.
     <div
       style={{
         position: "absolute",
-        inset: 0,
+        left: 168,
+        right: 168,
+        top: 168,
+        bottom: 64,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
