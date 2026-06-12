@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "../lib/i18n";
 
 /**
@@ -7,16 +8,23 @@ import { useI18n } from "../lib/i18n";
  */
 export function Welcome({ onContinue }: { onContinue: () => void }) {
   const { t } = useI18n();
+  // Weicher Abgang (TJ 2026-06-12): Tap -> Bestaetigungs-Ping + Ausblenden, dann weiter.
+  const [leaving, setLeaving] = useState(false);
+  const go = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(onContinue, 850);
+  };
   return (
     <div
-      className="wrap welcome-splash"
+      className={"wrap welcome-splash" + (leaving ? " leaving" : "")}
       id="s-welcome"
       role="button"
       tabIndex={0}
       aria-label="Weiter"
-      onClick={onContinue}
+      onClick={go}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onContinue();
+        if (e.key === "Enter" || e.key === " ") go();
       }}
     >
       <div className="hero welcome-hero">
@@ -24,6 +32,7 @@ export function Welcome({ onContinue }: { onContinue: () => void }) {
           <i></i>
           <i></i>
           <i></i>
+          {leaving && <i className="ping-once"></i>}
           <svg viewBox="0 0 96 96" aria-hidden="true">
             <circle cx="48" cy="48" r="32" fill="none" stroke="#06b6d4" strokeWidth="2.4" opacity=".3" />
             <circle cx="48" cy="48" r="22" fill="none" stroke="#06b6d4" strokeWidth="2.8" opacity=".55" />
