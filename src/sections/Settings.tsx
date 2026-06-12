@@ -351,6 +351,40 @@ export function Settings() {
                 options={SUPPORTED_LANGUAGES.map((l) => [l.code, l.label])}
               />
             </Row>
+            <Row name={t("settings.autoUpdate")}>
+              <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
+            </Row>
+            <Row name={t("settings.updates")} hint={updateMsg}>
+              {foundUpdate ? (
+                <button className="sub-tab" onClick={doInstall} disabled={updating}>
+                  {updating ? t("settings.installing") : t("settings.installNow", { version: foundUpdate })}
+                </button>
+              ) : (
+                <button className="sub-tab" onClick={doUpdate}>
+                  {t("settings.checkForUpdates")}
+                </button>
+              )}
+            </Row>
+
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
+              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>{t("settings.aboutEcho")}</div>
+              <Row name={t("settings.version")} hint={ver ? t("settings.versionHint", { version: ver }) : ""}>
+                <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
+              </Row>
+              <Row name={t("settings.dataFolder")} hint={t("settings.dataFolderHint")}>
+                <button className="sub-tab" onClick={() => openConfigDir()}>
+                  {t("settings.openFolder")}
+                </button>
+              </Row>
+              <Row name={t("settings.sourceCode")}>
+                <button
+                  className="sub-tab"
+                  onClick={() => openExternal("https://github.com/subunit-ai/echo-tauri")}
+                >
+                  {t("settings.github")}
+                </button>
+              </Row>
+            </div>
           </>
         )}
 
@@ -376,6 +410,9 @@ export function Settings() {
             </div>
             <Row name={t("settings.transcriptionLanguage")} hint={t("settings.transcriptionLanguageHint")}>
               <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
+            </Row>
+            <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
+              <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
             </Row>
             <Row name={t("settings.cloudQuality")}>
               <Sel
@@ -609,8 +646,13 @@ export function Settings() {
                 {c.plan || "free"}
               </span>
             </Row>
-            <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
-              <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
+            <Row name={t("settings.manageAccount")} hint={t("settings.manageAccountHint")}>
+              <button
+                className="sub-tab"
+                onClick={() => openExternal(`https://auth.subunit.ai/account?lang=${c.ui_language || "de"}`)}
+              >
+                {t("settings.openAccount")}
+              </button>
             </Row>
             <Row name={t("settings.saveToSynapse")} hint={t("settings.saveToSynapseHint")}>
               <Toggle checked={c.synapse_save_enabled} onChange={(v) => set("synapse_save_enabled", v)} />
@@ -618,40 +660,6 @@ export function Settings() {
             <Row name={t("settings.saveHistory")}>
               <Toggle checked={c.history_enabled} onChange={(v) => set("history_enabled", v)} />
             </Row>
-            <Row name={t("settings.autoUpdate")}>
-              <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
-            </Row>
-            <Row name={t("settings.updates")} hint={updateMsg}>
-              {foundUpdate ? (
-                <button className="sub-tab" onClick={doInstall} disabled={updating}>
-                  {updating ? t("settings.installing") : t("settings.installNow", { version: foundUpdate })}
-                </button>
-              ) : (
-                <button className="sub-tab" onClick={doUpdate}>
-                  {t("settings.checkForUpdates")}
-                </button>
-              )}
-            </Row>
-
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
-              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>{t("settings.aboutEcho")}</div>
-              <Row name={t("settings.version")} hint={ver ? t("settings.versionHint", { version: ver }) : ""}>
-                <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
-              </Row>
-              <Row name={t("settings.dataFolder")} hint={t("settings.dataFolderHint")}>
-                <button className="sub-tab" onClick={() => openConfigDir()}>
-                  {t("settings.openFolder")}
-                </button>
-              </Row>
-              <Row name={t("settings.sourceCode")}>
-                <button
-                  className="sub-tab"
-                  onClick={() => openExternal("https://github.com/subunit-ai/echo-tauri")}
-                >
-                  {t("settings.github")}
-                </button>
-              </Row>
-            </div>
           </>
         )}
       </div>
