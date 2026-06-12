@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import * as api from "./lib/api";
 import { decodeJwt, type Identity } from "./lib/auth";
 import { MeetingRecorder } from "./lib/recorder";
@@ -9,7 +9,7 @@ import { detectLang } from "./lib/i18n";
 // functions. Render-driving slices live in useState; imperative singletons (recorder,
 // timers, tokens read only inside actions) live in a ref so they don't churn renders.
 
-export type Screen = "landing" | "hostlogin" | "host" | "join" | "waiting" | "guest" | "enroll" | "ended";
+export type Screen = "welcome" | "landing" | "hostlogin" | "host" | "join" | "waiting" | "guest" | "enroll" | "ended";
 
 export interface Setup {
   title: string;
@@ -113,6 +113,13 @@ export function MeetingProvider({
 }) {
   const [screen, setScreen] = useState<Screen>("landing");
   const [identity, setIdentity] = useState<Identity | null>(null);
+  // 🔑 Persistenter Login (TJ 2026-06-11): Identity ueberlebt App-/Seiten-Neustarts,
+  // damit "Meeting starten" nie wieder in den SSO-Redirect haengt. Expiry-Check beim Boot (App.tsx).
+  useEffect(() => {
+    if (identity?.jwt) {
+      try { localStorage.setItem("meet_id", JSON.stringify(identity)); } catch { /* ignore */ }
+    }
+  }, [identity]);
   const [role, setRole] = useState<"host" | "guest" | null>(null);
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");

@@ -1,20 +1,37 @@
+import { useState } from "react";
 import { useI18n } from "../lib/i18n";
 
 /**
  * LANDING — hero + two action cards (start / join). 1:1 port of `#s-landing`.
  */
-export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: () => void }) {
+export function Landing({ onHost, onJoin, guest = false, onLogin }: { onHost: () => void; onJoin: () => void; guest?: boolean; onLogin?: () => void }) {
   const { t } = useI18n();
+  const [tipOpen, setTipOpen] = useState(false); // ?-Tooltip: Klick-Toggle (TJ 2026-06-12)
   return (
     <div className="wrap" id="s-landing">
       <div className="hero">
-        <div className="eyebrow">
-          <span className="dot"></span>Automatisches Protokoll
+        {/* DSGVO-Pille statt "Automatisches Protokoll" (TJ 2026-06-12) — ? toggelt die Erklaerung */}
+        <div className="eyebrow dsgvo-pill">
+          <span className="dsgvo-trust-ic" aria-hidden="true" />
+          {t("100 % DSGVO-konform")}
+          <span
+            className={"dsgvo-help" + (tipOpen ? " open" : "")}
+            role="button"
+            aria-expanded={tipOpen}
+            aria-label="Was bedeutet DSGVO-konform?"
+            onClick={() => setTipOpen((o) => !o)}
+          >
+            ?
+            <span className="dsgvo-tip" role="tooltip" onClick={(e) => e.stopPropagation()}>
+              {t("Alle Meetings werden ausschließlich auf unseren Servern in Deutschland verarbeitet — DSGVO-konform. Keine Weitergabe an Dritte, keine US-Cloud. Audio und Transkript werden nach der Auswertung automatisch gelöscht. Höchste Datensicherheit ist unser Standard.")}
+            </span>
+          </span>
         </div>
         <h1>{t("Meeting aufnehmen")}</h1>
         <p>{t("Starte ein Meeting oder tritt einem bei — mit sauberer Sprecher-Trennung.")}</p>
       </div>
       <div className="stack">
+        {!guest && (
         <button className="action" onClick={onHost}>
           <span className="ic">
             <svg viewBox="0 0 24 24">
@@ -33,6 +50,7 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: () => 
             </svg>
           </span>
         </button>
+        )}
         <button className="action alt" onClick={onJoin}>
           <span className="ic">
             <svg viewBox="0 0 24 24">
@@ -51,19 +69,11 @@ export function Landing({ onHost, onJoin }: { onHost: () => void; onJoin: () => 
             </svg>
           </span>
         </button>
-      </div>
-      {/* DSGVO-Trust-Zeile (kein Kasten) — überall präsent, Startseite + Setup */}
-      <div className="dsgvo-trust">
-        <span className="dsgvo-trust-ic" aria-hidden="true" />
-        <span className="dsgvo-trust-txt">100&nbsp;% DSGVO-konform</span>
-        <span className="dsgvo-help" tabIndex={0} role="button" aria-label="Was bedeutet DSGVO-konform?">
-          ?
-          <span className="dsgvo-tip" role="tooltip">
-            Alle Meetings werden ausschließlich auf unseren Servern in Deutschland verarbeitet — DSGVO-konform.
-            Keine Weitergabe an Dritte, keine US-Cloud. Audio und Transkript werden nach der Auswertung
-            automatisch gelöscht. Höchste Datensicherheit ist unser Standard.
-          </span>
-        </span>
+        {guest && (
+          <button className="btn btn-ghost" onClick={onLogin}>
+            {t("Mit Account anmelden — eigene Meetings starten")}
+          </button>
+        )}
       </div>
     </div>
   );

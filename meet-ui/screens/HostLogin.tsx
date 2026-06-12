@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../lib/i18n";
 import { useMeeting } from "../store";
 
 type Device = "multi" | "pod" | "single";
 
 // Erfassungs-Kacheln: Titel, Kurzbeschreibung (unter der Kachel) + ausführliche Info (?-Overlay).
-const DEVS: Device[] = ["multi", "pod", "single"];
+// Reihenfolge getauscht (TJ 2026-06-12): Ein Gerät ↔ Mehrere Geräte — ?-Infos wandern über den Key mit.
+const DEVS: Device[] = ["single", "pod", "multi"];
 const DEV_TT: Record<Device, string> = { multi: "Mehrere Geräte", pod: "Konferenzmikrofon", single: "Ein Gerät" };
 const DEV_DS: Record<Device, string> = { multi: "Jeder auf seinem Gerät", pod: "Host + Gäste per QR", single: "Alle teilen 1 Gerät" };
 const DEV_INFO: Record<Device, string> = {
@@ -30,41 +31,86 @@ function nextQuarterSlot(): { date: string; time: string } {
 export function HostLogin({ onBack }: { onBack: () => void }) {
   const { t } = useI18n();
   const m = useMeeting();
-  const [device, setDevice] = useState<Device>("multi");
+  const [device, setDevice] = useState<Device>("pod"); // Default: Konferenzmikrofon (TJ 2026-06-12)
   const [infoOpen, setInfoOpen] = useState<Device | "">("");
   const [spk, setSpk] = useState(2);
   const [title, setTitle] = useState("");
-  const [lang, setLang] = useState("auto");
   const [names, setNames] = useState<string[]>([]);
   const [mics, setMics] = useState<{ id: string; label: string }[]>([]);
   const [micId, setMicId] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState(false); // "Meeting planen"-Modal offen
+  const [sheet, setSheet] = useState(false); // Bottom-Sheet "Aufnahme anpassen" (Mikro/Sprecher/Namen)
   const [planDate, setPlanDate] = useState(() => nextQuarterSlot().date);
   const [planTime, setPlanTime] = useState(() => nextQuarterSlot().time);
 
+  // ⌨️ Typewriter-Placeholder (TJ 2026-06-12): tippt Meeting-Namen-Ideen ein & wieder raus.
+  // Bei Fokus im Feld: Animation aus (leerer Placeholder) — nicht ins Tippen reinquatschen.
+  const [ph, setPh] = useState("");
+  const [phFocus, setPhFocus] = useState(false);
+  useEffect(() => {
+    const IDEAS = ["Weekly Sync", "Sprint Review", "Strategie-Session", "Daily Standup", "1:1 Check-in"];
+    let i = 0, pos = 0, del = false;
+    let tm: number;
+    const tick = () => {
+      const word = IDEAS[i % IDEAS.length];
+      if (!del) {
+        pos++;
+        setPh(word.slice(0, pos));
+        if (pos === word.length) { del = true; tm = window.setTimeout(tick, 1800); return; }
+        tm = window.setTimeout(tick, 75);
+      } else {
+        pos--;
+        setPh(word.slice(0, pos));
+        if (pos === 0) { del = false; i++; tm = window.setTimeout(tick, 400); return; }
+        tm = window.setTimeout(tick, 35);
+      }
+    };
+    tm = window.setTimeout(tick, 600);
+    return () => window.clearTimeout(tm);
+  }, []);
+
   // Enumerate microphones once a central-mic mode (pod/single) is picked — mirrors the
   // vanilla loadMics(): permission probe, then list audioinput devices.
+  // ⚡ Performance (TJ 2026-06-11): beim Tile-Wechsel NUR billig enumerieren — getUserMedia
+  // aktiviert die Mikro-Hardware (iOS-Audio-Session) und hat die Klick-Animation ruckeln lassen.
   useEffect(() => {
     if (device === "multi") return;
     if (!navigator.mediaDevices?.enumerateDevices) return;
     let cancelled = false;
     (async () => {
       try {
-        const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
-        ms.getTracks().forEach((tk) => tk.stop());
         const devs = await navigator.mediaDevices.enumerateDevices();
         if (cancelled) return;
-        setMics(devs.filter((d) => d.kind === "audioinput").map((d, i) => ({ id: d.deviceId, label: d.label || "Mikrofon " + (i + 1) })));
+        const ins = devs.filter((d) => d.kind === "audioinput");
+        // Labels gibt es nur mit bereits erteilter Permission — dann reicht das hier komplett.
+        if (ins.some((d) => d.label)) {
+          setMics(ins.map((d, i) => ({ id: d.deviceId, label: d.label || "Mikrofon " + (i + 1) })));
+        }
       } catch {
-        /* no permission → just "Standard-Mikrofon" */
+        /* ignore */
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [device]);
+
+  // Volle Probe (Permission + Labels) erst, wenn der User das Mikro-Dropdown wirklich oeffnet.
+  const micProbed = useRef(false);
+  const probeMics = async () => {
+    if (micProbed.current || !navigator.mediaDevices?.getUserMedia) return;
+    micProbed.current = true;
+    try {
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+      ms.getTracks().forEach((tk) => tk.stop());
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      setMics(devs.filter((d) => d.kind === "audioinput").map((d, i) => ({ id: d.deviceId, label: d.label || "Mikrofon " + (i + 1) })));
+    } catch {
+      /* no permission → just "Standard-Mikrofon" */
+    }
+  };
 
   const setName = (i: number, v: string) =>
     setNames((arr) => {
@@ -82,7 +128,7 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
       device,
       spk,
       names: device === "single" ? names.map((n) => (n || "").trim()).filter(Boolean) : [],
-      language: lang,
+      language: "auto", // immer Auto-Erkennung (TJ 2026-06-12)
       scheduledAt: scheduledAt || null,
     });
     if (!r.ok) {
@@ -152,7 +198,77 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {/* 2. Meeting-Name (optional) — nach der Erfassung */}
+      {/* Sprache: IMMER automatische Erkennung — Auswahl entfernt (TJ 2026-06-12) */}
+
+      {/* 4. Aufnahme-Details: Hauptseite bleibt STATISCH — nur eine Zusammenfassungszeile,
+          die Optionen (Mikro/Sprecher/Namen) wohnen im Bottom-Sheet (Enterprise-Pattern,
+          Progressive Disclosure — TJ 2026-06-12). */}
+      {/* Die Zeile ist bei ALLEN Erfassungsarten da — feste Plätze, nichts verschiebt sich.
+          multi = reine Info · pod = NATIVER Mikro-Picker (unsichtbares <select> über der
+          Zeile → iOS öffnet sein eigenes Auswahlrad, kein Sheet — TJ 2026-06-12) ·
+          single = Sheet (braucht zusätzlich Sprecher/Namen). */}
+      <div className="sect">{t("Aufnahme")}</div>
+      {device === "multi" ? (
+        <div className="opt-row static">
+          <span className="opt-row-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <path d="M12 19v3" />
+            </svg>
+          </span>
+          <span className="opt-row-tx">{t("Jeder sein Mikro")}</span>
+        </div>
+      ) : device === "pod" ? (
+        <div className="opt-row opt-row-native">
+          <span className="opt-row-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <path d="M12 19v3" />
+            </svg>
+          </span>
+          <span className="opt-row-tx">
+            {mics.find((d) => d.id === micId)?.label || t("Standard-Mikro")}
+          </span>
+          <span className="opt-row-edit" aria-hidden="true">›</span>
+          <select
+            className="opt-row-select"
+            aria-label={t("Mikrofon")}
+            onPointerDown={probeMics}
+            onFocus={probeMics}
+            value={micId}
+            onChange={(e) => {
+              setMicId(e.target.value);
+              m.setMicDevice(e.target.value || null);
+            }}
+          >
+            <option value="">{t("Standard-Mikro")}</option>
+            {mics.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <button type="button" className="opt-row" onClick={() => setSheet(true)}>
+          <span className="opt-row-ic" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <path d="M12 19v3" />
+            </svg>
+          </span>
+          <span className="opt-row-tx">
+            {mics.find((d) => d.id === micId)?.label || t("Standard-Mikro")}
+            {" · " + t("Sprecher")}
+          </span>
+          <span className="opt-row-edit" aria-label={t("Anpassen")}>›</span>
+        </button>
+      )}
+
+      {/* 3. Meeting-Name (optional) — NACH der Aufnahme (Tausch TJ 2026-06-12) */}
       <div className="sect">
         {t("Meeting-Name")} <span className="opt">{t("· optional")}</span>
       </div>
@@ -160,7 +276,9 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         id="h-title"
         className="fld"
         maxLength={80}
-        placeholder="z. B. Kickoff mit Kunde X"
+        placeholder={phFocus ? "" : ph + "\u258f"}
+        onFocus={() => setPhFocus(true)}
+        onBlur={() => setPhFocus(false)}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
@@ -168,74 +286,6 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
         }}
       />
 
-      {/* 3. Sprache */}
-      <div className="sect">{t("Sprache")}</div>
-      <select id="h-lang" className="fld" value={lang} onChange={(e) => setLang(e.target.value)}>
-        <option value="auto">{t("🌐 Automatisch erkennen")}</option>
-        <option value="de">{t("🇩🇪 Deutsch")}</option>
-        <option value="en">{t("🇬🇧 Englisch")}</option>
-        <option value="es">{t("🇪🇸 Spanisch")}</option>
-        <option value="fr">{t("🇫🇷 Französisch")}</option>
-        <option value="it">{t("🇮🇹 Italienisch")}</option>
-      </select>
-
-      {device !== "multi" && (
-        <div id="microw">
-          <div className="sect">{t("Mikrofon")}</div>
-          <select
-            id="h-mic"
-            className="fld"
-            value={micId}
-            onChange={(e) => {
-              setMicId(e.target.value);
-              m.setMicDevice(e.target.value || null);
-            }}
-          >
-            <option value="">{t("Standard-Mikrofon")}</option>
-            {mics.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-          <div className="hint">{t("Für ein zentrales Mikro (z. B. Jabra) hier das Gerät wählen — dann nimmt nur dieses auf.")}</div>
-        </div>
-      )}
-
-      {device === "single" && (
-        <div id="single-setup">
-          <div className="sect">{t("Wie viele sprechen?")}</div>
-          <div className="numpick" id="numpick">
-            {[2, 3, 4, 5, 6].map((n) => (
-              <button key={n} type="button" data-n={n} className={spk === n ? "sel" : undefined} onClick={() => setSpk(n)}>
-                {n === 6 ? "6+" : n}
-              </button>
-            ))}
-          </div>
-          <div className="sect tight">
-            <span>{t("Namen")}</span> <span className="opt">{t("(optional — später im Transkript zuordenbar)")}</span>
-          </div>
-          <div id="namefields">
-            {Array.from({ length: spk }).map((_, i) => (
-              <input key={i} className="fld" maxLength={40} placeholder={"Name " + (i + 1) + " (optional)"} value={names[i] || ""} onChange={(e) => setName(i, e.target.value)} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* DSGVO-Trust-Zeile (kein Kasten) — überall präsent */}
-      <div className="dsgvo-trust">
-        <span className="dsgvo-trust-ic" aria-hidden="true" />
-        <span className="dsgvo-trust-txt">100&nbsp;% DSGVO-konform</span>
-        <span className="dsgvo-help" tabIndex={0} role="button" aria-label="Was bedeutet DSGVO-konform?">
-          ?
-          <span className="dsgvo-tip" role="tooltip">
-            Dein Meeting wird ausschließlich auf unseren Servern in Deutschland verarbeitet — DSGVO-konform.
-            Keine Weitergabe an Dritte, keine US-Cloud. Audio und Transkript werden nach der Auswertung
-            automatisch gelöscht. Höchste Datensicherheit ist unser Standard.
-          </span>
-        </span>
-      </div>
 
       <div className="cta">
         <button className="btn btn-primary" id="h-btn" disabled={busy} onClick={() => submit()}>
@@ -259,6 +309,58 @@ export function HostLogin({ onBack }: { onBack: () => void }) {
       <button className="btn btn-ghost" onClick={onBack}>
         {t("Zurück")}
       </button>
+
+      {/* Bottom-Sheet: Aufnahme anpassen (Mikrofon, Sprecher, Namen) */}
+      {sheet && (
+        <div className="sheet-backdrop" onClick={() => setSheet(false)}>
+          <div className="sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grip" aria-hidden="true"></div>
+            <div className="sect" style={{ marginTop: 0 }}>{t("Mikrofon")}</div>
+            <select
+              id="h-mic"
+              className="fld"
+              onPointerDown={probeMics}
+              onFocus={probeMics}
+              value={micId}
+              onChange={(e) => {
+                setMicId(e.target.value);
+                m.setMicDevice(e.target.value || null);
+              }}
+            >
+              <option value="">{t("Standard-Mikrofon")}</option>
+              {mics.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+            <div className="hint">{t("Für ein zentrales Mikro (z. B. Jabra) hier das Gerät wählen — dann nimmt nur dieses auf.")}</div>
+            {device === "single" && (
+              <>
+                <div className="sect">{t("Wie viele sprechen?")}</div>
+                <div className="numpick" id="numpick">
+                  {[2, 3, 4, 5, 6].map((n) => (
+                    <button key={n} type="button" data-n={n} className={spk === n ? "sel" : undefined} onClick={() => setSpk(n)}>
+                      {n === 6 ? "6+" : n}
+                    </button>
+                  ))}
+                </div>
+                <div className="sect tight">
+                  <span>{t("Namen")}</span> <span className="opt">{t("(optional — später im Transkript zuordenbar)")}</span>
+                </div>
+                <div id="namefields" className="sheet-names">
+                  {Array.from({ length: spk }).map((_, i) => (
+                    <input key={i} className="fld" maxLength={40} placeholder={"Name " + (i + 1) + " (optional)"} value={names[i] || ""} onChange={(e) => setName(i, e.target.value)} />
+                  ))}
+                </div>
+              </>
+            )}
+            <button className="btn btn-primary" onClick={() => setSheet(false)}>
+              {t("Fertig")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {plan && (
         <div className="ddm center">
