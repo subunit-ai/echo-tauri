@@ -9,7 +9,7 @@ import { detectLang } from "./lib/i18n";
 // functions. Render-driving slices live in useState; imperative singletons (recorder,
 // timers, tokens read only inside actions) live in a ref so they don't churn renders.
 
-export type Screen = "welcome" | "login" | "landing" | "hostlogin" | "host" | "join" | "waiting" | "guest" | "enroll" | "ended";
+export type Screen = "welcome" | "landing" | "hostlogin" | "host" | "join" | "waiting" | "guest" | "enroll" | "ended";
 
 export interface Setup {
   title: string;

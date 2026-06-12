@@ -10,7 +10,6 @@ import { Guest } from "./screens/Guest";
 import { Enroll } from "./screens/Enroll";
 import { Ended } from "./screens/Ended";
 import { Welcome } from "./screens/Welcome";
-import { Login } from "./screens/Login";
 import { useMeeting } from "./store";
 import { handleSsoCallback, identityFromToken, decodeJwt } from "./lib/auth";
 import { meetingInfo } from "./lib/api";
@@ -254,24 +253,12 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       {m.screen === "welcome" && (
         <Welcome
           onContinue={() => {
-            // Ein Tap: gespeicherter Login/Gast geht direkt rein, Erstnutzer zur Anmelde-Subpage.
-            if (m.identity?.jwt || guest) m.go("landing");
-            else m.go("login");
-          }}
-        />
-      )}
-      {m.screen === "login" && (
-        <Login
-          onLogin={() => {
-            try { localStorage.removeItem("meet_guest"); } catch { /* ignore */ }
-            setGuest(false);
-            if (m.identity?.jwt) m.go("landing");
-            else m.hostEntry();
-          }}
-          onGuest={() => {
-            try { localStorage.setItem("meet_guest", "1"); } catch { /* ignore */ }
-            setGuest(true);
-            m.go("landing");
+            // Gespeicherter Login/Gast -> direkt rein. Sonst SOFORT zur SSO-Anmeldung
+            // (kein Zwischen-Screen mehr, TJ 2026-06-12) — der auth-Cookie macht das
+            // still, abgelaufene lokale JWTs erneuern sich dabei von selbst.
+            if (m.identity?.jwt || guest) { m.go("landing"); return; }
+            setBoot({ msg: "Anmeldung …" });
+            m.hostEntry();
           }}
         />
       )}
