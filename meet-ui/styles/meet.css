@@ -137,14 +137,17 @@ html.native-app body::after{display:none}
    Light behaelt den hellen CSS-Mesh. reduced-motion → aus (Poster/Mesh uebernehmen). */
 /* Video als BUEHNE statt Vollbild-Crop (TJ 2026-06-11): echte Groesse (16:9, volle Breite, mittig),
    Raender via radialem Mask in den BG verschmolzen — kein Zoom, keine Matsch-Skalierung. */
-#bgvid{position:fixed;left:50%;top:50%;transform:translate(-50%,calc(-50% - 20px));width:min(100vw,1400px);aspect-ratio:16/9;height:auto;object-fit:contain;z-index:-3;pointer-events:none;display:none;-webkit-mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%);mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%)}
-html.dark #bgvid{display:block}
+#bgvid,#bgvid-hq{position:fixed;left:50%;top:50%;transform:translate(-50%,calc(-50% - 20px));width:min(100vw,1400px);aspect-ratio:16/9;height:auto;object-fit:contain;z-index:-3;pointer-events:none;display:none;-webkit-mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%);mask-image:radial-gradient(66% 66% at 50% 47%,#000 28%,transparent 85%)}
+html.dark #bgvid,html.dark #bgvid-hq{display:block}
 /* Light Mode (TJ 2026-06-12): Welle auch im hellen Theme — invertiert (dunkles Navy ->
    helles Eis), Farbton zurueckgedreht, dezent abgeschwaecht */
-html:not(.dark) #bgvid{display:block;filter:invert(1) hue-rotate(195deg) saturate(1.15);opacity:.5}
+html:not(.dark) #bgvid,html:not(.dark) #bgvid-hq{display:block;filter:invert(1) hue-rotate(195deg) saturate(1.15);opacity:.5}
 /* Desktop/Laptop (TJ 2026-06-12): Animation ueber die VOLLE Breite, 4K-Encode traegt die Qualitaet */
-@media (min-width:1000px){#bgvid{width:100vw;max-width:none}}
-@media (prefers-reduced-motion:reduce){#bgvid{display:none!important}}
+@media (min-width:1000px){#bgvid,#bgvid-hq{width:100vw;max-width:none}}
+@media (prefers-reduced-motion:reduce){#bgvid,#bgvid-hq{display:none!important}}
+/* 4K-HQ-Nachlade-Layer (TJ 2026-06-12): unsichtbar bis durchgepuffert, dann Crossfade */
+#bgvid-hq{transition:opacity 1.4s ease}
+#bgvid-hq:not(.on){opacity:0!important}
 /* Dark-Mode: Mesh-Orbs dezenter ueber dem Video (Tiefe statt Konkurrenz) */
 html.dark body::before{opacity:.55}
 .wrap{width:100%;max-width:462px;margin:auto;display:flex;flex-direction:column;max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none}
@@ -152,7 +155,11 @@ html.dark body::before{opacity:.55}
 @media(min-width:680px){.wrap{max-width:520px}}
 
 /* Brand */
-.brand{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:15px;font-size:25px;font-weight:600;letter-spacing:.01em;padding:0 40px;margin-top:34px;min-height:60px}
+.brand{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:15px;font-size:25px;font-weight:600;letter-spacing:.01em;padding:0 40px;margin-top:34px;min-height:60px;user-select:none;-webkit-user-select:none}
+/* Landing (TJ 2026-06-12): Brand groesser + weiter nach unten — praesenteres Element */
+.brand-lg{font-size:34px;margin-top:60px;min-height:88px;column-gap:20px}
+.brand-lg .echo,.brand-lg .echo svg{width:74px;height:74px}
+.brand-lg .echo i{width:74px;height:74px;margin:-37px 0 0 -37px}
 .brand .echo{position:relative;width:54px;height:54px;display:grid;place-items:center;flex:none}
 .brand .echo svg{position:relative;z-index:1;width:54px;height:54px;filter:drop-shadow(0 3px 12px rgba(6,182,212,.45))}
 /* Sonar-ping rings emitted by the Echo logo (both themes) */

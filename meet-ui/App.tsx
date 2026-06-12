@@ -130,6 +130,28 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       v.play().catch(() => {});
     };
     (window as any).__bgvidKick = ensure; // native iOS-Shell ruft das bei didBecomeActive
+    // 4K-HQ-Upgrade (TJ 2026-06-12): wenn das Nachlade-Video durchgepuffert ist,
+    // zeitsynchron starten, weich einblenden, dann die #bgvid-Rolle uebernehmen.
+    const hq = document.getElementById("bgvid-hq") as HTMLVideoElement | null;
+    const hqReady = () => {
+      if (!hq) return;
+      hq.removeEventListener("canplaythrough", hqReady);
+      const main = document.getElementById("bgvid") as HTMLVideoElement | null;
+      if (!main || main === hq) return;
+      try { hq.currentTime = main.currentTime; } catch { /* ignore */ }
+      hq.play().then(() => {
+        hq.classList.add("on");
+        window.setTimeout(() => {
+          const m2 = document.getElementById("bgvid") as HTMLVideoElement | null;
+          if (m2 && m2 !== hq) { m2.removeAttribute("id"); m2.pause(); m2.remove(); }
+          hq.id = "bgvid"; // Watchdog/Kick zielen ab jetzt auf das HQ-Element
+        }, 1600);
+      }).catch(() => {});
+    };
+    if (hq) {
+      if (hq.readyState >= 4) hqReady();
+      else hq.addEventListener("canplaythrough", hqReady);
+    }
     // Dauer-Watchdog (TJ 2026-06-12): iOS pausiert das BG-Video auch bei
     // Audio-Session-Wechseln (Mikro-Permission/getUserMedia im Setup, Anruf, Siri) —
     // dafuer gibt es KEIN visibility-Event. Alle 4s pruefen: sichtbar + pausiert → ensure().
@@ -189,6 +211,9 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
           dort ueber die volle Breite), Mobile den 1080p — beide 0.6x in der Datei. */}
       <video id="bgvid" autoPlay muted loop playsInline preload="auto" poster="/bg-wave-poster.jpg" aria-hidden="true"
         src={window.innerWidth >= 1000 ? "/bg-wave6-2160.mp4" : "/bg-wave6-1080.mp4"} />
+      {window.innerWidth >= 1000 && (
+        <video id="bgvid-hq" muted loop playsInline preload="auto" aria-hidden="true" src="/bg-wave6-2160-hq.mp4" />
+      )}
       {m.connLost && (
         <div id="connlost" className="connlost">
           ⚠️ Verbindung unterbrochen — bleib in dieser App, ich verbinde automatisch neu …

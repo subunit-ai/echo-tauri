@@ -202,7 +202,7 @@ export function Chrome() {
       </button>
 
       {screen !== "welcome" && (
-      <div className="brand">
+      <div className={"brand" + (screen === "landing" ? " brand-lg" : "")}>
         <b>Subunit</b>
         <span
           className="echo"
