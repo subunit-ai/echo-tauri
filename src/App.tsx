@@ -7,7 +7,7 @@ import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Meetings } from "./sections/Meetings";
 import { MeetLive } from "./sections/MeetLive";
-import { Onboarding } from "./sections/Onboarding";
+import { Intro } from "./intro/Intro";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
@@ -35,7 +35,7 @@ function Shell() {
     return <div className="empty" style={{ paddingTop: 90 }}>{t("common.loading")}</div>;
   }
   if (!config.has_seen_onboarding) {
-    return <Onboarding />;
+    return <Intro />;
   }
   return (
     <div className="app">
