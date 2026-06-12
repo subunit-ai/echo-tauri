@@ -267,19 +267,20 @@ jobs:
             exit 1
           fi
 
-          # latest.json's signature field = base64 of the whole .sig file.
+          # latest.json's signature field = the .sig file content VERBATIM (tauri
+          # writes the minisign blob already base64-armored; do NOT re-encode it).
           for f in "$mac" "$lin" "$win64" "$winarm"; do
             gh release download "$tag" -R "$repo" -p "$f.sig" -O "/tmp/$f.sig" --clobber
           done
 
           python3 - "$ver" "$now" "$base_url" "$mac" "$lin" "$win64" "$winarm" \
             > /tmp/latest.json <<'PY'
-          import sys, base64, json
+          import sys, json
           ver, now, base = sys.argv[1], sys.argv[2], sys.argv[3]
           mac, lin, win64, winarm = sys.argv[4:8]
           def sig(name):
-              with open(f"/tmp/{name}.sig", "rb") as fh:
-                  return base64.b64encode(fh.read()).decode()
+              with open(f"/tmp/{name}.sig", "r", encoding="utf-8") as fh:
+                  return fh.read().strip()
           def url(name): return f"{base}/{name}"
           plats = {}
           for k in ("darwin-aarch64", "darwin-aarch64-app"):
