@@ -121,26 +121,22 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       if (saved?.jwt) {
         const exp = Number(decodeJwt(saved.jwt).exp) || 0;
         if (exp * 1000 > Date.now() + 60000) {
-          // Auto-Login (TJ 2026-06-12): einmal angemeldet -> bei jedem Start
-          // unsichtbar wieder rein, direkt auf die Landing.
+          // Stiller Login (TJ 2026-06-12): Identity steht bereit, aber der EINE Klick
+          // auf der Welcome bleibt Pflicht — "Anmelden" geht dann sofort durch.
           m.setIdentity(saved);
-          m.go("landing");
+          m.go("welcome");
           bootDone("Angemeldet", saved.email || "");
           return;
         }
         try { localStorage.removeItem("meet_id"); } catch { /* ignore */ }
       }
-      // Gemerkte Gast-Wahl -> direkt auf die Gast-Landing (nur Beitreten).
       let g = false;
       try { g = localStorage.getItem("meet_guest") === "1"; } catch { g = false; }
-      if (g) {
-        m.go("landing");
-        bootDone("Gastmodus");
-        return;
-      }
-      // Allererster Start (kein Login, kein Gast-Flag) -> einmalige Anmelde-Seite.
+      // Welcome ist IMMER der Start-Screen (TJ 2026-06-12) — nur Deep-Link/Recap/
+      // Session-Restore springen direkt rein.
       m.go("welcome");
-      setBoot(null);
+      if (g) bootDone("Gastmodus");
+      else setBoot(null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
