@@ -180,6 +180,9 @@ pub struct Config {
     /// Console instead of pasting it into the app behind. Toggled from the
     /// console header and in Settings.
     pub prompt_console_as_target: bool,
+    /// Glass intensity of the Prompt Console shell: "clear" (most transparent,
+    /// default) | "regular" | "rich". Cycled from the console header.
+    pub prompt_console_glass: String,
 
     /// toggle | hold (push-to-talk, default)
     pub recording_mode: String,
@@ -298,6 +301,7 @@ impl Default for Config {
 
             prompt_console_hotkey: "<ctrl>+<shift>+p".to_string(),
             prompt_console_as_target: false,
+            prompt_console_glass: "clear".to_string(),
 
             recording_mode: "hold".to_string(),
 
