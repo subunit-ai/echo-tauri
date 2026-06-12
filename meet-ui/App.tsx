@@ -13,6 +13,7 @@ import { Welcome } from "./screens/Welcome";
 import { useMeeting } from "./store";
 import { handleSsoCallback, identityFromToken, decodeJwt } from "./lib/auth";
 import { meetingInfo } from "./lib/api";
+import { useI18n } from "./lib/i18n";
 import type { AuthMode } from "./MeetApp";
 
 /**
@@ -25,7 +26,15 @@ import type { AuthMode } from "./MeetApp";
  */
 export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; getEmbedToken?: () => Promise<string | null> } = {}) {
   const m = useMeeting();
+  const { t } = useI18n();
   const booted = useRef(false);
+  // Boot-Statuszeile (TJ 2026-06-12): zeigt unten live, was der Startmechanismus
+  // gerade tut. done=true -> gruener Punkt + sanftes Ausblenden.
+  const [boot, setBoot] = useState<{ msg: string; suffix?: string; done?: boolean } | null>({ msg: "Prüfe Anmeldung …" });
+  const bootDone = (msg: string, suffix = "") => {
+    setBoot({ msg, suffix, done: true });
+    window.setTimeout(() => setBoot(null), 2400);
+  };
   // Gast-Modus (Welcome → "Als Gast fortfahren"): nur Beitreten, kein Meeting starten.
   const [guest, setGuest] = useState(() => {
     try { return localStorage.getItem("meet_guest") === "1"; } catch { return false; }
@@ -36,6 +45,7 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
     (async () => {
       // Echo embed: adopt the injected token, stay on landing (pre-authenticated).
       if (authMode === "embed") {
+        setBoot(null);
         const tok = getEmbedToken ? await getEmbedToken() : null;
         if (tok) m.setIdentity(identityFromToken(tok));
         return;
@@ -54,6 +64,7 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
         } catch {
           /* ignore */
         }
+        setBoot(null);
         return;
       }
 
@@ -61,6 +72,7 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       if (id) {
         m.setIdentity(id);
         m.go("landing"); // nach SSO auf die Landing — nicht direkt in die Einrichtung (TJ 2026-06-11)
+        bootDone("Angemeldet", id.email || "");
         return;
       }
 
@@ -80,11 +92,13 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
         } catch {
           jwtDead = false;
         }
+        if (!jwtDead) setBoot({ msg: "Stelle Sitzung wieder her …" });
         const info = jwtDead ? null : await meetingInfo(v.code);
         if (info && info.status !== "ended" && info.status !== "purged") {
           if (v.jwt) m.setIdentity({ jwt: v.jwt, email: v.email || "", name: v.name || "" });
           if (v.role === "host") m.resumeHost(info, v);
           else m.resumeGuest(info, v);
+          bootDone("Sitzung wiederhergestellt");
           return;
         }
         try {
@@ -95,6 +109,7 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       }
 
       if (path) {
+        setBoot(null);
         m.goJoin(path[1]); // deep-link: land on join with the code prefilled (Welcome wird uebersprungen)
         return;
       }
@@ -105,14 +120,27 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
       try { saved = JSON.parse(localStorage.getItem("meet_id") || "null"); } catch { saved = null; }
       if (saved?.jwt) {
         const exp = Number(decodeJwt(saved.jwt).exp) || 0;
-        if (exp * 1000 > Date.now() + 60000) m.setIdentity(saved);
-        else {
-          try { localStorage.removeItem("meet_id"); } catch { /* ignore */ }
+        if (exp * 1000 > Date.now() + 60000) {
+          // Auto-Login (TJ 2026-06-12): einmal angemeldet -> bei jedem Start
+          // unsichtbar wieder rein, direkt auf die Landing.
+          m.setIdentity(saved);
+          m.go("landing");
+          bootDone("Angemeldet", saved.email || "");
+          return;
         }
+        try { localStorage.removeItem("meet_id"); } catch { /* ignore */ }
       }
-      // Welcome ist IMMER der Start-Screen bei frischem App-Start (TJ 2026-06-11) —
-      // nur Deep-Link/Recap/Live-Session-Restore (oben) springen direkt rein.
+      // Gemerkte Gast-Wahl -> direkt auf die Gast-Landing (nur Beitreten).
+      let g = false;
+      try { g = localStorage.getItem("meet_guest") === "1"; } catch { g = false; }
+      if (g) {
+        m.go("landing");
+        bootDone("Gastmodus");
+        return;
+      }
+      // Allererster Start (kein Login, kein Gast-Flag) -> einmalige Anmelde-Seite.
       m.go("welcome");
+      setBoot(null);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -220,6 +248,12 @@ export function App({ authMode = "web", getEmbedToken }: { authMode?: AuthMode; 
         </div>
       )}
       <Chrome />
+      {boot && (
+        <div className={"bootline" + (boot.done ? " done" : "")} role="status" aria-live="polite">
+          <span className="bootline-dot" aria-hidden="true" />
+          <span>{t(boot.msg)}{boot.suffix ? " · " + boot.suffix : ""}</span>
+        </div>
+      )}
       {m.screen === "welcome" && (
         <Welcome
           onLogin={() => {
