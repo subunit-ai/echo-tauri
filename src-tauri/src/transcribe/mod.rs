@@ -81,7 +81,15 @@ pub fn run_opts(
             }
         }
         "subunit" => {
-            let wav = samples_to_wav(samples, sample_rate)
+            // Downsample to 16 kHz BEFORE upload. Whisper runs at 16 kHz and the
+            // server downsamples anything else with the same linear resample
+            // anyway — so this is lossless for accuracy but shrinks the upload ~3×
+            // (mics capture at 48 kHz). The upload, not the GPU, was the bottleneck:
+            // a 48 kHz WAV is ~750 kbit/s, so a 70 s dictation = 6.5 MB and on a
+            // modest uplink that dominated end-to-end latency (server transcribes
+            // 70 s in ~3 s; the rest was the upload). See resample_to_16k.
+            let (samples16, sr16) = downsample_to_16k(samples, sample_rate);
+            let wav = samples_to_wav(&samples16, sr16)
                 .map_err(|e| EngineError::new("internal", e.to_string()))?;
             cloud::transcribe_subunit(cfg, wav, cfg.cloud_superfast, want_segments)
         }
@@ -90,6 +98,28 @@ pub fn run_opts(
             format!("mode `{other}` not implemented yet"),
         )),
     }
+}
+
+/// Linear-resample mono f32 down to 16 kHz for the cloud upload. Returns the
+/// samples unchanged when already at (or below) 16 kHz. Linear interpolation
+/// matches both the local whisper path and the server's own resample, so it
+/// adds no accuracy difference — it only shrinks the bytes on the wire.
+fn downsample_to_16k(input: &[f32], sr: u32) -> (Vec<f32>, u32) {
+    if sr <= 16_000 || input.is_empty() {
+        return (input.to_vec(), sr);
+    }
+    let ratio = 16_000f64 / sr as f64;
+    let out_len = ((input.len() as f64) * ratio) as usize;
+    let mut out = Vec::with_capacity(out_len);
+    for i in 0..out_len {
+        let src = i as f64 / ratio;
+        let idx = src.floor() as usize;
+        let frac = (src - idx as f64) as f32;
+        let a = input.get(idx).copied().unwrap_or(0.0);
+        let b = input.get(idx + 1).copied().unwrap_or(a);
+        out.push(a + (b - a) * frac);
+    }
+    (out, 16_000)
 }
 
 /// Encode mono f32 samples as 16-bit PCM WAV bytes (in-memory).
