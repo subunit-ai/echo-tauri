@@ -31,14 +31,31 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* Deliberately MORE transparent than --glass (0.55): the native vibrancy
-     layer behind the window does the frosting, the tint only deepens it —
-     the desktop should genuinely shimmer through. */
-  background: rgba(10, 22, 42, 0.3);
+  /* Real Liquid Glass: the macOS HudWindow vibrancy behind the window does the
+     frosting — so the tint is kept VERY light (the desktop genuinely shimmers
+     through) and we add a top-down sheen so it reads as a curved glass pane,
+     not a flat scrim. A brighter inner rim sells the glass edge. */
+  background: linear-gradient(
+    160deg,
+    rgba(36, 58, 92, 0.22) 0%,
+    rgba(10, 22, 42, 0.14) 46%,
+    rgba(8, 18, 36, 0.18) 100%
+  );
   border: 1px solid var(--glass-edge);
-  border-radius: 20px;
-  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+  border-radius: 22px;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(190, 215, 245, 0.28),
+    inset 0 0 0 1px rgba(140, 175, 220, 0.06);
   overflow: hidden;
+}
+
+/* Soft specular highlight across the top — the "liquid" catch-light. */
+.pc-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 44%;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent);
 }
 
 /* ---- Header (drag region) ---- */
@@ -78,7 +95,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(20, 38, 64, 0.26);
+  background: rgba(28, 48, 78, 0.18);
   border: 1px solid var(--glass-edge);
   border-radius: 8px;
   color: var(--ink2);
@@ -120,7 +137,7 @@ body {
   gap: 6px;
   max-width: 150px;
   padding: 4px 8px 4px 10px;
-  background: rgba(20, 38, 64, 0.26);
+  background: rgba(28, 48, 78, 0.18);
   border: 1px solid var(--glass-edge);
   border-radius: 9px;
   color: var(--ink3);
@@ -432,7 +449,7 @@ body {
   justify-content: center;
   gap: 5px;
   padding: 5px 11px;
-  background: rgba(20, 38, 64, 0.26);
+  background: rgba(28, 48, 78, 0.18);
   border: 1px solid var(--glass-edge);
   border-radius: 9px;
   color: var(--ink2);
