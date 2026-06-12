@@ -291,6 +291,8 @@
     "orbColorWorkingHint": "While recording & transcribing.",
     "orbColorDone": "Color — Done",
     "orbColorDoneHint": "Briefly after a successful transcription.",
+    "orbColorError": "Color — Error",
+    "orbColorErrorHint": "When something fails (defaults to amber).",
     "orbPosition": "Position",
     "posBottomCenter": "Bottom center",
     "posBottomLeft": "Bottom left",

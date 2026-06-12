@@ -212,27 +212,97 @@ jobs:
 
   publish:
     # Atomic release: flip the draft public only when every platform's installers
-    # AND its latest.json entries are complete. If any build job fails, the draft
+    # AND a COMPLETE latest.json are present. If any build job fails, the draft
     # stays invisible and the updater keeps serving the previous full release;
     # `gh run rerun --failed` re-runs the failed build and then this job.
+    #
+    # latest.json is REBUILT here deterministically from the per-platform .sig
+    # assets rather than trusting the one tauri-action uploaded. tauri-action merges
+    # latest.json in-place per build job (read-modify-write, no lock); a partial
+    # rerun once left a Windows-only manifest that published as "latest" and broke
+    # the macOS updater ("None of the fallback platforms… were found"). Assembling
+    # from the .sig files here is race-free, and we refuse to publish if any
+    # platform is missing.
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Publish release (draft → public, mark latest)
+      - name: Assemble + validate latest.json, then publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${{ github.ref_name }}"
           repo="${{ github.repository }}"
+          ver="${tag#v}"
+          now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          base_url="https://github.com/$repo/releases/download/$tag"
+
           # Drafts aren't resolvable via /releases/tags/<tag> — find by listing.
-          id=$(gh api "repos/$repo/releases?per_page=20" \
-            --jq ".[] | select(.tag_name==\"$tag\") | .id" | head -1)
-          if [ -z "$id" ]; then
-            echo "::error::no release found for $tag"; exit 1
+          rel=$(gh api "repos/$repo/releases?per_page=30" \
+            --jq "[.[] | select(.tag_name==\"$tag\")][0]")
+          id=$(echo "$rel" | jq -r '.id // empty')
+          if [ -z "$id" ]; then echo "::error::no release found for $tag"; exit 1; fi
+
+          # Updater bundle filenames → their tauri platform key(s).
+          mac="echo_aarch64.app.tar.gz"
+          lin="echo_${ver}_amd64.AppImage"
+          win64="echo_${ver}_x64-setup.exe"
+          winarm="echo_${ver}_arm64-setup.exe"
+
+          assets=$(echo "$rel" | jq -r '.assets[].name')
+          have() { echo "$assets" | grep -qx "$1"; }
+
+          # Every platform must have BOTH its installer and its .sig, or we refuse to
+          # publish — a half manifest is exactly the failure mode we're preventing.
+          missing=""
+          for f in "$mac" "$lin" "$win64" "$winarm"; do
+            have "$f"     || missing="$missing $f"
+            have "$f.sig" || missing="$missing $f.sig"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::latest.json would be incomplete — missing:$missing"
+            echo "::error::leaving draft hidden; rerun the failed build job(s)."
+            exit 1
           fi
+
+          # latest.json's signature field = base64 of the whole .sig file.
+          for f in "$mac" "$lin" "$win64" "$winarm"; do
+            gh release download "$tag" -R "$repo" -p "$f.sig" -O "/tmp/$f.sig" --clobber
+          done
+
+          python3 - "$ver" "$now" "$base_url" "$mac" "$lin" "$win64" "$winarm" \
+            > /tmp/latest.json <<'PY'
+          import sys, base64, json
+          ver, now, base = sys.argv[1], sys.argv[2], sys.argv[3]
+          mac, lin, win64, winarm = sys.argv[4:8]
+          def sig(name):
+              with open(f"/tmp/{name}.sig", "rb") as fh:
+                  return base64.b64encode(fh.read()).decode()
+          def url(name): return f"{base}/{name}"
+          plats = {}
+          for k in ("darwin-aarch64", "darwin-aarch64-app"):
+              plats[k] = {"signature": sig(mac), "url": url(mac)}
+          for k in ("linux-x86_64", "linux-x86_64-appimage"):
+              plats[k] = {"signature": sig(lin), "url": url(lin)}
+          for k in ("windows-x86_64", "windows-x86_64-nsis"):
+              plats[k] = {"signature": sig(win64), "url": url(win64)}
+          for k in ("windows-aarch64", "windows-aarch64-nsis"):
+              plats[k] = {"signature": sig(winarm), "url": url(winarm)}
+          json.dump({"version": ver, "notes": "", "pub_date": now,
+                     "platforms": plats}, sys.stdout, indent=2)
+          PY
+
+          # Belt-and-suspenders: assert all four base platforms made it in.
+          for k in darwin-aarch64 linux-x86_64 windows-x86_64 windows-aarch64; do
+            jq -e ".platforms[\"$k\"].url" /tmp/latest.json >/dev/null \
+              || { echo "::error::assembled latest.json missing $k"; exit 1; }
+          done
+          echo "assembled latest.json:"; jq '.platforms | keys' /tmp/latest.json
+
+          # Replace the racy latest.json on the draft, then flip it public + latest.
+          gh release upload "$tag" -R "$repo" /tmp/latest.json --clobber
           gh api -X PATCH "repos/$repo/releases/$id" \
             -F draft=false -f make_latest=true > /dev/null
-          echo "published $tag (release $id)"
+          echo "published $tag (release $id) with a complete latest.json"

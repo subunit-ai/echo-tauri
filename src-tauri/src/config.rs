@@ -129,6 +129,7 @@ pub struct Config {
     pub orb_position: String,
     pub orb_idle_pulse: bool,
     /// ping | sphere | sonar | bars | wave | classic
+    /// | ping2 | sonar2 | bars2 | wave2 (V2 remodels) | halo | orbit | aurora | spectrum
     pub orb_overlay_style: String,
     /// One-time guard: sets the default orb style to "sonar" ONCE for existing
     /// installs (see migrate()); afterwards the user's chosen style sticks.
@@ -151,11 +152,12 @@ pub struct Config {
     /// transcribing (the "busy" states), `done` = finished. These supersede the
     /// legacy single `orb_color_theme` dropdown — that field is kept only so old
     /// configs deserialize; its value is folded into `orb_color_idle` once via the
-    /// `orb_colors_migrated` guard. The `error` state keeps a fixed warning tint
-    /// (not user-themable — it signals a problem, shouldn't blend with the palette).
+    /// `orb_colors_migrated` guard. `error` is the warning tint shown when something
+    /// fails; it defaults to amber but is now user-themable like the rest.
     pub orb_color_idle: String,
     pub orb_color_working: String,
     pub orb_color_done: String,
+    pub orb_color_error: String,
     /// One-time guard: seed the per-state colors from the legacy `orb_color_theme`
     /// ONCE for existing installs (so their chosen tint carries over), then the
     /// user's colors stick. Old configs lack this field → default false → migrates.
@@ -284,6 +286,7 @@ impl Default for Config {
             orb_color_idle: "#22d3ee".to_string(),
             orb_color_working: "#ff5c5c".to_string(),
             orb_color_done: "#50dc82".to_string(),
+            orb_color_error: "#ffc450".to_string(),
             orb_colors_migrated: false,
 
             diarization_enabled: false,

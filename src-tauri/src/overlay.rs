@@ -148,7 +148,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// resize + reposition for size/position, and push the visual settings
 /// (style/color/idle/auto-hide) to the canvas. Called from `set_config`.
 pub fn apply_config(app: &AppHandle) {
-    let (orb_mode, show_bubble, size_mult, position, style, color_idle, color_working, color_done, idle_pulse, idle_mode, speed, quick) = {
+    let (orb_mode, show_bubble, size_mult, position, style, color_idle, color_working, color_done, color_error, idle_pulse, idle_mode, speed, quick) = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
         (
@@ -160,6 +160,7 @@ pub fn apply_config(app: &AppHandle) {
             c.orb_color_idle.clone(),
             c.orb_color_working.clone(),
             c.orb_color_done.clone(),
+            c.orb_color_error.clone(),
             c.orb_idle_pulse,
             c.orb_idle_mode.clone(),
             c.orb_speed,
@@ -207,6 +208,7 @@ pub fn apply_config(app: &AppHandle) {
             "colorIdle": color_idle,
             "colorWorking": color_working,
             "colorDone": color_done,
+            "colorError": color_error,
             "idlePulse": idle_pulse,
             "idleMode": idle_mode,
             "speed": speed,

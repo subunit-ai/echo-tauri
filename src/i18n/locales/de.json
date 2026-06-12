@@ -290,6 +290,8 @@
     "orbColorWorkingHint": "Während Aufnahme & Transkription.",
     "orbColorDone": "Farbe — Fertig",
     "orbColorDoneHint": "Kurz nach erfolgreicher Transkription.",
+    "orbColorError": "Farbe — Fehler",
+    "orbColorErrorHint": "Wenn etwas fehlschlägt (Standard: Bernstein).",
     "orbPosition": "Position",
     "posBottomCenter": "Unten Mitte",
     "posBottomLeft": "Unten Links",

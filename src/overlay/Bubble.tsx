@@ -34,6 +34,20 @@ export function Bubble() {
   const hideTimer = useRef<number | undefined>(undefined);
   // Animation speed multiplier (shared orb_speed setting; default calmer 0.6).
   const speed = useRef(0.6);
+  // Per-state colors, shared with the orb. `working` covers recording AND
+  // transcribing (the busy states), so both map to it — same as the orb.
+  const colors = useRef<Record<EngineState, string>>({ ...COLOR });
+  // Fold the 4 configurable orb colors into the bubble's 5-state map. Empty/missing
+  // values are ignored so we keep the current value (defaults on first load).
+  const applyColors = (p: { idle?: string; working?: string; done?: string; error?: string }) => {
+    if (p.idle) colors.current.idle = p.idle;
+    if (p.working) {
+      colors.current.recording = p.working;
+      colors.current.transcribing = p.working;
+    }
+    if (p.done) colors.current.done = p.done;
+    if (p.error) colors.current.error = p.error;
+  };
 
   // Pick up the shared overlay speed (and live updates from Settings) so the
   // bubble's idle shimmer honours the same "too fast" fix as the orb.
@@ -41,10 +55,28 @@ export function Bubble() {
     invoke<Record<string, unknown>>("get_config")
       .then((c) => {
         if (typeof c.orb_speed === "number") speed.current = c.orb_speed as number;
+        applyColors({
+          idle: c.orb_color_idle as string,
+          working: c.orb_color_working as string,
+          done: c.orb_color_done as string,
+          error: c.orb_color_error as string,
+        });
       })
       .catch(() => {});
-    const un = listen<{ speed?: number }>("echo://orb-config", (e) => {
+    const un = listen<{
+      speed?: number;
+      colorIdle?: string;
+      colorWorking?: string;
+      colorDone?: string;
+      colorError?: string;
+    }>("echo://orb-config", (e) => {
       if (typeof e.payload.speed === "number") speed.current = e.payload.speed;
+      applyColors({
+        idle: e.payload.colorIdle,
+        working: e.payload.colorWorking,
+        done: e.payload.colorDone,
+        error: e.payload.colorError,
+      });
     });
     return () => {
       un.then((f) => f());
@@ -99,7 +131,7 @@ export function Bubble() {
         const w = (canvas.width = Math.floor(64 * dpr));
         const h = (canvas.height = Math.floor(28 * dpr));
         ctx.clearRect(0, 0, w, h);
-        const color = COLOR[stRef.current] ?? "#22d3ee";
+        const color = colors.current[stRef.current] ?? "#22d3ee";
         const n = 5;
         const bw = w * 0.1;
         const gap = bw * 0.7;

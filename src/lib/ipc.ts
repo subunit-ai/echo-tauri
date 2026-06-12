@@ -38,6 +38,7 @@ export interface Config {
   orb_color_idle: string;
   orb_color_working: string;
   orb_color_done: string;
+  orb_color_error: string;
 
   diarization_enabled: boolean;
   diarization_max_speakers: number;

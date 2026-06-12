@@ -26,14 +26,14 @@ import {
   type OrbQuick,
 } from "../lib/ipc";
 
-// Per-state orb colors are user-configurable in Settings (idle / working / done).
-// `working` covers both recording AND transcribing (the "busy" states). The error
-// state keeps a fixed warning amber — it signals a problem and shouldn't blend into
-// the chosen palette. Defaults mirror the previous hardcoded look.
+// Per-state orb colors are user-configurable in Settings (idle / working / done /
+// error). `working` covers both recording AND transcribing (the "busy" states).
+// `error` defaults to a warning amber but is now themable like the rest.
+// Defaults mirror the previous hardcoded look.
 const DEFAULT_IDLE = "#22d3ee";
 const DEFAULT_WORKING = "#ff5c5c";
 const DEFAULT_DONE = "#50dc82";
-const ERROR_COLOR = "#ffc450";
+const DEFAULT_ERROR = "#ffc450";
 
 function hexA(hex: string, a: number): string {
   const h = hex.replace("#", "");
@@ -145,6 +145,7 @@ export function Orb() {
   const colorIdle = useRef(DEFAULT_IDLE);
   const colorWorking = useRef(DEFAULT_WORKING);
   const colorDone = useRef(DEFAULT_DONE);
+  const colorError = useRef(DEFAULT_ERROR);
   const idlePulse = useRef(true);
   const idleMode = useRef<"normal" | "dim" | "hide">("normal");
   const speed = useRef(0.6);
@@ -161,6 +162,7 @@ export function Orb() {
         if (typeof c.orb_color_idle === "string" && c.orb_color_idle) colorIdle.current = c.orb_color_idle;
         if (typeof c.orb_color_working === "string" && c.orb_color_working) colorWorking.current = c.orb_color_working;
         if (typeof c.orb_color_done === "string" && c.orb_color_done) colorDone.current = c.orb_color_done;
+        if (typeof c.orb_color_error === "string" && c.orb_color_error) colorError.current = c.orb_color_error;
         idlePulse.current = c.orb_idle_pulse !== false;
         if (c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide") idleMode.current = c.orb_idle_mode;
         else idleMode.current = "normal";
@@ -179,6 +181,7 @@ export function Orb() {
       colorIdle?: string;
       colorWorking?: string;
       colorDone?: string;
+      colorError?: string;
       idlePulse?: boolean;
       idleMode?: "normal" | "dim" | "hide";
       speed?: number;
@@ -189,6 +192,7 @@ export function Orb() {
       if (p.colorIdle) colorIdle.current = p.colorIdle;
       if (p.colorWorking) colorWorking.current = p.colorWorking;
       if (p.colorDone) colorDone.current = p.colorDone;
+      if (p.colorError) colorError.current = p.colorError;
       idlePulse.current = p.idlePulse !== false;
       if (p.idleMode) idleMode.current = p.idleMode;
       if (typeof p.speed === "number") speed.current = p.speed;
@@ -244,6 +248,12 @@ export function Orb() {
     let frame = 0;
     let raf = 0;
     const rings: { r: number; a0: number }[] = [];
+    // Per-style persistent state (kept across frames, harmless when unused):
+    // sonar2 contact blips · bars2 peak-hold caps · ping2's slow mic average
+    // (rings fire on voice ONSETS — level spikes above this average).
+    const blips: { ang: number; dist: number; a: number }[] = [];
+    const peaks: number[] = new Array(16).fill(0);
+    let lvlAvg = 0;
 
     const loop = () => {
       // Animation speed (TJ: the default cadence felt too fast — now adjustable).
@@ -260,14 +270,14 @@ export function Orb() {
       const lvl = Math.min(1, level.current);
       const st = state.current;
       // idle → colorIdle · recording/transcribing → colorWorking · done → colorDone
-      // · error → fixed warning amber.
+      // · error → colorError (defaults to warning amber).
       const base =
         st === "recording" || st === "transcribing"
           ? colorWorking.current
           : st === "done"
             ? colorDone.current
             : st === "error"
-              ? ERROR_COLOR
+              ? colorError.current
               : colorIdle.current;
       const dotR = size * 0.1;
       // When idle animation is OFF, freeze every style's time-based motion so the
@@ -391,6 +401,306 @@ export function Orb() {
           ctx.arc(cx, cy, dotR * (0.9 + energy * 0.4), 0, Math.PI * 2);
           ctx.fill();
           ctx.shadowBlur = 0;
+          break;
+        }
+        case "ping2": {
+          // Ping V2 — rings no longer emit on a fixed timer: they fire on VOICE
+          // ONSETS (level spikes above the slow mic average), scaled by how loud
+          // the syllable was, over a soft gradient core. The orb visibly ripples
+          // WHEN you talk, not merely while the mic is open. Idle keeps a slow
+          // calm ring so it still reads alive.
+          const maxR = size * 0.47;
+          lvlAvg = lvlAvg * 0.92 + lvl * 0.08;
+          const onset = speaking && lvl > 0.1 && lvl > lvlAvg * 1.35;
+          if (
+            !idleStill &&
+            ((onset && frame % 5 === 0) ||
+              (!speaking && frame % Math.max(1, Math.round(110 / sp)) === 0))
+          ) {
+            rings.push({ r: dotR * 0.9, a0: speaking ? 0.35 + lvl * 0.55 : 0.22 + energy * 0.2 });
+          }
+          for (let i = rings.length - 1; i >= 0; i--) {
+            const ring = rings[i];
+            ring.r += size * 0.004 * sp * (1 + energy * 0.5);
+            const p = (ring.r - dotR) / (maxR - dotR);
+            if (p >= 1) {
+              rings.splice(i, 1);
+              continue;
+            }
+            const a = ring.a0 * (1 - p) * (1 - p);
+            ctx.strokeStyle = hexA(base, a);
+            ctx.lineWidth = Math.max(1.2, size * 0.016 * (1 - p * 0.6));
+            ctx.beginPath();
+            ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          // gradient core that swells with the voice
+          const r = dotR * (0.9 + energy * 0.8);
+          const grad = ctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r * 1.7);
+          grad.addColorStop(0, hexA(base, 0.95));
+          grad.addColorStop(0.55, hexA(base, 0.4));
+          grad.addColorStop(1, hexA(base, 0));
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r * 1.7, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case "sonar2": {
+          // Sonar V2 — a real radar: rotating beam with a fading afterglow over
+          // faint range rings; while you speak, contact "blips" appear near the
+          // beam and fade like radar returns. Idle animation off → just the calm
+          // rings + centre dot (no frozen mid-sweep).
+          const R = size * 0.42;
+          ctx.lineWidth = 1;
+          for (let i = 1; i <= 3; i++) {
+            ctx.strokeStyle = hexA(base, 0.1 + 0.05 * energy);
+            ctx.beginPath();
+            ctx.arc(cx, cy, (R * i) / 3, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          if (!idleStill) {
+            const ang = t * 0.045;
+            const TRAIL = 26;
+            for (let i = TRAIL; i >= 0; i--) {
+              const a = ang - i * 0.05;
+              const al = Math.pow(1 - i / TRAIL, 2) * (0.45 + energy * 0.4);
+              ctx.strokeStyle = hexA(base, al);
+              ctx.lineWidth = i === 0 ? Math.max(1.5, size * 0.014) : Math.max(1, size * 0.008);
+              ctx.beginPath();
+              ctx.moveTo(cx, cy);
+              ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+              ctx.stroke();
+            }
+            if (speaking && lvl > 0.12 && frame % 9 === 0) {
+              blips.push({
+                ang: ang - Math.random() * 1.2,
+                dist: R * (0.3 + Math.random() * 0.6),
+                a: 0.55 + lvl * 0.4,
+              });
+            }
+          }
+          for (let i = blips.length - 1; i >= 0; i--) {
+            const b = blips[i];
+            b.a -= 0.012 * sp;
+            if (b.a <= 0) {
+              blips.splice(i, 1);
+              continue;
+            }
+            ctx.fillStyle = hexA(base, b.a);
+            ctx.beginPath();
+            ctx.arc(
+              cx + Math.cos(b.ang) * b.dist,
+              cy + Math.sin(b.ang) * b.dist,
+              Math.max(2, size * 0.02),
+              0,
+              Math.PI * 2,
+            );
+            ctx.fill();
+          }
+          ctx.fillStyle = hexA(base, 0.95);
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case "bars2": {
+          // Bars V2 — a 13-band spectrum with slowly-falling peak-hold caps
+          // (classic VU peaks), mirrored around the centre line. Same live-VU
+          // contract as "bars": height IS the mic level while recording.
+          const n = 13;
+          const bw = size * 0.028;
+          const gap = bw * 0.65;
+          const total = n * bw + (n - 1) * gap;
+          for (let i = 0; i < n; i++) {
+            const k = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2); // 0 centre → 1 edge
+            const profile = 1 - k * k * 0.75;
+            const band = speaking
+              ? 0.55 + 0.45 * Math.abs(Math.sin(ph * 0.33 + i * 1.7))
+              : 0.45 + 0.55 * Math.abs(Math.sin(ph * 0.13 + i * 1.7));
+            const amp = speaking
+              ? Math.min(1, (0.04 + lvl * 1.5) * profile * band)
+              : (energy * profile + 0.06) * band;
+            const bh = idleStill ? bw : Math.max(bw, size * 0.52 * amp);
+            const x = cx - total / 2 + i * (bw + gap);
+            ctx.fillStyle = hexA(base, 0.9);
+            ctx.beginPath();
+            ctx.roundRect(x, cy - bh / 2, bw, bh, bw / 2);
+            ctx.fill();
+            // peak caps spring up with each spike, then sink back slowly
+            peaks[i] = idleStill ? bh : Math.max(peaks[i] - size * 0.0045 * sp, bh);
+            if (!idleStill && peaks[i] > bh + bw * 1.2) {
+              ctx.fillStyle = hexA(base, 0.5);
+              ctx.beginPath();
+              ctx.roundRect(x, cy - peaks[i] / 2 - bw * 0.5, bw, bw * 0.55, bw * 0.28);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.roundRect(x, cy + peaks[i] / 2 - bw * 0.05, bw, bw * 0.55, bw * 0.28);
+              ctx.fill();
+            }
+          }
+          break;
+        }
+        case "wave2": {
+          // Wave V2 — three stacked sine layers (main + two echoes at lower
+          // alpha and different frequency/phase) under a soft glow, tapered to
+          // the ends, so the line reads like a rich audio waveform instead of a
+          // single thread. Height tracks the real mic level while recording.
+          const half = size * 0.42;
+          const baseAmp = idleStill
+            ? size * 0.012
+            : speaking
+              ? size * (0.02 + lvl * 0.4)
+              : size * 0.16 * (0.15 + energy);
+          const layers = [
+            { f: 0.052, off: 0, a: 0.95, k: 1 },
+            { f: 0.041, off: 1.7, a: 0.4, k: 0.7 },
+            { f: 0.067, off: 3.9, a: 0.22, k: 0.5 },
+          ];
+          for (const L of layers) {
+            ctx.lineWidth = Math.max(1.6, size * 0.018);
+            ctx.strokeStyle = hexA(base, L.a);
+            if (L.k === 1) {
+              ctx.shadowBlur = size * 0.06;
+              ctx.shadowColor = base;
+            }
+            ctx.beginPath();
+            for (let x = -half; x <= half; x += 2) {
+              const env = Math.pow(Math.cos((x / half) * (Math.PI / 2)), 2);
+              const y = Math.sin(x * L.f + ph * 0.22 + L.off) * baseAmp * L.k * env;
+              x === -half ? ctx.moveTo(cx + x, cy + y) : ctx.lineTo(cx + x, cy + y);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+          }
+          break;
+        }
+        case "halo": {
+          // Halo — a thin resting ring with two comet-like arcs chasing each
+          // other around it; the arcs lengthen and the ring swells as you speak.
+          // Minimal and premium, deliberately quiet at rest.
+          const R = size * (0.24 + 0.07 * energy);
+          ctx.lineCap = "round";
+          ctx.strokeStyle = hexA(base, 0.18);
+          ctx.lineWidth = Math.max(1.5, size * 0.014);
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, 0, Math.PI * 2);
+          ctx.stroke();
+          const arcLen = (0.5 + energy * 1.3) * Math.PI * 0.6;
+          const SEG = 14;
+          for (let j = 0; j < 2; j++) {
+            const head = ph * 0.03 * (j === 0 ? 1 : 0.82) + j * Math.PI;
+            for (let i = 0; i < SEG; i++) {
+              const a0 = head - (arcLen * (i + 1)) / SEG;
+              const a1 = head - (arcLen * i) / SEG;
+              ctx.strokeStyle = hexA(base, Math.pow(1 - i / SEG, 1.6) * (0.55 + energy * 0.4));
+              ctx.lineWidth = Math.max(2, size * 0.028 * (1 - (i / SEG) * 0.55));
+              ctx.beginPath();
+              ctx.arc(cx, cy, R, a0, a1);
+              ctx.stroke();
+            }
+          }
+          ctx.lineCap = "butt";
+          const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, dotR * 1.2);
+          grad.addColorStop(0, hexA(base, 0.85));
+          grad.addColorStop(1, hexA(base, 0));
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 1.2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case "orbit": {
+          // Orbit — electrons circling a nucleus on three tilted elliptical
+          // paths, each with a short fading trail; orbits widen slightly with
+          // the energy. Trails skip when frozen so rest is truly still.
+          const orbits = [
+            { rx: 0.3, ry: 0.13, tilt: 0.5, v: 1.0, off: 0 },
+            { rx: 0.26, ry: 0.32, tilt: -0.9, v: 0.74, off: 2.1 },
+            { rx: 0.34, ry: 0.2, tilt: 1.9, v: 0.55, off: 4.4 },
+          ];
+          for (const o of orbits) {
+            const rx = size * o.rx * (0.85 + energy * 0.3);
+            const ry = size * o.ry * (0.85 + energy * 0.3);
+            ctx.strokeStyle = hexA(base, 0.1);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, o.tilt, 0, Math.PI * 2);
+            ctx.stroke();
+            const head = ph * 0.035 * o.v + o.off;
+            const ghosts = idleStill ? 0 : 5;
+            for (let g = ghosts; g >= 0; g--) {
+              const a = head - g * 0.16;
+              const ex = rx * Math.cos(a);
+              const ey = ry * Math.sin(a);
+              const x = cx + ex * Math.cos(o.tilt) - ey * Math.sin(o.tilt);
+              const y = cy + ex * Math.sin(o.tilt) + ey * Math.cos(o.tilt);
+              ctx.fillStyle = hexA(base, Math.pow(1 - g / 6, 1.8) * 0.9);
+              ctx.beginPath();
+              ctx.arc(x, y, Math.max(1.5, size * 0.022 * (1 - g * 0.13)), 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = hexA(base, 0.95);
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 0.6 * (1 + energy * 0.3), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case "aurora": {
+          // Aurora — three soft gradient blobs drifting on Lissajous paths,
+          // additively blended so overlaps bloom; the cloud tightens and
+          // brightens as you speak. The most organic, "lava lamp" of the set.
+          const prevOp = ctx.globalCompositeOperation;
+          ctx.globalCompositeOperation = "lighter";
+          const spread = size * (speaking ? 0.1 + (1 - lvl) * 0.05 : 0.14);
+          const blobs = [
+            { fx: 0.021, fy: 0.017, off: 0, r: 0.2 },
+            { fx: 0.013, fy: 0.024, off: 2.4, r: 0.17 },
+            { fx: 0.017, fy: 0.011, off: 4.6, r: 0.23 },
+          ];
+          for (const b of blobs) {
+            const x = cx + Math.sin(ph * b.fx + b.off) * spread;
+            const y = cy + Math.cos(ph * b.fy + b.off * 1.3) * spread;
+            const r = size * b.r * (0.8 + energy * 0.5);
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+            grad.addColorStop(0, hexA(base, 0.5 + energy * 0.3));
+            grad.addColorStop(1, hexA(base, 0));
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalCompositeOperation = prevOp;
+          break;
+        }
+        case "spectrum": {
+          // Spectrum — a circular equalizer: rounded spokes radiating from a
+          // ring, each band dancing on its own phase; while recording the whole
+          // crown follows the real mic level. Collapses to stubs at rest.
+          const N = 28;
+          const r0 = size * 0.16;
+          ctx.lineCap = "round";
+          ctx.lineWidth = Math.max(2, size * 0.018);
+          for (let i = 0; i < N; i++) {
+            const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+            const band = 0.35 + 0.65 * Math.abs(Math.sin(ph * 0.17 + i * 2.4));
+            const len = idleStill
+              ? size * 0.012
+              : speaking
+                ? size * (0.015 + lvl * 0.23 * band)
+                : size * 0.1 * energy * band + size * 0.01;
+            ctx.strokeStyle = hexA(base, 0.45 + 0.5 * band);
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+            ctx.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
+            ctx.stroke();
+          }
+          ctx.lineCap = "butt";
+          ctx.fillStyle = hexA(base, 0.9);
+          ctx.beginPath();
+          ctx.arc(cx, cy, dotR * 0.55, 0, Math.PI * 2);
+          ctx.fill();
           break;
         }
         default: {

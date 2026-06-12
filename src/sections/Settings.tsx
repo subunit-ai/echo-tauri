@@ -521,11 +521,19 @@ export function Settings() {
                 onChange={(v) => set("orb_overlay_style", v)}
                 options={[
                   ["ping", t("settings.orbStylePing")],
+                  ["ping2", "Ping V2"],
                   ["sphere", "Sphere"],
                   ["sonar", "Sonar"],
+                  ["sonar2", "Sonar V2 (Radar)"],
                   ["bars", "Bars"],
+                  ["bars2", "Bars V2 (EQ)"],
                   ["wave", "Wave"],
+                  ["wave2", "Wave V2"],
                   ["classic", "Classic"],
+                  ["halo", "Halo"],
+                  ["orbit", "Orbit"],
+                  ["aurora", "Aurora"],
+                  ["spectrum", "Spectrum"],
                 ]}
               />
             </Row>
@@ -547,6 +555,9 @@ export function Settings() {
             </Row>
             <Row name={t("settings.orbColorDone")} hint={t("settings.orbColorDoneHint")}>
               <ColorSwatch value={c.orb_color_done} onChange={(v) => set("orb_color_done", v)} />
+            </Row>
+            <Row name={t("settings.orbColorError")} hint={t("settings.orbColorErrorHint")}>
+              <ColorSwatch value={c.orb_color_error} onChange={(v) => set("orb_color_error", v)} />
             </Row>
             <Row name={t("settings.orbPosition")}>
               <Sel
