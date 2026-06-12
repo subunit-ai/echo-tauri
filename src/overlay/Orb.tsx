@@ -60,13 +60,17 @@ const MODE_COLOR: Record<string, string> = {
   superfast: "#ff9f43",
 };
 
-// Liquid-Glass (dark, floats over arbitrary screen content — no real backdrop
-// to blur, so the glass is a high-opacity navy fill + hairline + top rim).
+// Liquid-Glass (dark, floats over arbitrary screen content). The overlay window
+// is transparent, so `backdrop-filter` blurs the real desktop/app content BEHIND
+// it — a thin translucent navy tint over that blur reads as proper frosted glass
+// (TJ: "noch transparenter, mehr Liquid Glass"). Hairline + top rim keep the edge.
 const glassSurface: CSSProperties = {
-  background: "rgba(10,22,40,0.92)",
-  border: "1px solid rgba(150,185,225,0.18)",
+  background: "rgba(12,24,46,0.52)",
+  backdropFilter: "blur(22px) saturate(1.6)",
+  WebkitBackdropFilter: "blur(22px) saturate(1.6)",
+  border: "1px solid rgba(165,200,240,0.16)",
   boxShadow:
-    "inset 0 1px 0 rgba(190,215,245,0.14), 0 18px 40px -18px rgba(0,0,0,0.65)",
+    "inset 0 1px 0 rgba(205,228,255,0.16), 0 16px 38px -18px rgba(0,0,0,0.55)",
 };
 
 const EASE = "cubic-bezier(.2,.8,.2,1)";
@@ -126,10 +130,11 @@ function Row({
  * gets no mouse events while click-through, so it can't track hover itself).
  *
  * Engaged → three icon-only glass chips appear around the orb (mode left,
- * language above, cleanup right) plus the ✦ console chip below. Hovering ANY
- * chip blooms all three into full option panels — every value visible, one
- * click to set (`orb_set`). Returning to the orb collapses them back to chips;
- * leaving the window hides everything.
+ * language above, cleanup right) plus the ✦ console chip below. Each chip
+ * springs on hover and blooms ONLY its own option panel — every value visible,
+ * one click to set (`orb_set`). The other chips stay put so you can switch.
+ * Returning to the orb collapses the panel back to a chip; leaving the window
+ * hides everything.
  */
 export function Orb() {
   const { t } = useTranslation();
@@ -146,7 +151,9 @@ export function Orb() {
   const speed = useRef(0.6);
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  // Which single satellite is expanded (null = just the icon chips). Hovering a
+  // chip opens ONLY its own panel — not all three at once (TJ).
+  const [openPanel, setOpenPanel] = useState<"mode" | "language" | "cleanup" | null>(null);
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
@@ -192,7 +199,7 @@ export function Orb() {
     // disengage the panels also fold back so the next hover starts calm.
     const unHover = listen<{ hover: boolean }>("echo://orb-hover", (e) => {
       setHover(e.payload.hover);
-      if (!e.payload.hover) setExpanded(false);
+      if (!e.payload.hover) setOpenPanel(null);
     });
     return () => {
       un.then((f) => f());
@@ -483,13 +490,13 @@ export function Orb() {
     padding: 0,
     transition: `opacity 0.18s ease, transform 0.22s ${EASE}`,
   };
-  // Chips show while engaged-but-collapsed; panels replace them when expanded.
+  // A chip shows while engaged, EXCEPT the one whose own panel is currently open
+  // (that panel takes its place). The others stay as chips so you can switch.
   const chipVis = (vis: boolean): CSSProperties => ({
     opacity: vis ? 1 : 0,
     transform: vis ? "scale(1)" : "scale(0.7)",
     pointerEvents: vis ? "auto" : "none",
   });
-  const chipsVisible = hover && !expanded;
 
   const panelBase: CSSProperties = {
     ...glassSurface,
@@ -502,19 +509,24 @@ export function Orb() {
     gap: 2,
     transition: `opacity 0.22s ${EASE}, transform 0.22s ${EASE}`,
   };
-  const panelVis = (origin: string): CSSProperties => ({
-    opacity: expanded && hover ? 1 : 0,
-    transform: expanded && hover ? "scale(1)" : "scale(0.72)",
-    transformOrigin: origin,
-    pointerEvents: expanded && hover ? "auto" : "none",
-  });
+  // Only the open panel is visible — keep it mounted so it stays put while the
+  // pointer travels from its chip onto it (leaving sets openPanel back to null).
+  const panelVis = (key: "mode" | "language" | "cleanup", origin: string): CSSProperties => {
+    const on = openPanel === key;
+    return {
+      opacity: on ? 1 : 0,
+      transform: on ? "scale(1)" : "scale(0.72)",
+      transformOrigin: origin,
+      pointerEvents: on ? "auto" : "none",
+    };
+  };
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Orb square between the gutters. Returning here folds the panels back. */}
       <div
         ref={boxRef}
-        onMouseEnter={() => setExpanded(false)}
+        onMouseEnter={() => setOpenPanel(null)}
         style={{
           position: "absolute",
           left: GUTTER_X,
@@ -536,11 +548,12 @@ export function Orb() {
                Hovering ANY of them blooms all three option panels. ---- */}
           {/* W — transcription mode */}
           <button
+            className="orb-chip"
             title={t("overlay.tooltipMode", { value: quick.mode })}
-            onMouseEnter={() => setExpanded(true)}
+            onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...chipBase,
-              ...chipVis(chipsVisible),
+              ...chipVis(hover && openPanel !== "mode"),
               left: GUTTER_X - GAP - CHIP,
               top: orbMidY,
               marginTop: -CHIP / 2,
@@ -561,11 +574,12 @@ export function Orb() {
           </button>
           {/* N — language */}
           <button
+            className="orb-chip"
             title={t("overlay.tooltipLanguage", { value: quick.language })}
-            onMouseEnter={() => setExpanded(true)}
+            onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...chipBase,
-              ...chipVis(chipsVisible),
+              ...chipVis(hover && openPanel !== "language"),
               left: `calc(50% - ${CHIP / 2}px)`,
               top: GUTTER_TOP - GAP - CHIP,
             }}
@@ -574,11 +588,12 @@ export function Orb() {
           </button>
           {/* E — cleanup style */}
           <button
+            className="orb-chip"
             title={t("overlay.tooltipCleanup", { value: quick.cleanup })}
-            onMouseEnter={() => setExpanded(true)}
+            onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...chipBase,
-              ...chipVis(chipsVisible),
+              ...chipVis(hover && openPanel !== "cleanup"),
               left: `calc(100% - ${GUTTER_X - GAP}px)`,
               top: orbMidY,
               marginTop: -CHIP / 2,
@@ -588,12 +603,13 @@ export function Orb() {
             <StrokeIcon paths={SPARKLES_PATHS} size={17} strokeWidth={1.9} />
           </button>
 
-          {/* ---- Expanded islands: all three bloom together on chip hover ---- */}
+          {/* ---- Expanded island: ONLY the hovered chip's panel blooms ---- */}
           {/* Mode — left of the orb */}
           <div
+            onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...panelBase,
-              ...panelVis("right center"),
+              ...panelVis("mode", "right center"),
               left: 0,
               top: orbMidY,
               translate: "0 -50%",
@@ -620,9 +636,10 @@ export function Orb() {
           </div>
           {/* Language — above the orb */}
           <div
+            onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...panelBase,
-              ...panelVis("center bottom"),
+              ...panelVis("language", "center bottom"),
               left: `calc(50% - ${PANEL_W / 2}px)`,
               bottom: `calc(100% - ${GUTTER_TOP - GAP}px)`,
             }}
@@ -648,9 +665,10 @@ export function Orb() {
           </div>
           {/* Cleanup — right of the orb */}
           <div
+            onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...panelBase,
-              ...panelVis("left center"),
+              ...panelVis("cleanup", "left center"),
               left: `calc(100% - ${PANEL_W}px)`,
               top: orbMidY,
               translate: "0 -50%",
@@ -692,6 +710,7 @@ export function Orb() {
 
       {/* S — Prompt Console (action chip, stays a chip in both stages) */}
       <button
+        className="orb-chip"
         title={t("overlay.tooltipPrompt")}
         onClick={() => {
           invoke("prompt_console_toggle").catch(() => {});
