@@ -23,7 +23,10 @@ import {
   duplicateOrbProfile,
   type Config,
   type OrbProfile,
+  type EngineState,
 } from "../lib/ipc";
+import { OrbCanvas } from "../overlay/OrbCanvas";
+import type { OrbVisual } from "../overlay/orbRender";
 import { listen } from "@tauri-apps/api/event";
 import { LANGUAGES } from "../lib/languages";
 import { SOUND_PRESETS, playSound } from "../lib/sounds";
@@ -274,6 +277,73 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** The live Orb configurator preview. Renders the orb EXACTLY like the floating
+ *  overlay (shared `drawOrb`), big and centred, reacting live to every setting
+ *  below it. A "Demo-Stimme" run drives a synthetic speaking envelope so the
+ *  voice reaction is visible right in the app; otherwise the state chips let you
+ *  inspect each per-state colour (idle / active / done / error). This is the
+ *  visible half of the Orb-configurator the foundation was built for. */
+function OrbConfigurator({ c }: { c: Config }) {
+  const { t } = useTranslation();
+  const [demo, setDemo] = useState(true);
+  const [previewState, setPreviewState] = useState<EngineState>("idle");
+
+  const visual: OrbVisual = {
+    style: c.orb_overlay_style,
+    colors: {
+      idle: c.orb_color_idle,
+      working: c.orb_color_working,
+      done: c.orb_color_done,
+      error: c.orb_color_error,
+    },
+    idlePulse: c.orb_idle_pulse,
+    idleMode: c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide" ? c.orb_idle_mode : "normal",
+    speed: c.orb_speed ?? 0.6,
+  };
+  // The size slider visibly scales the preview too (clamped to the stage).
+  const sizeFactor = c.orb_overlay_size ?? 1;
+  const px = Math.round(Math.max(120, Math.min(300, 170 * sizeFactor)));
+
+  const STATES: { key: EngineState; labelKey: string }[] = [
+    { key: "idle", labelKey: "settings.orbStateIdle" },
+    { key: "recording", labelKey: "settings.orbStateActive" },
+    { key: "done", labelKey: "settings.orbStateDone" },
+    { key: "error", labelKey: "settings.orbStateError" },
+  ];
+
+  return (
+    <div className="orb-config">
+      <div className="oc-head">
+        <div className="oc-title">{t("settings.orbConfigurator")}</div>
+        <div className="oc-sub">{t("settings.orbConfiguratorHint")}</div>
+      </div>
+      <div className="oc-stage">
+        <OrbCanvas visual={visual} state={previewState} demo={demo} size={px} />
+      </div>
+      <div className="oc-controls">
+        <button
+          className={`oc-demo ${demo ? "active" : ""}`}
+          onClick={() => setDemo((d) => !d)}
+        >
+          {demo ? `■ ${t("settings.orbDemoStop")}` : `▶ ${t("settings.orbDemoPlay")}`}
+        </button>
+        <div className="oc-states">
+          {STATES.map((s) => (
+            <button
+              key={s.key}
+              className={!demo && previewState === s.key ? "active" : ""}
+              disabled={demo}
+              onClick={() => setPreviewState(s.key)}
+            >
+              {t(s.labelKey)}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -560,6 +630,11 @@ export function Settings() {
                   {t("settings.github")}
                 </button>
               </Row>
+              <Row name={t("settings.replayIntro")} hint={t("settings.replayIntroHint")}>
+                <button className="sub-tab" onClick={() => patch({ has_seen_onboarding: false })}>
+                  {t("settings.replayIntroBtn")}
+                </button>
+              </Row>
             </div>
           </>
         )}
@@ -688,6 +763,7 @@ export function Settings() {
 
         {tab === "overlay" && (
           <>
+            <OrbConfigurator c={c} />
             <Row name={t("settings.showOrbOverlay")}>
               <Toggle checked={c.use_orb_overlay} onChange={(v) => set("use_orb_overlay", v)} />
             </Row>

@@ -982,3 +982,89 @@ input:focus {
   color: #ff8c8c;
   border-color: color-mix(in srgb, #ff5c5c 45%, transparent);
 }
+
+/* ---- Orb configurator (live preview) ---- */
+.orb-config {
+  margin: 2px 0 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--glass2);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+}
+.oc-head {
+  margin-bottom: 12px;
+}
+.oc-title {
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+.oc-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.oc-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 14px;
+  border-radius: 14px;
+  /* a calm spotlight so the orb pops regardless of theme */
+  background:
+    radial-gradient(120% 120% at 50% 38%, rgba(120, 170, 255, 0.1), transparent 70%),
+    rgba(4, 10, 22, 0.55);
+  border: 1px solid rgba(150, 190, 240, 0.1);
+  overflow: hidden;
+}
+.oc-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.oc-demo {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-weight: 650;
+  font-size: 0.82rem;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.oc-demo.active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.oc-states {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.oc-states button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+.oc-states button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+.oc-states button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.oc-states button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
