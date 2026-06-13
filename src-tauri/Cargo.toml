@@ -71,6 +71,9 @@ base64 = "0.22"
 # HTTP client (rustls — no OpenSSL link, avoids the Win-ARM `requests`/urllib3
 # WSAEACCES class of bugs that plagued the Python build).
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json", "blocking", "stream"] }
+# Live dictation streaming: blocking WS client for /v1/dictate (rustls — the
+# same no-OpenSSL stack as reqwest, incl. matching webpki roots).
+tungstenite = { version = "0.24", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
 # Async runtime (model downloads, meeting auto-detect, overlay timers).
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net", "io-util", "sync", "fs"] }
 # Hardware probe (RAM/cores) for the recommended local-model hint.

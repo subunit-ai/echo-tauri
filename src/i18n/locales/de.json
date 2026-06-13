@@ -341,7 +341,10 @@
     "promptHotkey": "Prompt-Konsole Hotkey",
     "promptHotkeyHint": "Globale Tastenkombi, die die schwebende Prompt-Konsole öffnet/versteckt",
     "promptAsTarget": "Konsole als Diktat-Ziel",
-    "promptAsTargetHint": "Jede Transkription landet in der Prompt-Konsole statt in der aktiven App"
+    "promptAsTargetHint": "Jede Transkription landet in der Prompt-Konsole statt in der aktiven App",
+    "replayIntro": "Intro",
+    "replayIntroHint": "Startet das Erststart-Erlebnis erneut — deine Einstellungen bleiben erhalten.",
+    "replayIntroButton": "Intro wiederholen"
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",

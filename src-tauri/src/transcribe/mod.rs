@@ -11,6 +11,7 @@ mod local;
 // Opus speech compression for uploads — all platforms (libopus via opusic-sys,
 // CMake-built from vendored source; see Cargo.toml).
 mod opus_enc;
+pub mod stream;
 pub mod vocab;
 
 use crate::config::Config;
@@ -115,12 +116,14 @@ pub fn run_opts(
     }
 }
 
-/// Linear-resample mono f32 down to 16 kHz for the cloud upload. Returns the
-/// samples unchanged when already at (or below) 16 kHz. Linear interpolation
-/// matches both the local whisper path and the server's own resample, so it
-/// adds no accuracy difference — it only shrinks the bytes on the wire.
-fn downsample_to_16k(input: &[f32], sr: u32) -> (Vec<f32>, u32) {
-    if sr <= 16_000 || input.is_empty() {
+/// Linear-resample mono f32 to 16 kHz for the cloud upload. Linear
+/// interpolation matches both the local whisper path and the server's own
+/// resample, so it adds no accuracy difference — it only normalizes the rate.
+/// Sub-16k input (e.g. an 8 kHz Bluetooth-HFP mic) is resampled UP: server and
+/// stream protocol decode at a fixed 16 kHz, so passing it through unchanged
+/// would play back at double speed and transcribe to garbage.
+pub(crate) fn downsample_to_16k(input: &[f32], sr: u32) -> (Vec<f32>, u32) {
+    if sr == 16_000 || input.is_empty() {
         return (input.to_vec(), sr);
     }
     let ratio = 16_000f64 / sr as f64;
