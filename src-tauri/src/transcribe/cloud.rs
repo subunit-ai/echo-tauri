@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use reqwest::blocking::multipart;
 
-use super::{vocab, EngineError, Segment, TranscriptResult};
+use super::{vocab, EngineError, Segment, Timings, TranscriptResult};
 use crate::config::Config;
 
 pub fn transcribe_subunit(
@@ -140,11 +140,29 @@ pub fn transcribe_subunit(
         .and_then(|v| v.as_str())
         .map(|t| vocab::apply_vocab_replace(t.trim(), cfg));
 
+    // Server's pure compute time (whisper only — excludes the inline cleanup the
+    // server runs afterwards). Keeping it lets the dispatcher report server vs
+    // network instead of one opaque stt_ms.
+    let server_ms = json
+        .get("elapsed_s")
+        .and_then(|v| v.as_f64())
+        .map(|s| (s * 1000.0) as u64)
+        .unwrap_or(0);
+    // Combined-round-trip cleanup outcome: "ok" | "unavailable" | "error", or
+    // absent on an old server. "unavailable" = all cleanup subscriptions at their
+    // limit, so the caller must NOT pay a second doomed /v1/cleanup round trip.
+    let cleanup_status = json
+        .get("cleanup_status")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     Ok(TranscriptResult {
         text: vocab::apply_vocab_replace(&text, cfg),
         quality_mode,
         segments,
         cleaned_text,
-        timings: Default::default(), // filled by the dispatcher, which times this call
+        cleanup_status,
+        // server_ms only; encode_ms/stt_ms are filled by the dispatcher that times this call.
+        timings: Timings { server_ms, ..Default::default() },
     })
 }

@@ -37,6 +37,12 @@ pub struct TranscriptResult {
     /// server returned it; `None` → the caller runs its own cleanup call.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cleaned_text: Option<String>,
+    /// Server-reported cleanup outcome from the combined round trip: "ok",
+    /// "unavailable" (all cleanup subscriptions at their limit — a retry would
+    /// also fail) or "error". `None` for an old server that doesn't send it.
+    /// "unavailable" lets the caller skip the doomed second /v1/cleanup call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cleanup_status: Option<String>,
     /// Engine-phase latency (encode/STT). The full end-to-end breakdown is
     /// assembled in `do_transcribe` and logged + stored with the history entry —
     /// the measurement system we iterate latency work against.
@@ -51,6 +57,11 @@ pub struct Timings {
     /// Speech-to-text: cloud round-trip (upload + server STT, incl. the inline
     /// cleanup when the combined round trip ran) or local inference.
     pub stt_ms: u64,
+    /// Server-side compute only (cloud `elapsed_s` × 1000 — pure GPU whisper,
+    /// EXCLUDES the inline cleanup, which the server times separately). 0 for
+    /// local. `stt_ms - server_ms` ≈ network round-trip + upload + inline cleanup,
+    /// which is what lets us see network vs GPU instead of one opaque number.
+    pub server_ms: u64,
 }
 
 /// Structured error across the IPC boundary so the frontend branches on `code`
@@ -120,6 +131,8 @@ pub fn run_opts(
                     r.timings = Timings {
                         encode_ms,
                         stt_ms: t_stt.elapsed().as_millis() as u64,
+                        // cloud.rs parsed the server's elapsed_s into server_ms — keep it.
+                        server_ms: r.timings.server_ms,
                     };
                     Ok(r)
                 }
@@ -158,6 +171,7 @@ fn run_local(
         r.timings = Timings {
             encode_ms: 0,
             stt_ms: t_stt.elapsed().as_millis() as u64,
+            server_ms: 0, // local engine — no server compute
         };
         Ok(r)
     }
@@ -213,6 +227,7 @@ fn local_fallback(
                 r.timings = Timings {
                     encode_ms: 0,
                     stt_ms: t_stt.elapsed().as_millis() as u64,
+                    server_ms: 0, // local fallback — no server compute
                 };
                 Some(r)
             }

@@ -222,6 +222,15 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let t_cleanup = std::time::Instant::now();
     let mut text = match result.cleaned_text {
         Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
+        // Server ran the combined round trip but cleanup is down (all subscriptions
+        // at their weekly limit) — a separate /v1/cleanup call would also fail. Paste
+        // the raw transcript now instead of burning another ~2 s on a dead service.
+        // (Distinct from a missing field on an old server, which still falls through
+        // to the separate call below.)
+        _ if result.cleanup_status.as_deref() == Some("unavailable") => {
+            log::info!("transcribe: server cleanup unavailable (subscription limit) — pasting raw, skipping retry");
+            result.text
+        }
         _ if cfg.cleanup_enabled && style != "raw" => {
             crate::cleanup::maybe_cleanup(&cfg, &result.text, &style)
         }
@@ -231,11 +240,24 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         text = crate::dach::dach_format(&text);
     }
     let cleanup_ms = t_cleanup.elapsed().as_millis() as u64;
+    // Latency breakdown — the measurement system we iterate against. server_ms is
+    // pure GPU (cloud elapsed_s); stt_ms is the full cloud round trip (so
+    // stt_ms - server_ms ≈ network + upload + inline cleanup); cleanup_ms is the
+    // SEPARATE /v1/cleanup call only (0 when the inline path or the skip applied).
+    log::info!(
+        "transcribe latency: encode={}ms stt={}ms server_gpu={}ms net+inline≈{}ms cleanup_call={}ms",
+        result.timings.encode_ms,
+        result.timings.stt_ms,
+        result.timings.server_ms,
+        result.timings.stt_ms.saturating_sub(result.timings.server_ms),
+        cleanup_ms,
+    );
     let result = TranscriptResult {
         text,
         quality_mode: result.quality_mode,
         segments: Vec::new(),
         cleaned_text: None,
+        cleanup_status: None,
         timings: result.timings,
     };
 
