@@ -384,6 +384,13 @@ export function Settings() {
                   {t("settings.github")}
                 </button>
               </Row>
+              <Row name={t("settings.replayIntro")} hint={t("settings.replayIntroHint")}>
+                {/* Re-enter the first-run intro any time (signed-in or not) —
+                    completion/skip flips the flag back, settings stay intact. */}
+                <button className="sub-tab" onClick={() => set("has_seen_onboarding", false)}>
+                  {t("settings.replayIntroButton")}
+                </button>
+              </Row>
             </div>
           </>
         )}

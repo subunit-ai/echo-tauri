@@ -353,7 +353,10 @@
     "promptHotkey": "Prompt Console hotkey",
     "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Console",
     "promptAsTarget": "Console as dictation target",
-    "promptAsTargetHint": "Every transcription lands in the Prompt Console instead of the active app"
+    "promptAsTargetHint": "Every transcription lands in the Prompt Console instead of the active app",
+    "replayIntro": "Intro",
+    "replayIntroHint": "Replays the first-run experience — your settings stay untouched.",
+    "replayIntroButton": "Replay intro"
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
