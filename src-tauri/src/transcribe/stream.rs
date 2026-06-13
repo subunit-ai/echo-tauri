@@ -167,15 +167,22 @@ fn agreed_stable(prev: &str, cur: &str) -> String {
 /// reconcile toward the stable text on every partial instead (bounded — see
 /// `apply_target`), so typing keeps flowing.
 fn live_commit(l: &mut Live, cur: &str, committed: Option<&str>) {
-    // Prefer the SERVER's committed prefix: it is final-quality and FROZEN (the
-    // server only ever extends it, never revises), so typing it is pure monotonic
-    // append — no rewrite, no wild-delete, and crucially no freeze (the client can
-    // never get stuck waiting on a revision it can't safely undo). Fall back to the
-    // client-side agreed-stable heuristic only when the server sent no committed
-    // prefix (older server, or a non-quality tier that doesn't commit).
+    // Type the LONGER of two stable targets:
+    //  - agreed-stable (client LocalAgreement): the common prefix of two consecutive
+    //    partials, trimmed to a word boundary. Tracks ~1 word behind live speech, so
+    //    it flows continuously WITHOUT needing a pause.
+    //  - the server's committed prefix: final-quality and FROZEN (only ever extended),
+    //    but it ONLY advances at VAD silence boundaries — through a long run-on
+    //    sentence it stays put for many seconds (that was the freeze: first chunk
+    //    typed, then nothing until the next pause / the final).
+    // Whichever is longer wins: agreed-stable keeps typing during continuous speech,
+    // committed leaps ahead with quality-corrected text at pauses. plan_target bounds
+    // any divergence (small recase/comma → ≤MAX_REWRITE rewrite; large mid-sentence →
+    // wait, then append-only at the final) so this never wild-deletes.
+    let ag = agreed_stable(&l.prev_partial, cur);
     let target = match committed {
-        Some(c) if !c.is_empty() => c.to_string(),
-        _ => agreed_stable(&l.prev_partial, cur),
+        Some(c) if c.chars().count() > ag.chars().count() => c.to_string(),
+        _ => ag,
     };
     l.prev_partial = cur.to_string();
     if !target.is_empty() {
@@ -750,11 +757,16 @@ mod tests {
         for (t, cur, committed) in partials {
             max_partial_gap = max_partial_gap.max(t.saturating_sub(prev_t));
             prev_t = *t;
-            // Mirror live_commit: prefer the server's committed prefix, else agreed-stable.
-            let target = if !committed.is_empty() {
+            // Mirror live_commit: type the LONGER of agreed-stable and the server's
+            // committed prefix. agreed-stable tracks ~1 word behind live speech (fast,
+            // no pause needed); committed is final-quality but only advances at VAD
+            // pauses (it would freeze through long run-on sentences). The longer wins:
+            // fast during continuous speech, quality-corrected at pauses.
+            let ag = agreed_stable(&prev, cur);
+            let target = if committed.chars().count() > ag.chars().count() {
                 committed.clone()
             } else {
-                agreed_stable(&prev, cur)
+                ag
             };
             prev = cur.clone();
             if target.is_empty() {
