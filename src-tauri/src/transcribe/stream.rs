@@ -84,6 +84,57 @@ pub fn live_injected_chars() -> usize {
     LIVE_INJECTED.load(Ordering::Relaxed)
 }
 
+// ── Live-typing debug capture (opt-in via ECHO_LIVE_DEBUG=1) ─────────────────
+// When set, a streamed dictation records every partial (timestamped) + the final
+// and writes a replayable fixture to <config>/livetest/<unix_ms>.json — turning a
+// REAL dictation into a regression/latency fixture for the offline test harness
+// (livetest_replay), captured with the app's own fresh auth. Off = two cheap
+// no-op checks per partial; nothing written. Runs on the per-session stream thread,
+// so a thread-local needs no locking.
+struct DebugRec {
+    start: Instant,
+    partials: Vec<(u64, String)>,
+}
+thread_local! {
+    static DBG: std::cell::RefCell<Option<DebugRec>> = const { std::cell::RefCell::new(None) };
+}
+fn dbg_begin() {
+    if std::env::var_os("ECHO_LIVE_DEBUG").is_some() {
+        DBG.with(|d| *d.borrow_mut() = Some(DebugRec { start: Instant::now(), partials: Vec::new() }));
+    }
+}
+fn dbg_partial(text: &str) {
+    DBG.with(|d| {
+        if let Some(r) = d.borrow_mut().as_mut() {
+            let t = r.start.elapsed().as_millis() as u64;
+            r.partials.push((t, text.to_string()));
+        }
+    });
+}
+fn dbg_finish(final_text: &str) {
+    DBG.with(|d| {
+        let Some(r) = d.borrow_mut().take() else { return };
+        let t_final = r.start.elapsed().as_millis() as u64;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let Some(dir) = crate::config::config_file().parent().map(|p| p.join("livetest")) else {
+            return;
+        };
+        let _ = std::fs::create_dir_all(&dir);
+        let fixture = serde_json::json!({
+            "final": final_text,
+            "t_final_ms": t_final,
+            "partials": r.partials.iter().map(|(t, s)| serde_json::json!({"t_ms": t, "text": s})).collect::<Vec<_>>(),
+        });
+        let path = dir.join(format!("{ts}.json"));
+        if std::fs::write(&path, serde_json::to_string_pretty(&fixture).unwrap_or_default()).is_ok() {
+            log::info!("live-debug: fixture written ({} partials) {path:?}", r.partials.len());
+        }
+    });
+}
+
 /// LocalAgreement state for "live" mode: the text already typed into the target
 /// (`confirmed`) and the previous partial, to detect what is stable across two
 /// consecutive decodes.
@@ -299,6 +350,7 @@ fn session_thread(
         }
     };
     log::info!("stream: connected, live partials on (live_typing={live})");
+    dbg_begin(); // opt-in fixture capture (ECHO_LIVE_DEBUG)
 
     // LocalAgreement state for "live" mode — None unless live typing is on.
     let mut live_state = if live {
@@ -549,6 +601,7 @@ fn drain_partials(
                 if v.get("type").and_then(|t| t.as_str()) == Some("partial") {
                     if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                         let _ = app.emit("echo://stream-partial", text.to_string());
+                        dbg_partial(text);
                         // Live mode: type the newly-stable prefix into the target.
                         if let Some(l) = live.as_deref_mut() {
                             live_commit(l, text);
@@ -647,6 +700,213 @@ mod tests {
         let (ops, c) = plan_target(confirmed, target, true);
         assert_eq!(ops, vec![LiveOp::Type(" noch mehr".into())]);
         assert_eq!(c, format!("{confirmed} noch mehr"));
+    }
+
+    // ── Live-typing test center ─────────────────────────────────────────────
+    // Replay REAL speech through the REAL reconcile logic (agreed_stable +
+    // plan_target) into a simulated buffer, so live-typing correctness + stall +
+    // wild-delete can be checked WITHOUT a human dictating. `livetest_capture`
+    // streams an audio file to the server and saves a fixture; `livetest_replay`
+    // and the committed-fixture regression test run the logic offline.
+
+    /// Run the actual client reconcile logic over a captured partial stream into
+    /// a simulated text buffer and print a report. Returns (live_result, stats).
+    /// The on-screen buffer is always == the planner's `confirmed` by construction,
+    /// so `confirmed` IS the simulated buffer.
+    fn livetest_analyze(partials: &[(u64, String)], final_text: &str) -> (String, usize, u64) {
+        let mut confirmed = String::new();
+        let mut prev = String::new();
+        let (mut total_bs, mut max_bs, mut rewrites, mut typed) = (0usize, 0usize, 0usize, 0usize);
+        let mut last_progress = partials.first().map(|p| p.0).unwrap_or(0);
+        let mut max_gap: u64 = 0;
+        let mut apply = |ops: &[LiveOp]| {
+            for op in ops {
+                match op {
+                    LiveOp::Backspace(n) => {
+                        total_bs += n;
+                        max_bs = max_bs.max(*n);
+                        rewrites += 1;
+                    }
+                    LiveOp::Type(s) => typed += s.chars().count(),
+                }
+            }
+        };
+        for (t, cur) in partials {
+            let stable = agreed_stable(&prev, cur);
+            prev = cur.clone();
+            if stable.is_empty() {
+                continue;
+            }
+            let (ops, newc) = plan_target(&confirmed, &stable, false);
+            if ops.is_empty() {
+                max_gap = max_gap.max(t.saturating_sub(last_progress));
+            } else {
+                last_progress = *t;
+                apply(&ops);
+            }
+            confirmed = newc;
+        }
+        let (ops, newc) = plan_target(&confirmed, final_text, true);
+        apply(&ops);
+        confirmed = newc;
+
+        let exact = confirmed == final_text;
+        println!("── live-typing replay report ──");
+        println!("partials      : {}", partials.len());
+        println!("server final  : {final_text:?}");
+        println!("live result   : {confirmed:?}");
+        println!("EXACT MATCH   : {exact}");
+        println!("max progress gap (partials arriving, nothing typed): {max_gap} ms");
+        println!("backspaces    : total={total_bs} max_single={max_bs} rewrites={rewrites} typed_chars={typed}");
+        // Regression guard: a single backspace must never exceed the rewrite cap
+        // (that was the "wild delete" — purging the whole line at finish).
+        assert!(max_bs <= MAX_REWRITE, "WILD DELETE: single backspace {max_bs} > cap {MAX_REWRITE}");
+        (confirmed, max_bs, max_gap)
+    }
+
+    /// Stream a 16 kHz s16le mono PCM file to /v1/dictate in real-time 150 ms
+    /// chunks, capture every partial (timestamped) + the final, save a JSON
+    /// fixture, and print the replay report. Reads creds from this machine's Echo
+    /// config (credential never printed). Run:
+    ///   ECHO_LIVE_AUDIO=/path/x.pcm ECHO_LIVE_FIXTURE=out.json \
+    ///     cargo test --lib -- --ignored livetest_capture --nocapture
+    #[test]
+    #[ignore]
+    fn livetest_capture() {
+        let Ok(audio_path) = std::env::var("ECHO_LIVE_AUDIO") else {
+            println!("SKIP: set ECHO_LIVE_AUDIO=<16k s16le mono pcm>");
+            return;
+        };
+        let fixture_path =
+            std::env::var("ECHO_LIVE_FIXTURE").unwrap_or_else(|_| "/tmp/echo-livetest.json".into());
+        let pcm = std::fs::read(&audio_path).expect("read audio pcm");
+        println!("audio: {audio_path} ({} bytes ≈ {:.1}s @16k)", pcm.len(), pcm.len() as f64 / 32000.0);
+
+        let cfg_path = crate::config::config_file();
+        let cfg: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&cfg_path).expect("echo config"))
+                .expect("config json");
+        let token = cfg["subunit_access_token"].as_str().unwrap_or_default().to_string();
+        let api_key = cfg["subunit_api_key"].as_str().unwrap_or_default().to_string();
+        if token.is_empty() && api_key.is_empty() {
+            println!("SKIP: not signed in");
+            return;
+        }
+        let endpoint = cfg["subunit_endpoint"]
+            .as_str()
+            .unwrap_or("https://transcribe.subunit.ai/v1/transcribe")
+            .replace("https://", "wss://")
+            .replace("/v1/transcribe", "/v1/dictate");
+
+        let (mut ws, _) = tungstenite::connect(&endpoint).expect("connect");
+        ws.send(Message::Text(
+            serde_json::json!({
+                "token": token, "api_key": api_key, "language": "de",
+                "quality_mode": "quality", "cleanup_style": "",
+            })
+            .to_string(),
+        ))
+        .expect("hello");
+        loop {
+            match ws.read().expect("ready") {
+                Message::Text(t) => {
+                    let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
+                    if v["type"] == "ready" {
+                        break;
+                    }
+                    if v["type"] == "error" {
+                        // Expired/!auth token → skip, don't fail (use the app's fresh
+                        // auth via ECHO_LIVE_DEBUG capture instead, or dictate to refresh).
+                        println!("SKIP: server rejected ({}) — token likely expired; dictate once in Echo to refresh, then re-run", v["code"]);
+                        return;
+                    }
+                }
+                other => panic!("expected text, got {other:?}"),
+            }
+        }
+        set_read_timeout(&mut ws, Duration::from_millis(5));
+
+        let start = Instant::now();
+        let mut partials: Vec<(u64, String)> = Vec::new();
+        let record = |ws: &mut Ws, partials: &mut Vec<(u64, String)>, window: Duration| -> Option<String> {
+            let until = Instant::now() + window;
+            loop {
+                if Instant::now() >= until {
+                    return None;
+                }
+                match ws.read() {
+                    Ok(Message::Text(t)) => {
+                        let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
+                        match v["type"].as_str() {
+                            Some("partial") => {
+                                if let Some(s) = v["text"].as_str() {
+                                    partials.push((start.elapsed().as_millis() as u64, s.to_string()));
+                                }
+                            }
+                            Some("final") => {
+                                return Some(v["text"].as_str().unwrap_or_default().to_string());
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(tungstenite::Error::Io(e))
+                        if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+                    Err(e) => panic!("read: {e}"),
+                }
+            }
+        };
+
+        // 150 ms of 16k s16le mono = 4800 bytes. Feed in real time, draining partials.
+        for chunk in pcm.chunks(4800) {
+            ws.send(Message::Binary(chunk.to_vec())).expect("audio");
+            record(&mut ws, &mut partials, Duration::from_millis(150));
+        }
+        let t_end_ms = start.elapsed().as_millis() as u64;
+        ws.send(Message::Text(r#"{"type":"end"}"#.into())).expect("end");
+        let final_text = loop {
+            if let Some(f) = record(&mut ws, &mut partials, Duration::from_millis(500)) {
+                break f;
+            }
+            if start.elapsed() > Duration::from_secs(90) {
+                panic!("no final within 90s");
+            }
+        };
+        let t_final_ms = start.elapsed().as_millis() as u64;
+        println!("stream: {} partials, release@{t_end_ms}ms, final@{t_final_ms}ms (release→final {}ms)", partials.len(), t_final_ms - t_end_ms);
+
+        let fixture = serde_json::json!({
+            "audio": audio_path,
+            "final": final_text,
+            "t_end_ms": t_end_ms,
+            "t_final_ms": t_final_ms,
+            "partials": partials.iter().map(|(t, s)| serde_json::json!({"t_ms": t, "text": s})).collect::<Vec<_>>(),
+        });
+        std::fs::write(&fixture_path, serde_json::to_string_pretty(&fixture).unwrap()).expect("write fixture");
+        println!("fixture saved: {fixture_path}");
+
+        livetest_analyze(&partials, &final_text);
+    }
+
+    /// Replay a saved fixture through the reconcile logic — OFFLINE (no server).
+    /// `ECHO_LIVE_FIXTURE=out.json cargo test --lib -- --ignored livetest_replay --nocapture`
+    #[test]
+    #[ignore]
+    fn livetest_replay() {
+        let path = std::env::var("ECHO_LIVE_FIXTURE").unwrap_or_else(|_| "/tmp/echo-livetest.json".into());
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            println!("SKIP: no fixture at {path}");
+            return;
+        };
+        let v: serde_json::Value = serde_json::from_str(&raw).expect("fixture json");
+        let final_text = v["final"].as_str().unwrap_or_default().to_string();
+        let partials: Vec<(u64, String)> = v["partials"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|p| (p["t_ms"].as_u64().unwrap_or(0), p["text"].as_str().unwrap_or_default().to_string()))
+            .collect();
+        livetest_analyze(&partials, &final_text);
     }
 
     /// Protocol smoke against a `/v1/dictate` server. By default it targets a
@@ -782,6 +1042,7 @@ fn finish_flow(
                             .and_then(|t| t.as_str())
                             .unwrap_or_default()
                             .to_string();
+                        dbg_finish(&text); // write the opt-in fixture (ECHO_LIVE_DEBUG)
                         let cleaned_text = v
                             .get("cleaned_text")
                             .and_then(|t| t.as_str())
@@ -821,6 +1082,7 @@ fn finish_flow(
                         // Late lookahead while the final computes — still useful.
                         if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                             let _ = app.emit("echo://stream-partial", text.to_string());
+                            dbg_partial(text);
                         }
                     }
                     Some("error") => {
