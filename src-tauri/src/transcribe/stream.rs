@@ -93,7 +93,7 @@ pub fn live_injected_chars() -> usize {
 // so a thread-local needs no locking.
 struct DebugRec {
     start: Instant,
-    partials: Vec<(u64, String)>,
+    partials: Vec<(u64, String, String)>, // (t_ms, partial_text, server committed prefix)
 }
 thread_local! {
     static DBG: std::cell::RefCell<Option<DebugRec>> = const { std::cell::RefCell::new(None) };
@@ -103,11 +103,11 @@ fn dbg_begin() {
         DBG.with(|d| *d.borrow_mut() = Some(DebugRec { start: Instant::now(), partials: Vec::new() }));
     }
 }
-fn dbg_partial(text: &str) {
+fn dbg_partial(text: &str, committed: Option<&str>) {
     DBG.with(|d| {
         if let Some(r) = d.borrow_mut().as_mut() {
             let t = r.start.elapsed().as_millis() as u64;
-            r.partials.push((t, text.to_string()));
+            r.partials.push((t, text.to_string(), committed.unwrap_or_default().to_string()));
         }
     });
 }
@@ -126,7 +126,7 @@ fn dbg_finish(final_text: &str) {
         let fixture = serde_json::json!({
             "final": final_text,
             "t_final_ms": t_final,
-            "partials": r.partials.iter().map(|(t, s)| serde_json::json!({"t_ms": t, "text": s})).collect::<Vec<_>>(),
+            "partials": r.partials.iter().map(|(t, s, c)| serde_json::json!({"t_ms": t, "text": s, "committed": c})).collect::<Vec<_>>(),
         });
         let path = dir.join(format!("{ts}.json"));
         if std::fs::write(&path, serde_json::to_string_pretty(&fixture).unwrap_or_default()).is_ok() {
@@ -166,11 +166,20 @@ fn agreed_stable(prev: &str, cur: &str) -> String {
 /// and dumped the remainder late at finish ("breaks after the comma"). We now
 /// reconcile toward the stable text on every partial instead (bounded — see
 /// `apply_target`), so typing keeps flowing.
-fn live_commit(l: &mut Live, cur: &str) {
-    let stable = agreed_stable(&l.prev_partial, cur);
+fn live_commit(l: &mut Live, cur: &str, committed: Option<&str>) {
+    // Prefer the SERVER's committed prefix: it is final-quality and FROZEN (the
+    // server only ever extends it, never revises), so typing it is pure monotonic
+    // append — no rewrite, no wild-delete, and crucially no freeze (the client can
+    // never get stuck waiting on a revision it can't safely undo). Fall back to the
+    // client-side agreed-stable heuristic only when the server sent no committed
+    // prefix (older server, or a non-quality tier that doesn't commit).
+    let target = match committed {
+        Some(c) if !c.is_empty() => c.to_string(),
+        _ => agreed_stable(&l.prev_partial, cur),
+    };
     l.prev_partial = cur.to_string();
-    if !stable.is_empty() {
-        apply_target(l, &stable, false);
+    if !target.is_empty() {
+        apply_target(l, &target, false);
     }
 }
 
@@ -601,10 +610,11 @@ fn drain_partials(
                 if v.get("type").and_then(|t| t.as_str()) == Some("partial") {
                     if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                         let _ = app.emit("echo://stream-partial", text.to_string());
-                        dbg_partial(text);
-                        // Live mode: type the newly-stable prefix into the target.
+                        let committed = v.get("committed").and_then(|c| c.as_str());
+                        dbg_partial(text, committed);
+                        // Live mode: type the server's committed (frozen) prefix.
                         if let Some(l) = live.as_deref_mut() {
-                            live_commit(l, text);
+                            live_commit(l, text, committed);
                         }
                     }
                 }
@@ -713,12 +723,18 @@ mod tests {
     /// a simulated text buffer and print a report. Returns (live_result, stats).
     /// The on-screen buffer is always == the planner's `confirmed` by construction,
     /// so `confirmed` IS the simulated buffer.
-    fn livetest_analyze(partials: &[(u64, String)], final_text: &str) -> (String, usize, u64) {
+    fn livetest_analyze(partials: &[(u64, String, String)], final_text: &str) -> (String, usize, u64) {
         let mut confirmed = String::new();
         let mut prev = String::new();
         let (mut total_bs, mut max_bs, mut rewrites, mut typed) = (0usize, 0usize, 0usize, 0usize);
         let mut last_progress = partials.first().map(|p| p.0).unwrap_or(0);
         let mut max_gap: u64 = 0;
+        // Server cadence: biggest gap between consecutive partial ARRIVALS. If this
+        // is large, the freeze is the server withholding stable text (tail guard),
+        // not the client logic.
+        let mut max_partial_gap: u64 = 0;
+        let mut prev_t = partials.first().map(|p| p.0).unwrap_or(0);
+        let mut timeline: Vec<String> = Vec::new();
         let mut apply = |ops: &[LiveOp]| {
             for op in ops {
                 match op {
@@ -731,16 +747,31 @@ mod tests {
                 }
             }
         };
-        for (t, cur) in partials {
-            let stable = agreed_stable(&prev, cur);
+        for (t, cur, committed) in partials {
+            max_partial_gap = max_partial_gap.max(t.saturating_sub(prev_t));
+            prev_t = *t;
+            // Mirror live_commit: prefer the server's committed prefix, else agreed-stable.
+            let target = if !committed.is_empty() {
+                committed.clone()
+            } else {
+                agreed_stable(&prev, cur)
+            };
             prev = cur.clone();
-            if stable.is_empty() {
+            if target.is_empty() {
                 continue;
             }
-            let (ops, newc) = plan_target(&confirmed, &stable, false);
+            let (ops, newc) = plan_target(&confirmed, &target, false);
             if ops.is_empty() {
                 max_gap = max_gap.max(t.saturating_sub(last_progress));
             } else {
+                let typed_now: usize = ops
+                    .iter()
+                    .map(|o| match o {
+                        LiveOp::Type(s) => s.chars().count(),
+                        LiveOp::Backspace(_) => 0,
+                    })
+                    .sum();
+                timeline.push(format!("  {t:>6}ms  +{typed_now:>3} → {newc:?}"));
                 last_progress = *t;
                 apply(&ops);
             }
@@ -756,8 +787,13 @@ mod tests {
         println!("server final  : {final_text:?}");
         println!("live result   : {confirmed:?}");
         println!("EXACT MATCH   : {exact}");
-        println!("max progress gap (partials arriving, nothing typed): {max_gap} ms");
+        println!("max SERVER gap (between partial arrivals)          : {max_partial_gap} ms  ← freeze if large = server tail-guard");
+        println!("max CLIENT gap (partials arriving, nothing typed)  : {max_gap} ms  ← freeze if large = client logic");
         println!("backspaces    : total={total_bs} max_single={max_bs} rewrites={rewrites} typed_chars={typed}");
+        println!("── typing timeline (when text actually grew) ──");
+        for line in &timeline {
+            println!("{line}");
+        }
         // Regression guard: a single backspace must never exceed the rewrite cap
         // (that was the "wild delete" — purging the whole line at finish).
         assert!(max_bs <= MAX_REWRITE, "WILD DELETE: single backspace {max_bs} > cap {MAX_REWRITE}");
@@ -827,8 +863,8 @@ mod tests {
         set_read_timeout(&mut ws, Duration::from_millis(5));
 
         let start = Instant::now();
-        let mut partials: Vec<(u64, String)> = Vec::new();
-        let record = |ws: &mut Ws, partials: &mut Vec<(u64, String)>, window: Duration| -> Option<String> {
+        let mut partials: Vec<(u64, String, String)> = Vec::new();
+        let record = |ws: &mut Ws, partials: &mut Vec<(u64, String, String)>, window: Duration| -> Option<String> {
             let until = Instant::now() + window;
             loop {
                 if Instant::now() >= until {
@@ -840,7 +876,11 @@ mod tests {
                         match v["type"].as_str() {
                             Some("partial") => {
                                 if let Some(s) = v["text"].as_str() {
-                                    partials.push((start.elapsed().as_millis() as u64, s.to_string()));
+                                    partials.push((
+                                        start.elapsed().as_millis() as u64,
+                                        s.to_string(),
+                                        v["committed"].as_str().unwrap_or_default().to_string(),
+                                    ));
                                 }
                             }
                             Some("final") => {
@@ -880,7 +920,7 @@ mod tests {
             "final": final_text,
             "t_end_ms": t_end_ms,
             "t_final_ms": t_final_ms,
-            "partials": partials.iter().map(|(t, s)| serde_json::json!({"t_ms": t, "text": s})).collect::<Vec<_>>(),
+            "partials": partials.iter().map(|(t, s, c)| serde_json::json!({"t_ms": t, "text": s, "committed": c})).collect::<Vec<_>>(),
         });
         std::fs::write(&fixture_path, serde_json::to_string_pretty(&fixture).unwrap()).expect("write fixture");
         println!("fixture saved: {fixture_path}");
@@ -900,11 +940,17 @@ mod tests {
         };
         let v: serde_json::Value = serde_json::from_str(&raw).expect("fixture json");
         let final_text = v["final"].as_str().unwrap_or_default().to_string();
-        let partials: Vec<(u64, String)> = v["partials"]
+        let partials: Vec<(u64, String, String)> = v["partials"]
             .as_array()
             .unwrap_or(&vec![])
             .iter()
-            .map(|p| (p["t_ms"].as_u64().unwrap_or(0), p["text"].as_str().unwrap_or_default().to_string()))
+            .map(|p| {
+                (
+                    p["t_ms"].as_u64().unwrap_or(0),
+                    p["text"].as_str().unwrap_or_default().to_string(),
+                    p["committed"].as_str().unwrap_or_default().to_string(),
+                )
+            })
             .collect();
         livetest_analyze(&partials, &final_text);
     }
@@ -1082,7 +1128,7 @@ fn finish_flow(
                         // Late lookahead while the final computes — still useful.
                         if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                             let _ = app.emit("echo://stream-partial", text.to_string());
-                            dbg_partial(text);
+                            dbg_partial(text, v.get("committed").and_then(|c| c.as_str()));
                         }
                     }
                     Some("error") => {
