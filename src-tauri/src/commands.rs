@@ -385,6 +385,11 @@ pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config
     }
     // Live-apply overlay settings (show/hide, size, position, style/color/idle).
     crate::overlay::apply_config(&app);
+    // Keep the orb's voice-reactivity in sync with config (no recording restart).
+    {
+        let c = state.config.lock();
+        crate::recorder::set_reactivity(c.orb_noise_floor, c.orb_gain, c.orb_gamma);
+    }
     Ok(())
 }
 
@@ -669,11 +674,17 @@ pub fn stop_and_transcribe(app: AppHandle) -> Result<TranscriptResult, EngineErr
 /// finishes (or the timeout fires).
 #[tauri::command]
 pub async fn login(app: AppHandle) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let app_for_sync = app.clone();
+    let res = tauri::async_runtime::spawn_blocking(move || {
         crate::auth::login(&app).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("login task: {e}"))?
+    .map_err(|e| format!("login task: {e}"))?;
+    // Pull this account's orb profiles now that we're authenticated.
+    if res.is_ok() {
+        crate::presets_sync::kick(&app_for_sync);
+    }
+    res
 }
 
 /// Toggle launch-at-login: flip the OS autostart entry and persist the preference.

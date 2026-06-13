@@ -151,6 +151,14 @@ pub struct Config {
     /// calmer/slower. User-settable (TJ: the default frequency felt too fast).
     /// Clamped to a sane range when applied. Default 0.6 = a calmer baseline.
     pub orb_speed: f32,
+    /// Voice-reactivity of the orb/bubble meters (perceptual VU mapping in
+    /// `recorder.rs`): `noise_floor` gates true silence, `gain` is the linear
+    /// boost, `gamma` (<1) expands the quiet→mid band a voice lives in. Defaults
+    /// mirror the previous hardcoded constants. Captured in orb profiles so the
+    /// future configurator can tune "how strongly it reacts to your voice".
+    pub orb_noise_floor: f32,
+    pub orb_gain: f32,
+    pub orb_gamma: f32,
     /// Per-state orb colors (hex). `idle` = resting, `working` = recording AND
     /// transcribing (the "busy" states), `done` = finished. These supersede the
     /// legacy single `orb_color_theme` dropdown — that field is kept only so old
@@ -286,6 +294,9 @@ impl Default for Config {
             orb_idle_mode: "normal".to_string(),
             orb_idle_migrated: false,
             orb_speed: 0.6,
+            orb_noise_floor: 0.01,
+            orb_gain: 7.5,
+            orb_gamma: 0.55,
             orb_color_idle: "#22d3ee".to_string(),
             orb_color_working: "#ff5c5c".to_string(),
             orb_color_done: "#50dc82".to_string(),

@@ -49,7 +49,18 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             ts   INTEGER NOT NULL,
             data TEXT    NOT NULL
          );
-         CREATE INDEX IF NOT EXISTS idx_meetings_ts ON meetings(ts DESC);",
+         CREATE INDEX IF NOT EXISTS idx_meetings_ts ON meetings(ts DESC);
+         CREATE TABLE IF NOT EXISTS preset_profiles (
+            id         TEXT    NOT NULL,
+            account    TEXT    NOT NULL,
+            name       TEXT    NOT NULL DEFAULT '',
+            payload    TEXT    NOT NULL DEFAULT '{}',
+            updated_at INTEGER NOT NULL,
+            deleted    INTEGER NOT NULL DEFAULT 0,
+            dirty      INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (account, id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_profiles_account ON preset_profiles(account, updated_at);",
     )?;
     *DB.lock() = Some(conn);
     log::info!("store: opened {}", path.display());
@@ -262,6 +273,161 @@ pub fn update_meeting_by_ts(ts: i64, key: &str, value: &str) {
     );
 }
 
+// ---- Orb profiles (per-account, local-first, cloud-synced) ----
+//
+// Each profile is an opaque JSON `payload` (the full orb look) the app owns.
+// Rows are partitioned by `account` so multiple accounts on one machine never
+// mix. `dirty` = has local changes not yet pushed to the server; tombstones
+// (`deleted=1`) ride along so a delete propagates. Mirrors the server schema.
+
+/// All non-deleted profiles for `account`, newest-first.
+pub fn list_profiles(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, payload, updated_at FROM preset_profiles
+               WHERE account = ?1 AND deleted = 0 ORDER BY updated_at DESC, name ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        let payload: String = r.get(2)?;
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "payload": serde_json::from_str::<Value>(&payload).unwrap_or_else(|_| json!({})),
+            "updated_at": r.get::<_, i64>(3)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(e) => {
+            log::warn!("store: profile query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Insert or replace a profile, marking it dirty (needs push). `payload` is a
+/// JSON string. Used by the local CRUD commands.
+pub fn upsert_profile(account: &str, id: &str, name: &str, payload: &str, updated_at: i64, dirty: bool) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO preset_profiles (id, account, name, payload, updated_at, deleted, dirty)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
+         ON CONFLICT(account, id) DO UPDATE SET
+            name = excluded.name, payload = excluded.payload,
+            updated_at = excluded.updated_at, deleted = 0, dirty = excluded.dirty",
+        params![id, account, name, payload, updated_at, dirty as i64],
+    );
+}
+
+/// Tombstone a profile (kept as a dirty deleted row so the delete syncs).
+pub fn soft_delete_profile(account: &str, id: &str, updated_at: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "UPDATE preset_profiles SET deleted = 1, dirty = 1, updated_at = ?3
+         WHERE account = ?1 AND id = ?2",
+        params![account, id, updated_at],
+    );
+}
+
+/// Rows with un-pushed local changes (including tombstones) for the sync push.
+pub fn take_dirty_profiles(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, payload, updated_at, deleted FROM preset_profiles
+               WHERE account = ?1 AND dirty = 1";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        let payload: String = r.get(2)?;
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "payload": serde_json::from_str::<Value>(&payload).unwrap_or_else(|_| json!({})),
+            "updated_at": r.get::<_, i64>(3)?,
+            "deleted": r.get::<_, i64>(4)? != 0,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Clear the dirty flag for the pushed `(id, updated_at)` pairs — but only if
+/// the row hasn't been edited again since (its `updated_at` still matches), so
+/// an edit racing the push isn't silently dropped (it stays dirty, re-pushed).
+pub fn mark_profiles_synced(account: &str, items: &[(String, i64)]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    for (id, updated_at) in items {
+        let _ = conn.execute(
+            "UPDATE preset_profiles SET dirty = 0
+             WHERE account = ?1 AND id = ?2 AND updated_at = ?3",
+            params![account, id, updated_at],
+        );
+    }
+}
+
+/// Reconcile the authoritative server set into the local store: server rows
+/// overwrite local NON-dirty rows (server is truth for already-synced state),
+/// local dirty rows are left for the next push, and local non-dirty rows the
+/// server no longer has (deleted elsewhere) are removed.
+pub fn apply_server_profiles(account: &str, server_rows: &[Value]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let mut server_ids: Vec<String> = Vec::with_capacity(server_rows.len());
+    for row in server_rows {
+        let Some(id) = row.get("id").and_then(Value::as_str) else { continue };
+        server_ids.push(id.to_string());
+        // Skip if a dirty local version exists (pending push wins for now).
+        let dirty: i64 = conn
+            .query_row(
+                "SELECT dirty FROM preset_profiles WHERE account = ?1 AND id = ?2",
+                params![account, id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if dirty == 1 {
+            continue;
+        }
+        let name = row.get("name").and_then(Value::as_str).unwrap_or("");
+        let payload = row
+            .get("payload")
+            .map(|p| if p.is_string() { p.as_str().unwrap_or("{}").to_string() } else { p.to_string() })
+            .unwrap_or_else(|| "{}".to_string());
+        let updated_at = row.get("updated_at").and_then(Value::as_i64).unwrap_or(0);
+        let _ = conn.execute(
+            "INSERT INTO preset_profiles (id, account, name, payload, updated_at, deleted, dirty)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, 0)
+             ON CONFLICT(account, id) DO UPDATE SET
+                name = excluded.name, payload = excluded.payload,
+                updated_at = excluded.updated_at, deleted = 0, dirty = 0",
+            params![id, account, name, payload, updated_at],
+        );
+    }
+    // Remove local non-dirty profiles the server didn't return (deleted elsewhere).
+    let keep: std::collections::HashSet<&str> = server_ids.iter().map(String::as_str).collect();
+    let existing: Vec<String> = {
+        let sql = "SELECT id FROM preset_profiles WHERE account = ?1 AND dirty = 0 AND deleted = 0";
+        match conn.prepare_cached(sql) {
+            Ok(mut stmt) => stmt
+                .query_map(params![account], |r| r.get::<_, String>(0))
+                .map(|it| it.filter_map(Result::ok).collect())
+                .unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    };
+    for id in existing {
+        if !keep.contains(id.as_str()) {
+            let _ = conn.execute(
+                "DELETE FROM preset_profiles WHERE account = ?1 AND id = ?2",
+                params![account, id],
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +482,40 @@ mod tests {
         let migrated = list_history("", 10, 0);
         assert_eq!(migrated[0]["text"], "neu");
         assert_eq!(migrated[1]["text"], "alt");
+
+        // Orb profiles: per-account isolation, dirty tracking, server reconcile.
+        upsert_profile("em:a", "p1", "Aurora", r#"{"style":"sonar2"}"#, 100, true);
+        upsert_profile("em:a", "p2", "Mono", r#"{"style":"bars"}"#, 100, true);
+        upsert_profile("em:b", "p1", "B-only", r#"{"style":"wave"}"#, 100, true);
+        assert_eq!(list_profiles("em:a").len(), 2);
+        assert_eq!(list_profiles("em:b").len(), 1); // isolation
+        assert_eq!(list_profiles("em:b")[0]["payload"]["style"], "wave");
+        assert_eq!(take_dirty_profiles("em:a").len(), 2);
+        mark_profiles_synced("em:a", &[("p1".into(), 100), ("p2".into(), 100)]);
+        assert_eq!(take_dirty_profiles("em:a").len(), 0);
+        // A stale (mismatched updated_at) sync-ack must NOT clear a fresh edit.
+        upsert_profile("em:a", "p1", "Aurora2", r#"{"style":"sonar2"}"#, 120, true);
+        mark_profiles_synced("em:a", &[("p1".into(), 100)]); // stale ts → no-op
+        assert_eq!(take_dirty_profiles("em:a").len(), 1);
+        mark_profiles_synced("em:a", &[("p1".into(), 120)]);
+        assert_eq!(take_dirty_profiles("em:a").len(), 0);
+        // Tombstone hides from list but rides along as dirty for the push.
+        soft_delete_profile("em:a", "p2", 200);
+        assert_eq!(list_profiles("em:a").len(), 1);
+        assert_eq!(take_dirty_profiles("em:a").len(), 1);
+        // Server reconcile: a dirty local row survives; a synced row absent from
+        // the server set is removed; a server-only row is pulled in.
+        mark_profiles_synced("em:a", &[("p2".into(), 200)]);
+        upsert_profile("em:a", "p3", "LocalDirty", "{}", 300, true);
+        apply_server_profiles(
+            "em:a",
+            &[json!({"id":"p1","name":"AuroraSynced","payload":{"style":"sonar2"},"updated_at":150})],
+        );
+        let a = list_profiles("em:a");
+        let ids: std::collections::HashSet<&str> =
+            a.iter().filter_map(|p| p["id"].as_str()).collect();
+        assert!(ids.contains("p1") && ids.contains("p3")); // server p1 + local-dirty p3
+        assert!(!ids.contains("p2")); // synced+deleted, not on server → gone
 
         let _ = std::fs::remove_file(&path);
     }

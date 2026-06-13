@@ -15,8 +15,16 @@ import {
   setAutostart,
   patchForUiMode,
   uiModeOf,
+  listOrbProfiles,
+  saveOrbProfile,
+  applyOrbProfile,
+  renameOrbProfile,
+  deleteOrbProfile,
+  duplicateOrbProfile,
   type Config,
+  type OrbProfile,
 } from "../lib/ipc";
+import { listen } from "@tauri-apps/api/event";
 import { LANGUAGES } from "../lib/languages";
 import { SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
@@ -101,6 +109,93 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
   { key: "sunset", label: "Sonnenuntergang", idle: "#f59e0b", working: "#fb7185", done: "#c084fc" },
   { key: "smaragd", label: "Smaragd", idle: "#2dd4bf", working: "#10b981", done: "#a3e635" },
 ];
+
+/** Phase-1 manager for saved Orb profiles (the FULL look — colours, style,
+ *  speed, reactivity — per account, cloud-synced). The richer live "orb
+ *  configurator" (big preview, effect/voice pickers) builds on these same
+ *  commands later; this is the durable foundation. */
+function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
+  const { t } = useTranslation();
+  const [profiles, setProfiles] = useState<OrbProfile[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const reload = () => listOrbProfiles().then(setProfiles).catch(() => {});
+  useEffect(() => {
+    reload();
+    const un = listen("echo://profiles-changed", () => reload());
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  const guard = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await fn();
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveCurrent = () => {
+    const name = window.prompt(t("settings.orbProfileNamePrompt"), t("settings.orbProfileDefaultName"));
+    if (name && name.trim()) guard(() => saveOrbProfile(name.trim()));
+  };
+  const rename = (p: OrbProfile) => {
+    const name = window.prompt(t("settings.orbProfileRenamePrompt"), p.name);
+    if (name && name.trim() && name.trim() !== p.name) guard(() => renameOrbProfile(p.id, name.trim()));
+  };
+  const duplicate = (p: OrbProfile) => {
+    const base = `${p.name} ${t("settings.orbProfileCopySuffix")}`;
+    const name = window.prompt(t("settings.orbProfileDuplicatePrompt"), base);
+    if (name && name.trim()) guard(() => duplicateOrbProfile(p.id, name.trim()));
+  };
+  const remove = (p: OrbProfile) => {
+    if (window.confirm(t("settings.orbProfileDeleteConfirm", { name: p.name || "?" })))
+      guard(() => deleteOrbProfile(p.id));
+  };
+
+  return (
+    <div className="orb-profiles">
+      <div className="op-head">
+        <div>
+          <div className="op-title">{t("settings.orbProfiles")}</div>
+          <div className="op-sub">
+            {cloudSynced ? t("settings.orbProfilesSynced") : t("settings.orbProfilesLocalOnly")}
+          </div>
+        </div>
+        <button className="op-save" disabled={busy} onClick={saveCurrent}>
+          ＋ {t("settings.orbProfileSaveCurrent")}
+        </button>
+      </div>
+      {profiles.length === 0 ? (
+        <div className="op-empty">{t("settings.orbProfilesEmpty")}</div>
+      ) : (
+        <div className="op-list">
+          {profiles.map((p) => (
+            <div className="op-item" key={p.id}>
+              <span className="op-name">{p.name || t("settings.orbProfileUnnamed")}</span>
+              <div className="op-actions">
+                <button disabled={busy} onClick={() => guard(() => applyOrbProfile(p.id))}>
+                  {t("settings.orbProfileApply")}
+                </button>
+                <button disabled={busy} title={t("settings.orbProfileRename")} onClick={() => rename(p)}>
+                  ✎
+                </button>
+                <button disabled={busy} title={t("settings.orbProfileDuplicate")} onClick={() => duplicate(p)}>
+                  ⧉
+                </button>
+                <button disabled={busy} title={t("settings.orbProfileDelete")} onClick={() => remove(p)}>
+                  🗑
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Settings() {
   const { t } = useTranslation();
@@ -551,6 +646,7 @@ export function Settings() {
                 ]}
               />
             </Row>
+            <OrbProfiles cloudSynced={!!c.account_email} />
             <Row name={t("settings.orbColorIdle")} hint={t("settings.orbColorIdleHint")}>
               <ColorSwatch value={c.orb_color_idle} onChange={(v) => set("orb_color_idle", v)} />
             </Row>

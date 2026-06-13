@@ -294,6 +294,23 @@ fn build_stream(
 
 /// Downmix to mono, append to the buffer (bounded by `max`), and publish a
 /// boosted RMS level (0..1). Level keeps updating even once the buffer is capped.
+// Voice-reactivity of the VU mapping, live-tunable from config without coupling
+// the recorder to Config (the hot audio path stays self-contained). Stored as
+// f32 bits; `set_reactivity` is called at startup and on every config change.
+// Defaults mirror the previous hardcoded constants (noise_floor 0.01 / gain 7.5
+// / gamma 0.55) so behaviour is identical until the user tweaks a profile.
+static REACT_NOISE_FLOOR: AtomicU32 = AtomicU32::new(0x3c23d70a); // 0.01
+static REACT_GAIN: AtomicU32 = AtomicU32::new(0x40f00000); // 7.5
+static REACT_GAMMA: AtomicU32 = AtomicU32::new(0x3f0ccccd); // 0.55
+
+/// Update the orb's voice-reactivity params (from config). Sane clamps so a bad
+/// profile can't break the meters: floor 0..0.2, gain 0.5..40, gamma 0.1..2.
+pub fn set_reactivity(noise_floor: f32, gain: f32, gamma: f32) {
+    REACT_NOISE_FLOOR.store(noise_floor.clamp(0.0, 0.2).to_bits(), Ordering::Relaxed);
+    REACT_GAIN.store(gain.clamp(0.5, 40.0).to_bits(), Ordering::Relaxed);
+    REACT_GAMMA.store(gamma.clamp(0.1, 2.0).to_bits(), Ordering::Relaxed);
+}
+
 fn ingest(
     data: &[f32],
     channels: usize,
@@ -340,11 +357,11 @@ fn ingest(
         // stages: (1) a tiny noise gate so true silence stays at rest, (2) a strong
         // linear gain, (3) a gamma < 1 that expands the quiet→mid range — the band
         // an actual voice lives in — while still saturating to 1.0 when you're loud.
-        const NOISE_FLOOR: f32 = 0.01;
-        const GAIN: f32 = 7.5;
-        const GAMMA: f32 = 0.55;
-        let gated = (rms - NOISE_FLOOR).max(0.0);
-        let boosted = (gated * GAIN).min(1.0).powf(GAMMA);
+        let noise_floor = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
+        let gain = f32::from_bits(REACT_GAIN.load(Ordering::Relaxed));
+        let gamma = f32::from_bits(REACT_GAMMA.load(Ordering::Relaxed));
+        let gated = (rms - noise_floor).max(0.0);
+        let boosted = (gated * gain).min(1.0).powf(gamma);
         level.store(boosted.to_bits(), Ordering::Relaxed);
     }
 }

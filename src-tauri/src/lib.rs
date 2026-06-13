@@ -20,10 +20,12 @@ mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting tr
 mod meeting_detect;
 mod models;
 mod prompt_console;
+mod presets; // per-account orb profiles (local-first)
+mod presets_sync; // /v1/presets cloud sync
 mod synapse;
 mod overlay;
 mod recorder;
-mod store; // SQLite history + meetings (echo.db)
+mod store; // SQLite history + meetings + orb profiles (echo.db)
 mod transcribe;
 
 use commands::AppState;
@@ -159,6 +161,12 @@ pub fn run() {
             intro::intro_stream_start,
             intro::intro_stream_stop,
             hotkey::hotkey_set_suspended,
+            presets::list_orb_profiles,
+            presets::save_orb_profile,
+            presets::apply_orb_profile,
+            presets::rename_orb_profile,
+            presets::delete_orb_profile,
+            presets::duplicate_orb_profile,
         ])
         .setup(|app| {
             // Version/platform banner — first line in every log, mirrors the old
@@ -193,6 +201,15 @@ pub fn run() {
                     }
                 }
             }
+
+            // Seed the orb's voice-reactivity from config (defaults until a profile
+            // tweaks it), and pull this account's orb profiles in the background.
+            {
+                let st = app.state::<AppState>();
+                let c = st.config.lock();
+                crate::recorder::set_reactivity(c.orb_noise_floor, c.orb_gain, c.orb_gamma);
+            }
+            crate::presets_sync::kick(app.handle());
 
             // macOS: the paste-back path must reach the main thread (enigo crashes
             // off-thread). Stash the handle for inject::macos_inject, then trigger the

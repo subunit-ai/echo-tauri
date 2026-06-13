@@ -34,6 +34,10 @@ export interface Config {
   /** Idle behaviour: "normal" | "dim" | "hide". */
   orb_idle_mode: string;
   orb_speed: number;
+  /** Voice-reactivity of the orb/bubble meters (perceptual VU mapping). */
+  orb_noise_floor: number;
+  orb_gain: number;
+  orb_gamma: number;
   /** Per-state orb colors (hex). working = recording + transcribing. */
   orb_color_idle: string;
   orb_color_working: string;
@@ -126,6 +130,38 @@ export const orbCycle = (which: "mode" | "language" | "cleanup") =>
 /** Set one satellite directly (expanded island panels pick instead of cycling). */
 export const orbSet = (which: "mode" | "language" | "cleanup", value: string) =>
   invoke<OrbQuick>("orb_set", { which, value });
+
+// ---- Orb profiles (per-account, local-first, cloud-synced) ----------------
+// A profile is the FULL orb look. `payload` is an opaque blob (forward-compatible
+// for the future configurator); the known shape today:
+export interface OrbProfilePayload {
+  colors?: { idle?: string; working?: string; done?: string; error?: string };
+  style?: string;
+  speed?: number;
+  idle_mode?: string;
+  idle_pulse?: boolean;
+  size?: number;
+  reactivity?: { noise_floor?: number; gain?: number; gamma?: number };
+}
+export interface OrbProfile {
+  id: string;
+  name: string;
+  payload: OrbProfilePayload;
+  updated_at: number;
+}
+/** All of the current account's saved orb profiles (newest-first). */
+export const listOrbProfiles = () => invoke<OrbProfile[]>("list_orb_profiles");
+/** Create (omit id) or update a profile. payload omitted → snapshot current look. Returns id. */
+export const saveOrbProfile = (name: string, payload?: OrbProfilePayload, id?: string) =>
+  invoke<string>("save_orb_profile", { id: id ?? null, name, payload: payload ?? null });
+/** Apply a saved profile's look to the live orb. */
+export const applyOrbProfile = (id: string) => invoke<void>("apply_orb_profile", { id });
+export const renameOrbProfile = (id: string, name: string) =>
+  invoke<void>("rename_orb_profile", { id, name });
+export const deleteOrbProfile = (id: string) => invoke<void>("delete_orb_profile", { id });
+export const duplicateOrbProfile = (id: string, name: string) =>
+  invoke<string>("duplicate_orb_profile", { id, name });
+
 export const appVersion = () => invoke<string>("app_version");
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 /** Copy text to the clipboard (History action). */
