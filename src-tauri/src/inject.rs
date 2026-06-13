@@ -692,12 +692,24 @@ fn macos_type_live(text: String) {
         log::error!("live type: app handle not set — cannot reach main thread");
         return;
     };
+    let n = text.chars().count();
+    let dispatched = Instant::now();
+    // Diagnostic (ECHO_LIVE_DEBUG): split the local typing latency into the
+    // main-thread QUEUE wait (time the keystroke sat behind caption/orb rendering)
+    // vs the actual TYPE time. A large queue → typing trails the caption because it
+    // competes with the UI on the main thread (→ candidate to move off-thread).
+    let measure = std::env::var_os("ECHO_LIVE_DEBUG").is_some();
     if let Err(e) = app.run_on_main_thread(move || {
+        let queue_ms = dispatched.elapsed().as_millis();
         if !mac::is_trusted(false) {
             return; // no AX permission → silent (clipboard/manual paste still works)
         }
+        let t = Instant::now();
         if let Err(e) = mac::type_unicode(&text) {
             log::debug!("live type: {e}");
+        }
+        if measure {
+            log::info!("live inject: queue={queue_ms}ms type={}ms chars={n}", t.elapsed().as_millis());
         }
     }) {
         log::debug!("live type: run_on_main_thread failed: {e}");
