@@ -108,79 +108,126 @@ fn agreed_stable(prev: &str, cur: &str) -> String {
     }
 }
 
-/// Type the newly-stable suffix into the target (append at the caret). Only ever
-/// grows `confirmed`; if a partial diverges (rare model revision) we wait — the
-/// finish-time reconcile fixes it against the authoritative final.
+/// A live partial arrived — steer the typed text toward its agreed-stable prefix.
+/// Crucially this must NOT freeze when the server revises already-typed text
+/// (e.g. inserts a comma / recases a word once the tail settles): the old
+/// "append only if `stable` still starts with `confirmed`" guard stalled there
+/// and dumped the remainder late at finish ("breaks after the comma"). We now
+/// reconcile toward the stable text on every partial instead (bounded — see
+/// `apply_target`), so typing keeps flowing.
 fn live_commit(l: &mut Live, cur: &str) {
     let stable = agreed_stable(&l.prev_partial, cur);
     l.prev_partial = cur.to_string();
-    if stable.len() > l.confirmed.len() && stable.starts_with(&l.confirmed) {
-        let delta = stable[l.confirmed.len()..].to_string();
-        let n = delta.chars().count();
-        crate::inject::inject_text_delta(&delta);
-        LIVE_INJECTED.fetch_add(n, Ordering::Relaxed);
-        l.confirmed = stable;
+    if !stable.is_empty() {
+        apply_target(l, &stable, false);
     }
 }
 
-/// Largest trailing divergence we will REWRITE (backspace + retype) at finish.
-/// Backspacing is destructive — it eats whatever sits at the caret, including the
-/// user's own text — so we cap it hard. The common case (final simply extends the
-/// live text) deletes nothing; a small last-word refinement is rewritten; anything
-/// larger (e.g. the final recased/repunctuated text near the START) is left alone
-/// and we only append the missing tail. This is what stops the "wild delete".
+/// Largest trailing divergence we will REWRITE (backspace + retype). Backspacing
+/// is destructive — it eats whatever sits at the caret — so we cap it hard. A
+/// pure extension deletes nothing; a small last-word/punctuation refinement is
+/// rewritten; anything larger is handled without a purge (append-only at finish,
+/// or simply waited out mid-stream). This is what stops the "wild delete".
 const MAX_REWRITE: usize = 24;
 
-/// Reconcile the live-typed text with the server's authoritative final WITHOUT
-/// ever mass-deleting. The normal case — `confirmed` is a prefix of the final —
-/// just appends the remaining tail (zero backspaces). A short trailing mismatch
-/// (last word or two) is rewritten. A large early mismatch (recasing/punctuation
-/// the final applied to text we already typed) is NOT rewritten: we keep the live
-/// text and append only the words the final added beyond what we typed, so the
-/// worst case is a minor casing/punct difference — never a destructive purge.
-fn live_reconcile(l: &Live, final_text: &str) {
-    if l.confirmed.is_empty() {
-        if !final_text.is_empty() {
-            crate::inject::inject_text_delta(final_text);
-            LIVE_INJECTED.fetch_add(final_text.chars().count(), Ordering::Relaxed);
-        }
-        return;
+/// One injection step the live path will perform at the caret.
+#[derive(Debug, PartialEq)]
+enum LiveOp {
+    /// Delete this many characters (flag-zeroed Backspaces — never word-deletes).
+    Backspace(usize),
+    /// Type this string at the caret.
+    Type(String),
+}
+
+/// PURE decision: how to steer already-typed `confirmed` toward `target` (the
+/// authoritative text so far), returning the ops to perform and the resulting
+/// on-screen text. No I/O — unit-tested below. NEVER mass-deletes.
+///
+/// - Pure extension (`target` starts with what we typed): append the new tail, no delete.
+/// - `target` shorter (a prefix of `confirmed`): at finish, trim the extra (bounded);
+///   mid-stream WAIT — a transient shorter partial must not shrink the text.
+/// - Genuine middle divergence: if the diverging tail is short (≤ MAX_REWRITE),
+///   backspace+retype it (fixes a recase/comma — this is what unfreezes "stuck
+///   after the comma"); if large, append-only at finish, else WAIT mid-stream.
+fn plan_target(confirmed: &str, target: &str, is_final: bool) -> (Vec<LiveOp>, String) {
+    if target == confirmed {
+        return (vec![], confirmed.to_string());
     }
-    // Chars of the live text that diverge from the final (after the common prefix).
-    let common = l
-        .confirmed
+    if confirmed.is_empty() {
+        return (vec![LiveOp::Type(target.to_string())], target.to_string());
+    }
+    let confirmed_n = confirmed.chars().count();
+
+    // Pure extension — the common case. Append only the new suffix.
+    if target.starts_with(confirmed) {
+        let tail: String = target.chars().skip(confirmed_n).collect();
+        return (vec![LiveOp::Type(tail)], target.to_string());
+    }
+
+    // `target` is a prefix of what we typed (it got shorter).
+    if confirmed.starts_with(target) {
+        let to_delete = confirmed_n - target.chars().count();
+        if is_final && to_delete <= MAX_REWRITE {
+            return (vec![LiveOp::Backspace(to_delete)], target.to_string());
+        }
+        return (vec![], confirmed.to_string()); // mid-stream: wait
+    }
+
+    // Genuine middle divergence (recased word, inserted punctuation, …).
+    let common = confirmed
         .chars()
-        .zip(final_text.chars())
+        .zip(target.chars())
         .take_while(|(a, b)| a == b)
         .count();
-    let to_delete = l.confirmed.chars().count().saturating_sub(common);
-
+    let to_delete = confirmed_n - common;
     if to_delete <= MAX_REWRITE {
-        // Safe: rewrite only the short trailing divergence (often zero → pure append).
+        let tail: String = target.chars().skip(common).collect();
+        let mut ops = Vec::new();
         if to_delete > 0 {
-            crate::inject::inject_backspaces(to_delete);
+            ops.push(LiveOp::Backspace(to_delete));
         }
-        let tail: String = final_text.chars().skip(common).collect();
         if !tail.is_empty() {
-            crate::inject::inject_text_delta(&tail);
-            LIVE_INJECTED.fetch_add(tail.chars().count(), Ordering::Relaxed);
+            ops.push(LiveOp::Type(tail));
         }
-        return;
+        return (ops, target.to_string());
     }
+    if is_final {
+        // Large divergence at finish → append-only, word-aligned (no purge, no dup).
+        let typed_words = confirmed.split_whitespace().count();
+        let extra = target
+            .split_whitespace()
+            .skip(typed_words)
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !extra.is_empty() {
+            let out = format!(" {extra}"); // `confirmed` never ends in whitespace
+            let new_confirmed = format!("{confirmed}{out}");
+            return (vec![LiveOp::Type(out)], new_confirmed);
+        }
+    }
+    // mid-stream large divergence: wait — a later partial usually re-aligns.
+    (vec![], confirmed.to_string())
+}
 
-    // Large divergence → APPEND-ONLY. Commits are word-aligned, so append the
-    // final's words beyond the ones we already typed (no deletion, no duplication).
-    let typed_words = l.confirmed.split_whitespace().count();
-    let tail = final_text
-        .split_whitespace()
-        .skip(typed_words)
-        .collect::<Vec<_>>()
-        .join(" ");
-    if !tail.is_empty() {
-        let out = format!(" {tail}"); // `confirmed` never ends in whitespace
-        crate::inject::inject_text_delta(&out);
-        LIVE_INJECTED.fetch_add(out.chars().count(), Ordering::Relaxed);
+/// Apply `plan_target`'s decision through the real injector and update state.
+fn apply_target(l: &mut Live, target: &str, is_final: bool) {
+    let (ops, new_confirmed) = plan_target(&l.confirmed, target, is_final);
+    for op in ops {
+        match op {
+            LiveOp::Backspace(n) => crate::inject::inject_backspaces(n),
+            LiveOp::Type(s) => {
+                let n = s.chars().count();
+                crate::inject::inject_text_delta(&s);
+                LIVE_INJECTED.fetch_add(n, Ordering::Relaxed);
+            }
+        }
     }
+    l.confirmed = new_confirmed;
+}
+
+/// Finish-time reconcile against the server's authoritative final.
+fn live_reconcile(l: &mut Live, final_text: &str) {
+    apply_target(l, final_text, true);
 }
 
 const FEED_TICK: Duration = Duration::from_millis(150);
@@ -530,6 +577,77 @@ fn drain_partials(
 mod tests {
     use super::*;
     use tungstenite::Message;
+
+    // ── live-typing reconcile planner (plan_target) ──────────────────────────
+
+    #[test]
+    fn plan_first_text_from_empty() {
+        let (ops, c) = plan_target("", "Hallo", false);
+        assert_eq!(ops, vec![LiveOp::Type("Hallo".into())]);
+        assert_eq!(c, "Hallo");
+    }
+
+    #[test]
+    fn plan_pure_extension_appends_only() {
+        let (ops, c) = plan_target("So ist", "So ist die", false);
+        assert_eq!(ops, vec![LiveOp::Type(" die".into())]);
+        assert_eq!(c, "So ist die");
+    }
+
+    #[test]
+    fn plan_noop_when_equal() {
+        let (ops, c) = plan_target("So ist die", "So ist die", false);
+        assert!(ops.is_empty());
+        assert_eq!(c, "So ist die");
+    }
+
+    /// THE bug: the final inserted a comma into already-typed text. Old code
+    /// froze (no starts_with); now we backspace the short tail and retype it.
+    #[test]
+    fn plan_comma_revision_rewrites_short_tail_live() {
+        let (ops, c) = plan_target("So ist die Bude", "So ist die, Bude", false);
+        // common prefix "So ist die" = 10 chars → delete " Bude" (5), type ", Bude".
+        assert_eq!(
+            ops,
+            vec![LiveOp::Backspace(5), LiveOp::Type(", Bude".into())]
+        );
+        assert_eq!(c, "So ist die, Bude");
+    }
+
+    #[test]
+    fn plan_shorter_partial_waits_midstream() {
+        // A transient shorter partial must NOT shrink the typed text mid-stream.
+        let (ops, c) = plan_target("So ist die Bude", "So ist die", false);
+        assert!(ops.is_empty());
+        assert_eq!(c, "So ist die Bude");
+    }
+
+    #[test]
+    fn plan_shorter_final_trims() {
+        let (ops, c) = plan_target("So ist die Bude", "So ist die", true);
+        assert_eq!(ops, vec![LiveOp::Backspace(5)]);
+        assert_eq!(c, "So ist die");
+    }
+
+    #[test]
+    fn plan_large_early_divergence_waits_midstream() {
+        // Long text, diverges at char 0 (recase) → too big to rewrite mid-stream.
+        let confirmed = "hallo wie geht es dir und so weiter heute";
+        let target = "Hallo wie geht es dir und so weiter heute";
+        let (ops, c) = plan_target(confirmed, target, false);
+        assert!(ops.is_empty(), "must wait, not carpet-bomb: {ops:?}");
+        assert_eq!(c, confirmed);
+    }
+
+    #[test]
+    fn plan_large_early_divergence_appends_at_finish() {
+        // Same big early divergence, but at finish → append only the new words.
+        let confirmed = "hallo wie geht es dir und so weiter heute"; // 9 words
+        let target = "Hallo wie geht es dir und so weiter heute noch mehr";
+        let (ops, c) = plan_target(confirmed, target, true);
+        assert_eq!(ops, vec![LiveOp::Type(" noch mehr".into())]);
+        assert_eq!(c, format!("{confirmed} noch mehr"));
+    }
 
     /// Protocol smoke against a `/v1/dictate` server. By default it targets a
     /// LOCAL instance of the real dictate_ws.py with a stubbed model
