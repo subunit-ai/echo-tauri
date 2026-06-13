@@ -317,9 +317,31 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
         }
     };
 
-    // Hello: same credentials + knobs as /v1/transcribe.
-    let style = if cfg.cleanup_enabled && cfg.cleanup_style != "raw" {
-        cfg.cleanup_style.clone()
+    // Hello: same credentials + knobs as /v1/transcribe. Resolve the cleanup
+    // style EXACTLY like the batch path (commands::do_transcribe) so streaming
+    // does not silently bypass Auto-Mode: with auto-mode on, pick the style from
+    // the window captured at record-start (do_start ran before this connect), so
+    // the server applies the right per-app style inline and per-app switching
+    // keeps working with streaming on (the default). Long-form re-selection still
+    // only happens on the batch path — long recordings aren't the streaming case.
+    let style = if cfg.cleanup_enabled {
+        let resolved = if cfg.cleanup_auto_mode {
+            let (app_name, title) = {
+                let t = state.target.lock();
+                (
+                    t.as_ref().map(|t| t.app.clone()).unwrap_or_default(),
+                    t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+                )
+            };
+            crate::auto_mode::pick_style(&app_name, &title, &cfg.auto_mode_overrides, &cfg.cleanup_style).0
+        } else {
+            cfg.cleanup_style.clone()
+        };
+        if resolved != "raw" {
+            resolved
+        } else {
+            String::new()
+        }
     } else {
         String::new()
     };

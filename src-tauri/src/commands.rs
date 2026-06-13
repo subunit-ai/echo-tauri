@@ -230,10 +230,27 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         duration_s = fin.duration_s;
         is_long = cfg.long_form_threshold_seconds > 0
             && duration_s >= cfg.long_form_threshold_seconds as f64;
-        // Streaming sent the BASE cleanup style at connect-time (no auto-mode /
-        // long-form re-selection mid-stream) — label history with what ran.
-        style = if cfg.cleanup_enabled && cfg.cleanup_style != "raw" {
-            cfg.cleanup_style.clone()
+        // Streaming resolved the cleanup style at connect-time the SAME way the
+        // batch path does (incl. Auto-Mode from the captured window) — mirror that
+        // here so history is labelled with what actually ran. (Long-form
+        // re-selection still only applies on the batch path.)
+        style = if cfg.cleanup_enabled {
+            let resolved = if cfg.cleanup_auto_mode {
+                crate::auto_mode::pick_style(
+                    &app_name,
+                    &title,
+                    &cfg.auto_mode_overrides,
+                    &cfg.cleanup_style,
+                )
+                .0
+            } else {
+                cfg.cleanup_style.clone()
+            };
+            if resolved != "raw" {
+                resolved
+            } else {
+                "raw".to_string()
+            }
         } else {
             "raw".to_string()
         };
