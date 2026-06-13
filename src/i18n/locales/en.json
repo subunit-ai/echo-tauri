@@ -272,6 +272,7 @@
     "streamingFinal": "Fast",
     "streamingLive": "Live typing",
     "streamingAria": "Streaming mode",
+    "streamingLiveTapNote": "Tip: live typing is most reliable with toggle activation (tap to start/stop). In hold mode the hotkey stays pressed, which can suppress live typing in some apps (especially terminals/editors on Windows).",
     "dachFormat": "DACH formatting",
     "dachFormatHint": "Abbreviations, currency, „German“ quotation marks",
     "aiCleanup": "AI cleanup",

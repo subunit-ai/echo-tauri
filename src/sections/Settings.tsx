@@ -688,6 +688,11 @@ export function Settings() {
                 onChange={(m) => set("streaming_mode", m)}
                 disabled={uiModeOf(c) === "local"}
               />
+              {c.streaming_mode === "live" && c.recording_mode === "hold" && (
+                <div className="hint" style={{ color: "var(--warn, #f59e0b)" }}>
+                  {t("settings.streamingLiveTapNote")}
+                </div>
+              )}
             </div>
             <Row name={t("settings.instantLiveTyping")} hint={t("settings.instantLiveTypingHint")}>
               <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />

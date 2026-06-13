@@ -121,6 +121,43 @@ mod mac {
         up.post(CGEventTapLocation::HID);
         Ok(())
     }
+
+    /// Type arbitrary Unicode text via CGEvent — the LIVE-typing path — with the
+    /// event flags EXPLICITLY zeroed so a *physically-held* hotkey modifier can't
+    /// ride the synthetic keystrokes.
+    ///
+    /// Why not `enigo.text()`? enigo builds its `CGEventSource` with
+    /// `CombinedSessionState`, which folds the live hardware modifier state into
+    /// every event it posts, and it never clears the flags. In hold-to-talk
+    /// (`<ctrl>+<space>`) the user keeps Ctrl physically down for the whole take,
+    /// so every live-typed character inherited the Control flag → became a Ctrl
+    /// chord the focused app dropped (the "live typing types nothing" bug — fires,
+    /// `enigo.text()` returns Ok, yet no text lands). A synthetic key-up can't lift
+    /// a physically-held key, so releasing modifiers first never fixed it.
+    /// Calling `set_flags(empty())` on each event AFTER creation overwrites the
+    /// inherited bits, so the character arrives as plain text even while Ctrl is
+    /// held — the exact mirror of how `cmd_v` ADDS the Command flag it needs.
+    ///
+    /// `CGEventKeyboardSetUnicodeString` truncates past ~20 UTF-16 units, so we
+    /// chunk (same reasoning as enigo's `fast_text`). One keyDown event per chunk
+    /// carries the string — no key-up is needed for string injection. Main thread
+    /// only (called from `macos_inject`).
+    pub fn type_unicode(text: &str) -> anyhow::Result<()> {
+        let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+            .map_err(|_| anyhow::anyhow!("CGEventSource::new failed"))?;
+        let chars: Vec<char> = text.chars().collect();
+        for chunk in chars.chunks(20) {
+            let s: String = chunk.iter().collect();
+            let event = CGEvent::new_keyboard_event(src.clone(), 0, true)
+                .map_err(|_| anyhow::anyhow!("keyboard event creation failed"))?;
+            event.set_string(&s);
+            // CRITICAL: strip the inherited (physically-held) modifier flags so a
+            // still-held <ctrl> can't turn this into a Control chord and vanish.
+            event.set_flags(CGEventFlags::empty());
+            event.post(CGEventTapLocation::HID);
+        }
+        Ok(())
+    }
 }
 
 /// A captured target window. Platform-encoded in `id` (empty = none) so the
@@ -451,7 +488,9 @@ fn macos_inject(
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
         if prefer_typing {
-            if let Err(e) = enigo.text(&text) {
+            // Flag-zeroed CGEvent typing (see mac::type_unicode) — immune to a
+            // physically-held hotkey modifier, unlike enigo.text() which inherits it.
+            if let Err(e) = mac::type_unicode(&text) {
                 if allow_paste_fallback {
                     log::warn!("macos inject: typing failed ({e}) — Cmd+V fallback");
                     paste_cmd_v(&mut enigo);
@@ -573,6 +612,7 @@ fn paste() -> anyhow::Result<()> {
 /// emit the codepoints ourselves exactly as a keyboard/IME would. Other
 /// platforms keep enigo's `text()` (unchanged — don't rewrite what works).
 /// Modifiers are cleared first so a still-held hotkey modifier can't corrupt it.
+#[cfg_attr(target_os = "macos", allow(dead_code))] // macOS lives/delivers via macos_inject + mac::type_unicode
 pub fn type_text(text: &str) -> anyhow::Result<()> {
     let t0 = Instant::now();
     clear_modifiers();

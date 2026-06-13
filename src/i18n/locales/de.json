@@ -271,6 +271,7 @@
     "streamingFinal": "Schnell",
     "streamingLive": "Live-Tippen",
     "streamingAria": "Streaming-Modus",
+    "streamingLiveTapNote": "Tipp: Live-Tippen läuft am zuverlässigsten mit Umschalt-Aktivierung (Tippen zum Starten/Stoppen). Im Halten-Modus bleibt die Hotkey-Taste gedrückt — das kann das Live-Tippen in manchen Apps (v. a. Terminals/Editoren unter Windows) unterdrücken.",
     "dachFormat": "DACH-Formatierung",
     "dachFormatHint": "Abkürzungen, Währung, „deutsche“ Anführungszeichen",
     "aiCleanup": "KI-Cleanup",
