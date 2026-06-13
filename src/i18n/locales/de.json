@@ -307,6 +307,8 @@
     "orbProfileRenamePrompt": "Orb-Profil umbenennen:",
     "orbProfileDuplicatePrompt": "Name der Kopie:",
     "orbProfileCopySuffix": "(Kopie)",
+    "orbProfileSave": "Speichern",
+    "orbProfileCancel": "Abbrechen",
     "orbProfileDeleteConfirm": "Profil \"{{name}}\" löschen?",
     "orbPosition": "Position",
     "posCustom": "Eigene (verschoben)",

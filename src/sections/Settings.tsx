@@ -118,6 +118,13 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
   const { t } = useTranslation();
   const [profiles, setProfiles] = useState<OrbProfile[]>([]);
   const [busy, setBusy] = useState(false);
+  // In-app editing — the Tauri webview has no window.prompt/confirm (they no-op),
+  // so naming/confirming happens with real inputs right in the panel.
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const reload = () => listOrbProfiles().then(setProfiles).catch(() => {});
   useEffect(() => {
@@ -137,22 +144,40 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
       setBusy(false);
     }
   };
-  const saveCurrent = () => {
-    const name = window.prompt(t("settings.orbProfileNamePrompt"), t("settings.orbProfileDefaultName"));
-    if (name && name.trim()) guard(() => saveOrbProfile(name.trim()));
+
+  const startCreate = () => {
+    setNewName(t("settings.orbProfileDefaultName"));
+    setCreating(true);
   };
-  const rename = (p: OrbProfile) => {
-    const name = window.prompt(t("settings.orbProfileRenamePrompt"), p.name);
-    if (name && name.trim() && name.trim() !== p.name) guard(() => renameOrbProfile(p.id, name.trim()));
+  const cancelCreate = () => {
+    setCreating(false);
+    setNewName("");
   };
-  const duplicate = (p: OrbProfile) => {
-    const base = `${p.name} ${t("settings.orbProfileCopySuffix")}`;
-    const name = window.prompt(t("settings.orbProfileDuplicatePrompt"), base);
-    if (name && name.trim()) guard(() => duplicateOrbProfile(p.id, name.trim()));
+  const commitCreate = () => {
+    const name = newName.trim();
+    if (name) guard(() => saveOrbProfile(name));
+    cancelCreate();
   };
-  const remove = (p: OrbProfile) => {
-    if (window.confirm(t("settings.orbProfileDeleteConfirm", { name: p.name || "?" })))
-      guard(() => deleteOrbProfile(p.id));
+  const startRename = (p: OrbProfile) => {
+    setEditingId(p.id);
+    setEditName(p.name);
+  };
+  const commitRename = (p: OrbProfile) => {
+    const name = editName.trim();
+    if (name && name !== p.name) guard(() => renameOrbProfile(p.id, name));
+    setEditingId(null);
+    setEditName("");
+  };
+  const duplicate = (p: OrbProfile) =>
+    guard(() =>
+      duplicateOrbProfile(
+        p.id,
+        `${p.name || t("settings.orbProfileUnnamed")} ${t("settings.orbProfileCopySuffix")}`,
+      ),
+    );
+  const doDelete = (p: OrbProfile) => {
+    guard(() => deleteOrbProfile(p.id));
+    setConfirmId(null);
   };
 
   return (
@@ -164,33 +189,89 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
             {cloudSynced ? t("settings.orbProfilesSynced") : t("settings.orbProfilesLocalOnly")}
           </div>
         </div>
-        <button className="op-save" disabled={busy} onClick={saveCurrent}>
-          ＋ {t("settings.orbProfileSaveCurrent")}
-        </button>
+        {!creating && (
+          <button className="op-save" disabled={busy} onClick={startCreate}>
+            ＋ {t("settings.orbProfileSaveCurrent")}
+          </button>
+        )}
       </div>
-      {profiles.length === 0 ? (
+
+      {creating && (
+        <div className="op-edit">
+          <input
+            className="op-input"
+            autoFocus
+            value={newName}
+            placeholder={t("settings.orbProfileDefaultName")}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitCreate();
+              else if (e.key === "Escape") cancelCreate();
+            }}
+          />
+          <button disabled={busy || !newName.trim()} onClick={commitCreate}>
+            {t("settings.orbProfileSave")}
+          </button>
+          <button onClick={cancelCreate}>{t("settings.orbProfileCancel")}</button>
+        </div>
+      )}
+
+      {profiles.length === 0 && !creating ? (
         <div className="op-empty">{t("settings.orbProfilesEmpty")}</div>
       ) : (
         <div className="op-list">
-          {profiles.map((p) => (
-            <div className="op-item" key={p.id}>
-              <span className="op-name">{p.name || t("settings.orbProfileUnnamed")}</span>
-              <div className="op-actions">
-                <button disabled={busy} onClick={() => guard(() => applyOrbProfile(p.id))}>
-                  {t("settings.orbProfileApply")}
-                </button>
-                <button disabled={busy} title={t("settings.orbProfileRename")} onClick={() => rename(p)}>
-                  ✎
-                </button>
-                <button disabled={busy} title={t("settings.orbProfileDuplicate")} onClick={() => duplicate(p)}>
-                  ⧉
-                </button>
-                <button disabled={busy} title={t("settings.orbProfileDelete")} onClick={() => remove(p)}>
-                  🗑
-                </button>
+          {profiles.map((p) =>
+            editingId === p.id ? (
+              <div className="op-item" key={p.id}>
+                <input
+                  className="op-input"
+                  autoFocus
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitRename(p);
+                    else if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+                <div className="op-actions">
+                  <button disabled={busy} onClick={() => commitRename(p)}>
+                    {t("settings.orbProfileSave")}
+                  </button>
+                  <button onClick={() => setEditingId(null)}>{t("settings.orbProfileCancel")}</button>
+                </div>
               </div>
-            </div>
-          ))}
+            ) : confirmId === p.id ? (
+              <div className="op-item" key={p.id}>
+                <span className="op-name">
+                  {t("settings.orbProfileDeleteConfirm", { name: p.name || t("settings.orbProfileUnnamed") })}
+                </span>
+                <div className="op-actions">
+                  <button className="op-danger" disabled={busy} onClick={() => doDelete(p)}>
+                    {t("settings.orbProfileDelete")}
+                  </button>
+                  <button onClick={() => setConfirmId(null)}>{t("settings.orbProfileCancel")}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="op-item" key={p.id}>
+                <span className="op-name">{p.name || t("settings.orbProfileUnnamed")}</span>
+                <div className="op-actions">
+                  <button disabled={busy} onClick={() => guard(() => applyOrbProfile(p.id))}>
+                    {t("settings.orbProfileApply")}
+                  </button>
+                  <button disabled={busy} title={t("settings.orbProfileRename")} onClick={() => startRename(p)}>
+                    ✎
+                  </button>
+                  <button disabled={busy} title={t("settings.orbProfileDuplicate")} onClick={() => duplicate(p)}>
+                    ⧉
+                  </button>
+                  <button disabled={busy} title={t("settings.orbProfileDelete")} onClick={() => setConfirmId(p.id)}>
+                    🗑
+                  </button>
+                </div>
+              </div>
+            ),
+          )}
         </div>
       )}
     </div>

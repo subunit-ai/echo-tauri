@@ -955,3 +955,30 @@ input:focus {
   color: var(--accent-bright);
   border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
+.op-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.op-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 10px;
+  background: var(--glass);
+  color: inherit;
+  font-size: 0.9rem;
+}
+.op-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.op-item .op-input {
+  margin-right: 8px;
+}
+.op-actions .op-danger:first-child {
+  color: #ff8c8c;
+  border-color: color-mix(in srgb, #ff5c5c 45%, transparent);
+}
