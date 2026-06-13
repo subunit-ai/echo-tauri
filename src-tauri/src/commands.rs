@@ -75,9 +75,16 @@ pub fn do_start(app: &AppHandle) {
         return;
     }
 
-    let (dev, lock, mode, endpoint) = {
+    let (dev, lock, mode, endpoint, streaming, live) = {
         let c = state.config.lock();
-        (c.mic_device_name.clone(), c.target_lock, c.mode.clone(), c.subunit_endpoint.clone())
+        (
+            c.mic_device_name.clone(),
+            c.target_lock,
+            c.mode.clone(),
+            c.subunit_endpoint.clone(),
+            c.streaming_mode != "off",
+            c.streaming_mode == "live",
+        )
     };
     log::info!("do_start: target_lock={lock}");
     // Prewarm the pooled cloud connection NOW (record-start) so DNS+TCP+TLS is
@@ -104,12 +111,25 @@ pub fn do_start(app: &AppHandle) {
         return;
     }
     emit_state(app, EngineState::Recording, None);
+
+    // Open the dictation WebSocket NOW (cloud + streaming on) so the server
+    // decodes the take incrementally while the key is held — by release only the
+    // tail remains. start() is a cloud-only no-op internally; the mode flag is the
+    // kill switch. Any failure degrades to the classic batch upload in do_transcribe.
+    if mode == "subunit" && streaming {
+        crate::transcribe::stream::start(app, live);
+    }
 }
 
 pub fn do_cancel(app: &AppHandle) {
     let state = app.state::<AppState>();
     // The session is over — clear the re-entry guard so the next press is accepted.
     state.session_active.store(false, Ordering::SeqCst);
+    // Tear down any live streaming session so its server-side per-key slot frees
+    // (else the next press could trip the dictation session cap). cancel() sends a
+    // {cancel} frame + closes the WS; it does NOT stop the recorder, so the stop
+    // below stays the single mic-stop on the cancel path.
+    crate::transcribe::stream::cancel();
     let _ = state.recorder.stop();
     *state.target.lock() = None;
     emit_state(app, EngineState::Idle, None);
@@ -121,39 +141,21 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let state = app.state::<AppState>();
     // The session is over — clear the re-entry guard so the next press is accepted.
     state.session_active.store(false, Ordering::SeqCst);
-    let cap = match state.recorder.stop() {
-        Some(c) => c,
-        None => return Err(EngineError::new("no_recording", "keine aktive Aufnahme")),
-    };
-    if cap.samples.is_empty() {
-        emit_state(app, EngineState::Idle, None);
-        return Err(EngineError::new("empty", "leere Aufnahme"));
-    }
 
-    emit_state(app, EngineState::Transcribing, None);
-
-    // Latency measurement system: t_total spans recorder-stop → text delivered.
-    // Per-phase numbers (encode/stt from the engine, cleanup/inject here) are
-    // logged as ONE greppable line and stored with the history entry, so we can
-    // iterate on latency against real field data instead of feelings.
+    // Latency measurement system: t_total spans release → text delivered. Per-phase
+    // numbers (encode/stt from the engine, cleanup/inject here) are logged as ONE
+    // greppable line + stored with history, so we iterate on real field data.
     let t_total = std::time::Instant::now();
 
-    // Cloud path: refresh the access token if it's expired before we call out.
+    // Cloud path: refresh the access token if it's expired before we call out
+    // (streaming reuses the same credential, so this covers both paths).
     if state.config.lock().mode == "subunit" {
         crate::auth::ensure_fresh(app);
     }
     let cfg = state.config.lock().clone();
+    let streaming = cfg.mode == "subunit" && cfg.streaming_mode != "off";
 
-    // Duration → long-form detection (Python parity: switch style + store separately).
-    let duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
-    let is_long =
-        cfg.long_form_threshold_seconds > 0 && duration_s >= cfg.long_form_threshold_seconds as f64;
-    // Request timed segments only when we'll diarize this long-form recording.
-    let want_segments = is_long && cfg.diarization_enabled;
-
-    // The cleanup style (long-form > auto-mode > config) is known BEFORE we call
-    // out — the target window was captured at record-start — so it can ride along
-    // on the transcribe request (combined transcribe+cleanup, one round trip less).
+    // Target window context (captured at record-start) — Auto-Mode style + Synapse.
     let (app_name, title) = {
         let t = state.target.lock();
         (
@@ -161,82 +163,209 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
         )
     };
-    let style = if is_long {
-        cfg.long_form_cleanup_style.clone()
-    } else if cfg.cleanup_auto_mode {
-        let (style, source) = crate::auto_mode::pick_style(
-            &app_name,
-            &title,
-            &cfg.auto_mode_overrides,
-            &cfg.cleanup_style,
-        );
-        // App name only at info (titles can carry document names → debug).
-        log::info!("auto-mode: style={style} source={source} app=\"{app_name}\"");
-        style
-    } else {
-        cfg.cleanup_style.clone()
-    };
-    // Combined round trip only for normal dictation: long-form cleanup can take
-    // up to 90 s server-side — that stays on the separate /v1/cleanup call so the
-    // transcribe request can't blow its 120 s budget.
-    let inline_cleanup = !is_long && cfg.cleanup_enabled && style != "raw";
 
-    log::info!(
-        "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments} inline_cleanup={inline_cleanup}",
-        cfg.mode
-    );
-    let t_tx = std::time::Instant::now();
-    let result = match transcribe::run_opts(
-        &cfg,
-        &cap.samples,
-        cap.sample_rate,
-        want_segments,
-        inline_cleanup.then_some(style.as_str()),
-    ) {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!("transcribe: failed ({}) after {:?}", e.code, t_tx.elapsed());
-            emit_state(app, EngineState::Error, Some(e.message.clone()));
-            return Err(e);
+    // Acquire EITHER the server's streamed final (audio already lives server-side,
+    // no re-upload) OR a local capture for the classic batch path. On streaming
+    // success the mic is already stopped inside stream::finish(); on any stream
+    // failure the preserved capture flows into the classic path below — worst case
+    // is exactly today's latency, never a lost word.
+    let mut streamed: Option<crate::transcribe::stream::StreamFinal> = None;
+    let cap_opt: Option<crate::recorder::Capture>;
+    if streaming {
+        emit_state(app, EngineState::Transcribing, None);
+        match crate::transcribe::stream::finish() {
+            Some(Ok(fin)) => {
+                streamed = Some(fin);
+                cap_opt = None;
+            }
+            Some(Err(fail)) => {
+                log::warn!(
+                    "transcribe: stream failed ({}: {}) — classic fallback",
+                    fail.error.code,
+                    fail.error.message
+                );
+                cap_opt = fail.capture;
+            }
+            None => cap_opt = state.recorder.stop(), // streaming off mid-take / never started
         }
-    };
-    log::info!(
-        "transcribe: ok engine_mode={} chars={} server_cleanup={} (+{:?})",
-        result.quality_mode,
-        result.text.chars().count(),
-        result.cleaned_text.is_some(),
-        t_tx.elapsed()
-    );
+    } else {
+        cap_opt = state.recorder.stop();
+    }
+
+    // Live mode that failed AFTER typing part of the take: the user already has
+    // that text in their target, so a batch re-paste would DUPLICATE it. Finalize
+    // with what was typed instead. (Rare — most stream failures happen at connect,
+    // before anything is typed, where live_injected_chars()==0 and we fall through
+    // to the clean batch fallback below.)
+    if streaming
+        && streamed.is_none()
+        && cfg.streaming_mode == "live"
+        && crate::transcribe::stream::live_injected_chars() > 0
+    {
+        let typed = crate::transcribe::stream::live_injected_chars();
+        log::warn!(
+            "transcribe: live stream failed after typing {typed} chars — keeping the partial, skipping batch re-paste"
+        );
+        *state.target.lock() = None;
+        emit_state(app, EngineState::Done, None);
+        return Ok(TranscriptResult {
+            quality_mode: "cloud-stream-live".to_string(),
+            ..Default::default()
+        });
+    }
+
+    // Both paths now produce the SAME locals so the post-processing tail
+    // (cleanup → DACH → inject → history → stats → emit) is byte-identical.
+    let result: TranscriptResult;
+    let already_injected: bool;
+    let duration_s: f64;
+    let is_long: bool;
+    let want_segments: bool;
+    let style: String;
+    let segments: Vec<transcribe::Segment>;
+
+    if let Some(fin) = streamed {
+        // ── Streamed final ──────────────────────────────────────────────────
+        already_injected = fin.already_injected;
+        duration_s = fin.duration_s;
+        is_long = cfg.long_form_threshold_seconds > 0
+            && duration_s >= cfg.long_form_threshold_seconds as f64;
+        // Streaming sent the BASE cleanup style at connect-time (no auto-mode /
+        // long-form re-selection mid-stream) — label history with what ran.
+        style = if cfg.cleanup_enabled && cfg.cleanup_style != "raw" {
+            cfg.cleanup_style.clone()
+        } else {
+            "raw".to_string()
+        };
+        log::info!(
+            "transcribe: streamed final ({:.1}s, {} chars, cleaned={}, tier={})",
+            duration_s,
+            fin.text.chars().count(),
+            fin.cleaned_text.is_some(),
+            fin.quality_mode
+        );
+        result = TranscriptResult {
+            text: fin.text,
+            quality_mode: fin.quality_mode,
+            segments: Vec::new(),
+            cleaned_text: fin.cleaned_text,
+            cleanup_status: fin.cleanup_status,
+            // Streamed: no client encode, no separate GPU number — stt_ms is the
+            // whole release→final wait (the press→paste latency we tune against).
+            timings: transcribe::Timings {
+                encode_ms: 0,
+                stt_ms: t_total.elapsed().as_millis() as u64,
+                server_ms: 0,
+            },
+        };
+        want_segments = false; // streamed normal dictation never diarizes
+        segments = Vec::new();
+    } else {
+        // ── Classic batch path ──────────────────────────────────────────────
+        already_injected = false;
+        let cap = match cap_opt.as_ref() {
+            Some(c) if !c.samples.is_empty() => c,
+            Some(_) => {
+                emit_state(app, EngineState::Idle, None);
+                return Err(EngineError::new("empty", "leere Aufnahme"));
+            }
+            None => return Err(EngineError::new("no_recording", "keine aktive Aufnahme")),
+        };
+        emit_state(app, EngineState::Transcribing, None);
+
+        // Duration → long-form detection (Python parity: switch style + store separately).
+        duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
+        is_long = cfg.long_form_threshold_seconds > 0
+            && duration_s >= cfg.long_form_threshold_seconds as f64;
+        // Request timed segments only when we'll diarize this long-form recording.
+        want_segments = is_long && cfg.diarization_enabled;
+
+        // The cleanup style (long-form > auto-mode > config) is known BEFORE we call
+        // out — the target window was captured at record-start — so it can ride along
+        // on the transcribe request (combined transcribe+cleanup, one round trip less).
+        style = if is_long {
+            cfg.long_form_cleanup_style.clone()
+        } else if cfg.cleanup_auto_mode {
+            let (style, source) = crate::auto_mode::pick_style(
+                &app_name,
+                &title,
+                &cfg.auto_mode_overrides,
+                &cfg.cleanup_style,
+            );
+            // App name only at info (titles can carry document names → debug).
+            log::info!("auto-mode: style={style} source={source} app=\"{app_name}\"");
+            style
+        } else {
+            cfg.cleanup_style.clone()
+        };
+        // Combined round trip only for normal dictation: long-form cleanup can take
+        // up to 90 s server-side — that stays on the separate /v1/cleanup call so the
+        // transcribe request can't blow its 120 s budget.
+        let inline_cleanup = !is_long && cfg.cleanup_enabled && style != "raw";
+
+        log::info!(
+            "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments} inline_cleanup={inline_cleanup}",
+            cfg.mode
+        );
+        let t_tx = std::time::Instant::now();
+        let mut r = match transcribe::run_opts(
+            &cfg,
+            &cap.samples,
+            cap.sample_rate,
+            want_segments,
+            inline_cleanup.then_some(style.as_str()),
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("transcribe: failed ({}) after {:?}", e.code, t_tx.elapsed());
+                emit_state(app, EngineState::Error, Some(e.message.clone()));
+                return Err(e);
+            }
+        };
+        log::info!(
+            "transcribe: ok engine_mode={} chars={} server_cleanup={} (+{:?})",
+            r.quality_mode,
+            r.text.chars().count(),
+            r.cleaned_text.is_some(),
+            t_tx.elapsed()
+        );
+        // Keep the timed segments for diarization (the lean result below drops them).
+        segments = std::mem::take(&mut r.segments);
+        result = r;
+    }
 
     // Target window (captured at record-start), consumed for the paste-back below.
     let target = state.target.lock().take();
-
-    // Keep the timed segments for diarization (the reconstructed result below
-    // drops them — the IPC payload stays lean).
-    let segments = result.segments;
 
     // Post-process: prefer the server-side cleanup from the combined round trip;
     // fall back to the separate /v1/cleanup call (old server, local engine, or
     // long-form). Then DACH formatting. "raw" = passthrough. cleanup_ms times
     // only the separate call — the inline path already sits inside stt_ms.
     let t_cleanup = std::time::Instant::now();
-    let mut text = match result.cleaned_text {
-        Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
-        // Server ran the combined round trip but cleanup is down (all subscriptions
-        // at their weekly limit) — a separate /v1/cleanup call would also fail. Paste
-        // the raw transcript now instead of burning another ~2 s on a dead service.
-        // (Distinct from a missing field on an old server, which still falls through
-        // to the separate call below.)
-        _ if result.cleanup_status.as_deref() == Some("unavailable") => {
-            log::info!("transcribe: server cleanup unavailable (subscription limit) — pasting raw, skipping retry");
-            result.text
+    let mut text = if already_injected {
+        // Live mode already typed the RAW transcript into the target as the user
+        // spoke (then reconciled to it) — keep it verbatim for clipboard + history;
+        // cleanup/DACH would diverge from what is already on screen.
+        result.text
+    } else {
+        match result.cleaned_text {
+            Some(cleaned) if !cleaned.trim().is_empty() => cleaned,
+            // Server ran the combined round trip but cleanup is down (all subscriptions
+            // at their weekly limit) — a separate /v1/cleanup call would also fail. Paste
+            // the raw transcript now instead of burning another ~2 s on a dead service.
+            // (Distinct from a missing field on an old server, which still falls through
+            // to the separate call below.)
+            _ if result.cleanup_status.as_deref() == Some("unavailable") => {
+                log::info!("transcribe: server cleanup unavailable (subscription limit) — pasting raw, skipping retry");
+                result.text
+            }
+            _ if cfg.cleanup_enabled && style != "raw" => {
+                crate::cleanup::maybe_cleanup(&cfg, &result.text, &style)
+            }
+            _ => result.text,
         }
-        _ if cfg.cleanup_enabled && style != "raw" => {
-            crate::cleanup::maybe_cleanup(&cfg, &result.text, &style)
-        }
-        _ => result.text,
     };
-    if cfg.dach_format_enabled {
+    if cfg.dach_format_enabled && !already_injected {
         text = crate::dach::dach_format(&text);
     }
     let cleanup_ms = t_cleanup.elapsed().as_millis() as u64;
@@ -279,7 +408,14 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // app behind. Still copy it so a manual paste works everywhere. Otherwise:
     // paste-back into the captured target window (clipboard + paste per config).
     let t_inject = std::time::Instant::now();
-    if cfg.prompt_console_as_target {
+    if already_injected {
+        // Live mode already typed it into the target as the user spoke — never
+        // paste again (that would duplicate). Still copy to the clipboard so a
+        // manual re-paste works everywhere.
+        if let Err(e) = crate::inject::set_clipboard(&result.text) {
+            log::warn!("clipboard failed: {e}");
+        }
+    } else if cfg.prompt_console_as_target {
         if let Err(e) = crate::inject::set_clipboard(&result.text) {
             log::warn!("clipboard failed: {e}");
         }
@@ -351,16 +487,20 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // speaker-labelled transcript + signals the UI to refresh.
     if want_segments && !segments.is_empty() {
         use tauri::Emitter;
-        if let Ok(wav) = transcribe::samples_to_wav(&cap.samples, cap.sample_rate) {
-            let (app2, cfg2) = (app.clone(), cfg.clone());
-            std::thread::spawn(move || {
-                if let Some(speaker_text) =
-                    crate::diarize::speaker_transcript(&cfg2, wav, &segments)
-                {
-                    crate::store::update_meeting_by_ts(now as i64, "speaker_text", &speaker_text);
-                    let _ = app2.emit("echo://meetings-updated", ());
-                }
-            });
+        // Diarization needs the raw samples — only the batch path keeps a local
+        // capture (streamed normal dictation never sets want_segments).
+        if let Some(cap) = cap_opt.as_ref() {
+            if let Ok(wav) = transcribe::samples_to_wav(&cap.samples, cap.sample_rate) {
+                let (app2, cfg2) = (app.clone(), cfg.clone());
+                std::thread::spawn(move || {
+                    if let Some(speaker_text) =
+                        crate::diarize::speaker_transcript(&cfg2, wav, &segments)
+                    {
+                        crate::store::update_meeting_by_ts(now as i64, "speaker_text", &speaker_text);
+                        let _ = app2.emit("echo://meetings-updated", ());
+                    }
+                });
+            }
         }
     }
 

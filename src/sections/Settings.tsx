@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
+import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
 import {
   appVersion,
@@ -677,6 +678,17 @@ export function Settings() {
                 ]}
               />
             </Row>
+            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+              <div className="meta">
+                <div className="name">{t("settings.streaming")}</div>
+                <div className="hint">{t("settings.streamingHint")}</div>
+              </div>
+              <StreamingSwitch
+                value={c.streaming_mode}
+                onChange={(m) => set("streaming_mode", m)}
+                disabled={uiModeOf(c) === "local"}
+              />
+            </div>
             <Row name={t("settings.instantLiveTyping")} hint={t("settings.instantLiveTypingHint")}>
               <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />
             </Row>

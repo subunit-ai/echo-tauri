@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BigModeSwitch } from "../components/BigModeSwitch";
+import { StreamingSwitch } from "../components/StreamingSwitch";
 import { MicIcon } from "../components/icons";
 import { RecordPanel } from "../components/RecordPanel";
 import {
@@ -43,6 +44,17 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
       <RecordPanel />
 
       <BigModeSwitch value={uiModeOf(config)} onChange={(m) => patch(patchForUiMode(m))} />
+
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>
+          {t("settings.streaming")}
+        </div>
+        <StreamingSwitch
+          value={config.streaming_mode}
+          onChange={(m) => patch({ streaming_mode: m })}
+          disabled={uiModeOf(config) === "local"}
+        />
+      </div>
 
       <div style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 12 }}>
         <button

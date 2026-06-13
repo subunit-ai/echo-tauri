@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { onState, onTranscript, type EngineState } from "../lib/ipc";
+import { onState, onStreamPartial, onTranscript, type EngineState } from "../lib/ipc";
 
 // Push-to-talk test control. The real trigger is the global hotkey; this lets
 // you drive the full record → transcribe loop from the window too.
@@ -12,6 +12,7 @@ export function RecordPanel() {
   const [last, setLast] = useState("");
   const [lastTier, setLastTier] = useState("");
   const [level, setLevel] = useState(0);
+  const [partial, setPartial] = useState("");
 
   const LABEL: Record<EngineState, string> = {
     idle: t("record.stateIdle"),
@@ -26,11 +27,16 @@ export function RecordPanel() {
       onState((p) => {
         setState(p.state);
         setDetail(p.detail ?? "");
+        // The live caption belongs to the active take — clear it once we settle.
+        if (p.state === "idle" || p.state === "done" || p.state === "error") setPartial("");
       }),
       onTranscript((p) => {
         setLast(p.text);
         setLastTier(p.quality_mode);
+        setPartial("");
       }),
+      // Streaming dictation live partials — display-only caption, never pasted.
+      onStreamPartial((text) => setPartial(text)),
     ];
     return () => {
       subs.forEach((s) => s.then((un) => un()));
@@ -95,6 +101,13 @@ export function RecordPanel() {
             {LABEL[state]}
             {detail && state === "error" ? ` · ${detail}` : ""}
           </div>
+          {partial && (state === "recording" || state === "transcribing") && (
+            <div
+              style={{ marginTop: 6, fontSize: 12, opacity: 0.7, fontStyle: "italic", lineHeight: 1.35 }}
+            >
+              {partial}
+            </div>
+          )}
         </div>
       </div>
       {last && (

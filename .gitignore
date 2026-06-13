@@ -33,3 +33,6 @@ minisign*.key
 
 # GT-Fixtures mit echten Voiceprints = BIOMETRIE — NIE committen
 src-tauri/tests/fixtures/
+
+# Subunit Project Standard breadcrumb (intern, nicht committen)
+.u1/

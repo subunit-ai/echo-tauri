@@ -595,6 +595,79 @@ pub fn type_text(text: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Live-streaming dictation: type a text DELTA at the caret (append). Clears any
+/// held hotkey modifier first. macOS marshals onto the main thread (synthetic
+/// input isn't thread-safe there). Best-effort — a missed delta is fixed by the
+/// finish-time reconciliation. NO clipboard fallback: a delta must never paste
+/// the whole clipboard on top of the live text.
+pub fn inject_text_delta(text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_inject(text.to_string(), true, false, None, false);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Err(e) = type_text(text) {
+            log::debug!("inject_text_delta: type failed: {e}");
+        }
+    }
+}
+
+/// Live-streaming reconciliation: delete `count` characters at the caret via
+/// backspaces — used when the streamed final revises text we already live-typed.
+/// Rare (LocalAgreement only commits stable text). macOS marshals to the main thread.
+pub fn inject_backspaces(count: usize) {
+    if count == 0 {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_backspaces(count);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        clear_modifiers();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+            for _ in 0..count {
+                let _ = enigo.key(Key::Backspace, Direction::Click);
+            }
+        }
+    }
+}
+
+/// macOS-only: send `count` backspaces on the main thread (synthetic input is
+/// not thread-safe off it). Gated on Accessibility; clears modifiers first.
+#[cfg(target_os = "macos")]
+fn macos_backspaces(count: usize) {
+    let Some(app) = APP_HANDLE.get() else {
+        log::error!("macos backspaces: app handle not set");
+        return;
+    };
+    if let Err(e) = app.run_on_main_thread(move || {
+        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+        if !mac::is_trusted(false) {
+            return;
+        }
+        let mut enigo = match Enigo::new(&Settings::default()) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for k in [Key::Control, Key::Shift, Key::Alt, Key::Meta] {
+            let _ = enigo.key(k, Direction::Release);
+        }
+        for _ in 0..count {
+            let _ = enigo.key(Key::Backspace, Direction::Click);
+        }
+    }) {
+        log::debug!("macos backspaces: run_on_main_thread failed: {e}");
+    }
+}
+
 /// Native Windows synthetic keyboard input — replaces enigo on the paste chord.
 /// Each logical action is one `SendInput` call, so the OS enqueues its events
 /// atomically and the target window never sees a half-formed chord.

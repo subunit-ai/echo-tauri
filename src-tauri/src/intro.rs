@@ -135,7 +135,9 @@ pub fn transcribe_preview(app: AppHandle) -> Result<String, EngineError> {
 /// to `/v1/dictate`; local mode: no-op — release still delivers the final).
 #[tauri::command]
 pub fn intro_stream_start(app: AppHandle) {
-    stream::start(&app);
+    // Intro shows partials on-screen only (the "target" is Echo itself) — it must
+    // never live-type into a window. Always non-live; the release final lands via IPC.
+    stream::start(&app, false);
 }
 
 /// Drop the stream without a final (scene unmounted, hold aborted).

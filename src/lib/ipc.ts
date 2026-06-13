@@ -82,6 +82,11 @@ export interface Config {
 
   cloud_quality_mode: string;
   gpu_aware_migrated: boolean;
+  /** Live WS streaming dictation: "off" | "final" | "live". off = classic
+   *  one-shot upload; final = stream for speed, paste full result on release;
+   *  live = type the server-committed (stable) text into the target as you speak,
+   *  tail completes on release. Cloud only; falls back to batch on any WS error. */
+  streaming_mode: string;
   instant_live_typing: boolean;
 
   sound_enabled: boolean;
@@ -271,6 +276,10 @@ export const onTranscript = (
   cb: (p: TranscriptPayload) => void,
 ): Promise<UnlistenFn> =>
   listen<TranscriptPayload>("echo://transcript", (e) => cb(e.payload));
+/** Live partial transcript while streaming dictation — DISPLAY ONLY (a live
+ *  caption); never drives the paste. Fires only when streaming_mode != "off". */
+export const onStreamPartial = (cb: (text: string) => void): Promise<UnlistenFn> =>
+  listen<string>("echo://stream-partial", (e) => cb(e.payload));
 
 // ---- Auto-update ----
 /** Check for an update; resolves to the new version string, or null if current. */

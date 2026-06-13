@@ -23,6 +23,7 @@
 //!   S→C text   {"type":"final","text":…,"cleaned_text"?,…}  → close
 
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -42,6 +43,16 @@ pub struct StreamFinal {
     pub text: String,
     pub cleaned_text: Option<String>,
     pub quality_mode: String,
+    /// Audio duration the server decoded (s). The main pipeline needs it for
+    /// stats/history since the streamed path keeps no local capture on success.
+    pub duration_s: f64,
+    /// Server cleanup outcome ("ok"/"unavailable"/"error") so the main path can
+    /// apply the SAME doomed-/v1/cleanup-skip logic as the batch round trip.
+    pub cleanup_status: Option<String>,
+    /// "live" mode already typed this transcript into the target as the user
+    /// spoke (reconciled to this exact text on release) → the caller MUST NOT
+    /// paste it again. False for "final" mode (caller pastes once).
+    pub already_injected: bool,
 }
 
 /// Error + whatever capture the session still owns, so the caller can fall
@@ -63,6 +74,82 @@ struct Session {
 
 static ACTIVE: Lazy<Mutex<Option<Session>>> = Lazy::new(|| Mutex::new(None));
 
+/// Chars the live path has typed into the target this session (reset in `start`).
+/// Lets `do_transcribe` skip a batch re-paste when a live take fails AFTER already
+/// typing some text — pasting on top would duplicate it.
+static LIVE_INJECTED: AtomicUsize = AtomicUsize::new(0);
+
+/// How many characters the live path has typed into the target this session.
+pub fn live_injected_chars() -> usize {
+    LIVE_INJECTED.load(Ordering::Relaxed)
+}
+
+/// LocalAgreement state for "live" mode: the text already typed into the target
+/// (`confirmed`) and the previous partial, to detect what is stable across two
+/// consecutive decodes.
+struct Live {
+    confirmed: String,
+    prev_partial: String,
+}
+
+/// The agreed-stable prefix of two consecutive partials: their longest common
+/// prefix, trimmed back to the last word boundary so a still-growing final word
+/// is never committed. Only text that survived two decodes is treated as stable.
+fn agreed_stable(prev: &str, cur: &str) -> String {
+    let common: String = prev
+        .chars()
+        .zip(cur.chars())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a)
+        .collect();
+    match common.rfind(char::is_whitespace) {
+        Some(idx) => common[..idx].to_string(),
+        None => String::new(),
+    }
+}
+
+/// Type the newly-stable suffix into the target (append at the caret). Only ever
+/// grows `confirmed`; if a partial diverges (rare model revision) we wait — the
+/// finish-time reconcile fixes it against the authoritative final.
+fn live_commit(l: &mut Live, cur: &str) {
+    let stable = agreed_stable(&l.prev_partial, cur);
+    l.prev_partial = cur.to_string();
+    if stable.len() > l.confirmed.len() && stable.starts_with(&l.confirmed) {
+        let delta = stable[l.confirmed.len()..].to_string();
+        let n = delta.chars().count();
+        crate::inject::inject_text_delta(&delta);
+        LIVE_INJECTED.fetch_add(n, Ordering::Relaxed);
+        l.confirmed = stable;
+    }
+}
+
+/// Reconcile the live-typed text with the server's authoritative final: backspace
+/// whatever we typed past their common prefix, then type the remaining tail — so
+/// the target ends with EXACTLY the final transcript. Usually the common prefix
+/// is everything we typed, so this just appends the tail.
+fn live_reconcile(l: &Live, final_text: &str) {
+    let common: String = l
+        .confirmed
+        .chars()
+        .zip(final_text.chars())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a)
+        .collect();
+    let to_delete = l
+        .confirmed
+        .chars()
+        .count()
+        .saturating_sub(common.chars().count());
+    if to_delete > 0 {
+        crate::inject::inject_backspaces(to_delete);
+    }
+    let tail = &final_text[common.len()..];
+    if !tail.is_empty() {
+        crate::inject::inject_text_delta(tail);
+        LIVE_INJECTED.fetch_add(tail.chars().count(), Ordering::Relaxed);
+    }
+}
+
 const FEED_TICK: Duration = Duration::from_millis(150);
 const READ_TIMEOUT: Duration = Duration::from_millis(30);
 const READY_DEADLINE: Duration = Duration::from_secs(10);
@@ -71,12 +158,13 @@ const FINAL_DEADLINE: Duration = Duration::from_secs(90);
 
 /// Begin a streaming session for the recording that `do_start` just opened.
 /// Cloud mode only; no-op otherwise. Replaces any previous session.
-pub fn start(app: &AppHandle) {
+pub fn start(app: &AppHandle, live: bool) {
     let state = app.state::<AppState>();
     if state.config.lock().mode != "subunit" {
         return; // local engine has no streaming backend (yet)
     }
     cancel(); // a stale session must never outlive its recording
+    LIVE_INJECTED.store(0, Ordering::Relaxed); // fresh per-session live-typing counter
 
     let (ctl_tx, ctl_rx) = mpsc::channel();
     let (done_tx, done_rx) = mpsc::channel();
@@ -85,7 +173,7 @@ pub fn start(app: &AppHandle) {
     let app = app.clone();
     std::thread::Builder::new()
         .name("echo-stream".into())
-        .spawn(move || session_thread(app, ctl_rx, done_tx))
+        .spawn(move || session_thread(app, ctl_rx, done_tx, live))
         .ok();
 }
 
@@ -119,6 +207,7 @@ fn session_thread(
     app: AppHandle,
     ctl_rx: mpsc::Receiver<Ctl>,
     done_tx: mpsc::Sender<Result<StreamFinal, StreamFailure>>,
+    live: bool,
 ) {
     // Unavailable ⇒ report once and leave; the caller's fallback owns the take.
     let mut ws = match connect(&app) {
@@ -129,7 +218,14 @@ fn session_thread(
             return;
         }
     };
-    log::info!("stream: connected, live partials on");
+    log::info!("stream: connected, live partials on (live_typing={live})");
+
+    // LocalAgreement state for "live" mode — None unless live typing is on.
+    let mut live_state = if live {
+        Some(Live { confirmed: String::new(), prev_partial: String::new() })
+    } else {
+        None
+    };
 
     // Sent watermark in DOWNSAMPLED samples. The last 2 samples of every pass
     // are held back: the linear resampler's tail depends on samples that
@@ -144,7 +240,7 @@ fn session_thread(
                 return;
             }
             Ok(Ctl::Finish) => {
-                let result = finish_flow(&app, &mut ws, &mut sent);
+                let result = finish_flow(&app, &mut ws, &mut sent, live_state.as_mut());
                 let _ = done_tx.send(result);
                 return;
             }
@@ -156,7 +252,7 @@ fn session_thread(
                     let _ = done_tx.send(Err(StreamFailure { error: e, capture: None }));
                     return;
                 }
-                if let Err(e) = drain_partials(&app, &mut ws) {
+                if let Err(e) = drain_partials(&app, &mut ws, live_state.as_mut()) {
                     log::warn!("stream: read failed ({}) — degrading to classic", e.message);
                     let _ = done_tx.send(Err(StreamFailure { error: e, capture: None }));
                     return;
@@ -339,7 +435,11 @@ fn feed_delta(
 
 /// Read every pending message; emit partials to the UI. Non-blocking via the
 /// socket read timeout.
-fn drain_partials(app: &AppHandle, ws: &mut Ws) -> Result<(), EngineError> {
+fn drain_partials(
+    app: &AppHandle,
+    ws: &mut Ws,
+    mut live: Option<&mut Live>,
+) -> Result<(), EngineError> {
     loop {
         match ws.read() {
             Ok(Message::Text(t)) => {
@@ -347,6 +447,10 @@ fn drain_partials(app: &AppHandle, ws: &mut Ws) -> Result<(), EngineError> {
                 if v.get("type").and_then(|t| t.as_str()) == Some("partial") {
                     if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                         let _ = app.emit("echo://stream-partial", text.to_string());
+                        // Live mode: type the newly-stable prefix into the target.
+                        if let Some(l) = live.as_deref_mut() {
+                            live_commit(l, text);
+                        }
                     }
                 }
             }
@@ -471,6 +575,7 @@ fn finish_flow(
     app: &AppHandle,
     ws: &mut Ws,
     sent: &mut usize,
+    mut live: Option<&mut Live>,
 ) -> Result<StreamFinal, StreamFailure> {
     let flush_result = feed_delta(app, ws, sent, true)
         .and_then(|()| {
@@ -514,8 +619,30 @@ fn finish_flow(
                             .and_then(|t| t.as_str())
                             .unwrap_or("cloud-stream")
                             .to_string();
+                        let duration_s =
+                            v.get("duration_s").and_then(|d| d.as_f64()).unwrap_or(0.0);
+                        let cleanup_status = v
+                            .get("cleanup_status")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string());
                         let _ = ws.close(None);
-                        return Ok(StreamFinal { text, cleaned_text, quality_mode });
+                        // Live mode: reconcile what we typed during speech with the
+                        // authoritative final (backspace any divergent tail, type the
+                        // rest) so the target ends with EXACTLY the final transcript.
+                        let already_injected = if let Some(l) = live.as_deref_mut() {
+                            live_reconcile(l, &text);
+                            true
+                        } else {
+                            false
+                        };
+                        return Ok(StreamFinal {
+                            text,
+                            cleaned_text,
+                            quality_mode,
+                            duration_s,
+                            cleanup_status,
+                            already_injected,
+                        });
                     }
                     Some("partial") => {
                         // Late lookahead while the final computes — still useful.

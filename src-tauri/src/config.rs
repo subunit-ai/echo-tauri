@@ -228,6 +228,22 @@ pub struct Config {
     pub cloud_quality_mode: String,
     pub gpu_aware_migrated: bool,
 
+    /// Live WS streaming dictation mode (cloud only). The server decodes the
+    /// take incrementally while the key is held (stable-prefix) so release pays
+    /// only for the tail (~5× lower press→paste latency, the SAME full-quality
+    /// text as batch). Three modes:
+    ///   "off"   — classic one-shot upload (no streaming)
+    ///   "final" — stream for speed, paste the full final ONCE on release
+    ///   "live"  — type the server-committed (stable) text into the target AS
+    ///             you speak; the still-volatile tail stays on-screen only and
+    ///             completes on release. Only ever injects text the server
+    ///             marked stable, so no word it later revises is written →
+    ///             no garbage in the document, no quality loss.
+    /// Any WS failure falls back to batch automatically; this never gates
+    /// dictation. New field → container `#[serde(default)]` seeds existing
+    /// installs from `Config::default()`, so the promotion needs no migration guard.
+    pub streaming_mode: String,
+
     pub sound_enabled: bool,
     pub sound_volume: f32,
     /// Independent on/off for the two cues + which preset tone each plays. These
@@ -343,6 +359,8 @@ impl Default for Config {
 
             cloud_quality_mode: "quality".to_string(),
             gpu_aware_migrated: false,
+
+            streaming_mode: "final".to_string(),
 
             sound_enabled: true,
             sound_volume: 0.6,
