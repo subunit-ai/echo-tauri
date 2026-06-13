@@ -255,7 +255,7 @@
     "localModel": "Lokales Modell",
     "localModelHint": "Klick wählt + lädt das Modell (mit GPU ruhig groß — large-v3-turbo).",
     "transcriptionLanguage": "Transkriptions-Sprache",
-    "transcriptionLanguageHint": "\"Automatisch erkennen\" für gemischte Sprachen",
+    "transcriptionLanguageHint": "Feste Sprache ist am schnellsten. \"Automatisch erkennen\" nur bei gemischten Sprachen — kostet pro Diktat ~½ s extra (Erkennungslauf).",
     "cloudQuality": "Cloud-Qualität",
     "cloudQualityQuality": "Qualität",
     "cloudQualityFast": "Schnell",

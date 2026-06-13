@@ -256,7 +256,7 @@
     "localModel": "Local model",
     "localModelHint": "Click to select + download the model (go big with a GPU — large-v3-turbo).",
     "transcriptionLanguage": "Transcription language",
-    "transcriptionLanguageHint": "\"Auto-detect\" for mixed languages",
+    "transcriptionLanguageHint": "A fixed language is fastest. Use \"Auto-detect\" only for mixed languages — it costs ~½ s extra per dictation (detection pass).",
     "cloudQuality": "Cloud quality",
     "cloudQualityQuality": "Quality",
     "cloudQualityFast": "Fast",
