@@ -3,7 +3,7 @@
     "needsAccessibility": "Auto-Einfügen braucht „Bedienungshilfen\"-Zugriff. Text liegt in der Zwischenablage — aktiviere Echo unter Systemeinstellungen → Datenschutz & Sicherheit → Bedienungshilfen."
   },
   "intro": {
-    "tagline": "Drücken. Sprechen. Fertig.",
+    "tagline": "Drücken. Sprechen.",
     "begin": "Los geht's",
     "skip": "Intro überspringen",
     "continue": "Weiter",
@@ -32,6 +32,8 @@
     "finaleNothingHeard": "Nichts gehört — halte die Tasten und sprich dabei.",
     "finaleError": "Das hat nicht geklappt: {{detail}}",
     "finaleSkipHint": "Kein Problem — du kannst direkt loslegen.",
+    "finaleHoldButton": "🎙 Halten & sprechen",
+    "finaleHoldRelease": "● Aufnahme … loslassen",
     "finishWithout": "Ohne Probe-Diktat starten",
     "finish": "Echo starten"
   },

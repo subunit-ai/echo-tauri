@@ -190,6 +190,68 @@
   margin-top: 6px;
 }
 
+/* ── Finale: press-and-hold record button (the reliable dictation trigger) ── */
+.intro-rec {
+  appearance: none;
+  border: 1px solid var(--rim-cta);
+  border-radius: 999px;
+  padding: 13px 30px;
+  margin: 4px 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #062029;
+  background: linear-gradient(180deg, var(--cyan-ink), var(--cyan));
+  box-shadow:
+    0 12px 32px -10px color-mix(in srgb, var(--cyan) 62%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition:
+    transform 0.15s var(--ease-spring),
+    box-shadow 0.18s var(--ease-glass),
+    background 0.18s ease;
+}
+.intro-rec:hover {
+  transform: translateY(-1px) scale(1.02);
+}
+.intro-rec:active {
+  transform: scale(0.98);
+}
+.intro-rec:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+/* Recording: pulse red so "hold, now speak, release" is unmistakable. */
+.intro-rec.is-rec {
+  color: #fff;
+  background: linear-gradient(180deg, #ff6b6b, #e23b3b);
+  border-color: color-mix(in srgb, #ff5c5c 60%, transparent);
+  box-shadow:
+    0 0 0 0 rgba(255, 92, 92, 0.55),
+    0 12px 32px -10px rgba(255, 92, 92, 0.5);
+  animation: intro-rec-pulse 1.3s ease-out infinite;
+}
+@keyframes intro-rec-pulse {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(255, 92, 92, 0.5),
+      0 12px 32px -10px rgba(255, 92, 92, 0.5);
+  }
+  70% {
+    box-shadow:
+      0 0 0 14px rgba(255, 92, 92, 0),
+      0 12px 32px -10px rgba(255, 92, 92, 0.5);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 92, 92, 0),
+      0 12px 32px -10px rgba(255, 92, 92, 0.5);
+  }
+}
+
 /* ── Chrome: skip (top right) + progress dots (bottom center) ── */
 .intro-skip {
   position: fixed;

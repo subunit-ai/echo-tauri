@@ -3,7 +3,7 @@
     "needsAccessibility": "Auto-paste needs Accessibility access. Your text is on the clipboard — enable Echo under System Settings → Privacy & Security → Accessibility."
   },
   "intro": {
-    "tagline": "Press. Speak. Done.",
+    "tagline": "Press. Speak.",
     "begin": "Get started",
     "skip": "Skip intro",
     "continue": "Continue",
@@ -33,6 +33,8 @@
     "finaleNothingHeard": "Nothing heard — keep holding the keys while you speak.",
     "finaleError": "That didn't work: {{detail}}",
     "finaleSkipHint": "No problem — you're ready to go.",
+    "finaleHoldButton": "🎙 Hold & speak",
+    "finaleHoldRelease": "● Recording … release",
     "finishWithout": "Start without a test dictation",
     "finish": "Launch Echo"
   },

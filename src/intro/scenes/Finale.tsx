@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { keyName, modifierName, parseCombo } from "../../lib/hotkeys";
 import { onState } from "../../lib/ipc";
@@ -40,6 +40,55 @@ export function Finale({ finish }: SceneProps) {
     [combo],
   );
 
+  // Start / stop a take — shared by BOTH the hotkey and the press-and-hold
+  // button. The button is the reliable trigger: holding the combo as a plain
+  // DOM event is fragile (macOS swallows ⌃Space for input-source switching,
+  // and a focused intro button would eat the keypress) — TJ saw the dictation
+  // "not work" because the take never started. A real "drücken & sprechen"
+  // button can never be intercepted. Both paths converge here.
+  const begin = useCallback(() => {
+    if (phaseRef.current === "recording" || phaseRef.current === "transcribing") return;
+    stopping.current = false;
+    setErrMsg(null);
+    setText("");
+    setPartial("");
+    hadPartial.current = false;
+    setPhase("recording");
+    invoke("start_recording").catch(() => {});
+    // Live partials: the recording streams to the server over one WebSocket
+    // and partial transcripts flow back while you're still speaking.
+    invoke("intro_stream_start").catch(() => {});
+  }, []);
+
+  const end = useCallback(async () => {
+    if (stopping.current || phaseRef.current !== "recording") return;
+    stopping.current = true;
+    setPhase("transcribing");
+    setAttempted(true);
+    // No stream_stop here — transcribe_preview FINISHES the stream: it
+    // flushes the audio tail and takes the server's final without
+    // re-uploading. Cancelling first would throw that away.
+    try {
+      const result = await invoke<string>("transcribe_preview");
+      setText(result);
+      setPhase("done");
+    } catch (e) {
+      const err = e as { code?: string; message?: string };
+      if (err?.code === "empty" || err?.code === "no_recording") {
+        setErrMsg(t("intro.finaleNothingHeard"));
+      } else {
+        setErrMsg(t("intro.finaleError", { detail: err?.message ?? String(e) }));
+      }
+      setPhase("error");
+    }
+  }, [t]);
+
+  // Nothing should be focused when the scene opens: a focused nav button would
+  // otherwise swallow Space (part of the default ⌃Space hotkey) as a click.
+  useEffect(() => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  }, []);
+
   useEffect(() => {
     const matchesKey = (e: KeyboardEvent) => keyName(e) === comboKey;
     const modsHeld = (e: KeyboardEvent) =>
@@ -53,42 +102,9 @@ export function Finale({ finish }: SceneProps) {
 
     const down = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      if (phaseRef.current === "recording" || phaseRef.current === "transcribing") return;
-      if (!matchesKey(e) || !modsHeld(e)) return;
+      if (!comboKey || !matchesKey(e) || !modsHeld(e)) return;
       e.preventDefault();
-      stopping.current = false;
-      setErrMsg(null);
-      setText("");
-      setPartial("");
-      hadPartial.current = false;
-      setPhase("recording");
-      invoke("start_recording").catch(() => {});
-      // Live partials: the recording streams to the server over one WebSocket
-      // and partial transcripts flow back while you're still speaking.
-      invoke("intro_stream_start").catch(() => {});
-    };
-
-    const stop = async () => {
-      if (stopping.current) return;
-      stopping.current = true;
-      setPhase("transcribing");
-      setAttempted(true);
-      // No stream_stop here — transcribe_preview FINISHES the stream: it
-      // flushes the audio tail and takes the server's final without
-      // re-uploading. Cancelling first would throw that away.
-      try {
-        const result = await invoke<string>("transcribe_preview");
-        setText(result);
-        setPhase("done");
-      } catch (e) {
-        const err = e as { code?: string; message?: string };
-        if (err?.code === "empty" || err?.code === "no_recording") {
-          setErrMsg(t("intro.finaleNothingHeard"));
-        } else {
-          setErrMsg(t("intro.finaleError", { detail: err?.message ?? String(e) }));
-        }
-        setPhase("error");
-      }
+      begin();
     };
 
     const up = (e: KeyboardEvent) => {
@@ -97,13 +113,13 @@ export function Finale({ finish }: SceneProps) {
       const token = modifierName(e.key) ?? keyName(e);
       if (token && (token === comboKey || comboMods.includes(token))) {
         e.preventDefault();
-        void stop();
+        void end();
       }
     };
 
     // Window lost focus mid-hold → treat as release so nothing keeps recording.
     const blur = () => {
-      if (phaseRef.current === "recording") void stop();
+      if (phaseRef.current === "recording") void end();
     };
 
     document.addEventListener("keydown", down);
@@ -114,7 +130,7 @@ export function Finale({ finish }: SceneProps) {
       document.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [comboKey, comboMods, t]);
+  }, [comboKey, comboMods, begin, end]);
 
   // Live partials stream in while recording — and during "transcribing",
   // where a late lookahead can still land while the final computes. Once the
@@ -220,6 +236,28 @@ export function Finale({ finish }: SceneProps) {
           {t("intro.finaleSkipHint")}
         </p>
       )}
+      {/* The reliable trigger: press and hold to dictate (pointer can't be
+          swallowed by the OS or a focused button the way ⌃Space can). The
+          hotkey above still works; this guarantees the take always starts. */}
+      <button
+        type="button"
+        className={`intro-rec ${phase === "recording" ? "is-rec" : ""}`}
+        disabled={phase === "transcribing"}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          begin();
+        }}
+        onPointerUp={(e) => {
+          e.preventDefault();
+          void end();
+        }}
+        onPointerLeave={() => {
+          if (phaseRef.current === "recording") void end();
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {phase === "recording" ? t("intro.finaleHoldRelease") : t("intro.finaleHoldButton")}
+      </button>
       <div className="intro-nav">
         {attempted ? (
           <button type="button" className="intro-btn" onClick={finish}>
