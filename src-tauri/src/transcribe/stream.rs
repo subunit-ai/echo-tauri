@@ -123,30 +123,63 @@ fn live_commit(l: &mut Live, cur: &str) {
     }
 }
 
-/// Reconcile the live-typed text with the server's authoritative final: backspace
-/// whatever we typed past their common prefix, then type the remaining tail — so
-/// the target ends with EXACTLY the final transcript. Usually the common prefix
-/// is everything we typed, so this just appends the tail.
+/// Largest trailing divergence we will REWRITE (backspace + retype) at finish.
+/// Backspacing is destructive — it eats whatever sits at the caret, including the
+/// user's own text — so we cap it hard. The common case (final simply extends the
+/// live text) deletes nothing; a small last-word refinement is rewritten; anything
+/// larger (e.g. the final recased/repunctuated text near the START) is left alone
+/// and we only append the missing tail. This is what stops the "wild delete".
+const MAX_REWRITE: usize = 24;
+
+/// Reconcile the live-typed text with the server's authoritative final WITHOUT
+/// ever mass-deleting. The normal case — `confirmed` is a prefix of the final —
+/// just appends the remaining tail (zero backspaces). A short trailing mismatch
+/// (last word or two) is rewritten. A large early mismatch (recasing/punctuation
+/// the final applied to text we already typed) is NOT rewritten: we keep the live
+/// text and append only the words the final added beyond what we typed, so the
+/// worst case is a minor casing/punct difference — never a destructive purge.
 fn live_reconcile(l: &Live, final_text: &str) {
-    let common: String = l
+    if l.confirmed.is_empty() {
+        if !final_text.is_empty() {
+            crate::inject::inject_text_delta(final_text);
+            LIVE_INJECTED.fetch_add(final_text.chars().count(), Ordering::Relaxed);
+        }
+        return;
+    }
+    // Chars of the live text that diverge from the final (after the common prefix).
+    let common = l
         .confirmed
         .chars()
         .zip(final_text.chars())
         .take_while(|(a, b)| a == b)
-        .map(|(a, _)| a)
-        .collect();
-    let to_delete = l
-        .confirmed
-        .chars()
-        .count()
-        .saturating_sub(common.chars().count());
-    if to_delete > 0 {
-        crate::inject::inject_backspaces(to_delete);
+        .count();
+    let to_delete = l.confirmed.chars().count().saturating_sub(common);
+
+    if to_delete <= MAX_REWRITE {
+        // Safe: rewrite only the short trailing divergence (often zero → pure append).
+        if to_delete > 0 {
+            crate::inject::inject_backspaces(to_delete);
+        }
+        let tail: String = final_text.chars().skip(common).collect();
+        if !tail.is_empty() {
+            crate::inject::inject_text_delta(&tail);
+            LIVE_INJECTED.fetch_add(tail.chars().count(), Ordering::Relaxed);
+        }
+        return;
     }
-    let tail = &final_text[common.len()..];
+
+    // Large divergence → APPEND-ONLY. Commits are word-aligned, so append the
+    // final's words beyond the ones we already typed (no deletion, no duplication).
+    let typed_words = l.confirmed.split_whitespace().count();
+    let tail = final_text
+        .split_whitespace()
+        .skip(typed_words)
+        .collect::<Vec<_>>()
+        .join(" ");
     if !tail.is_empty() {
-        crate::inject::inject_text_delta(tail);
-        LIVE_INJECTED.fetch_add(tail.chars().count(), Ordering::Relaxed);
+        let out = format!(" {tail}"); // `confirmed` never ends in whitespace
+        crate::inject::inject_text_delta(&out);
+        LIVE_INJECTED.fetch_add(out.chars().count(), Ordering::Relaxed);
     }
 }
 

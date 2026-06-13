@@ -158,6 +158,29 @@ mod mac {
         }
         Ok(())
     }
+
+    /// `kVK_Delete` — the Backspace key's virtual keycode on macOS.
+    const KVK_DELETE: u16 = 51;
+
+    /// Send `count` Backspaces via CGEvent with the flags zeroed — used by the
+    /// live-typing finish-reconcile. Flag-zeroing matters here too: if a held
+    /// `<ctrl>` rode the event it would become Ctrl+Backspace = DELETE WHOLE WORD,
+    /// turning a few char-deletes into a wild multi-word purge. Main thread only.
+    pub fn backspaces(count: usize) -> anyhow::Result<()> {
+        let src = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+            .map_err(|_| anyhow::anyhow!("CGEventSource::new failed"))?;
+        for _ in 0..count {
+            let down = CGEvent::new_keyboard_event(src.clone(), KVK_DELETE, true)
+                .map_err(|_| anyhow::anyhow!("backspace keyDown failed"))?;
+            down.set_flags(CGEventFlags::empty());
+            down.post(CGEventTapLocation::HID);
+            let up = CGEvent::new_keyboard_event(src.clone(), KVK_DELETE, false)
+                .map_err(|_| anyhow::anyhow!("backspace keyUp failed"))?;
+            up.set_flags(CGEventFlags::empty());
+            up.post(CGEventTapLocation::HID);
+        }
+        Ok(())
+    }
 }
 
 /// A captured target window. Platform-encoded in `id` (empty = none) so the
@@ -646,13 +669,38 @@ pub fn inject_text_delta(text: &str) {
     }
     #[cfg(target_os = "macos")]
     {
-        macos_inject(text.to_string(), true, false, None, false);
+        macos_type_live(text.to_string());
     }
     #[cfg(not(target_os = "macos"))]
     {
         if let Err(e) = type_text(text) {
             log::debug!("inject_text_delta: type failed: {e}");
         }
+    }
+}
+
+/// macOS-only LEAN live-typing path: marshal to the main thread (synthetic input
+/// isn't thread-safe there) and type via `mac::type_unicode`. Deliberately omits
+/// the modifier-release + 20 ms settle + `Enigo::new` that `macos_inject` does:
+/// `type_unicode` zeroes the event flags per character, so a held modifier is
+/// already neutralised — and on the LIVE hot path (one call per stable word) those
+/// extras serialised on the main thread and made the typed text lag visibly behind
+/// the on-screen caption. AX is checked without a prompt (already primed at start).
+#[cfg(target_os = "macos")]
+fn macos_type_live(text: String) {
+    let Some(app) = APP_HANDLE.get() else {
+        log::error!("live type: app handle not set — cannot reach main thread");
+        return;
+    };
+    if let Err(e) = app.run_on_main_thread(move || {
+        if !mac::is_trusted(false) {
+            return; // no AX permission → silent (clipboard/manual paste still works)
+        }
+        if let Err(e) = mac::type_unicode(&text) {
+            log::debug!("live type: {e}");
+        }
+    }) {
+        log::debug!("live type: run_on_main_thread failed: {e}");
     }
 }
 
@@ -689,19 +737,13 @@ fn macos_backspaces(count: usize) {
         return;
     };
     if let Err(e) = app.run_on_main_thread(move || {
-        use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         if !mac::is_trusted(false) {
             return;
         }
-        let mut enigo = match Enigo::new(&Settings::default()) {
-            Ok(e) => e,
-            Err(_) => return,
-        };
-        for k in [Key::Control, Key::Shift, Key::Alt, Key::Meta] {
-            let _ = enigo.key(k, Direction::Release);
-        }
-        for _ in 0..count {
-            let _ = enigo.key(Key::Backspace, Direction::Click);
+        // Flag-zeroed Backspace events (mac::backspaces): immune to a held <ctrl>,
+        // which would otherwise make each one a Ctrl+Backspace word-delete.
+        if let Err(e) = mac::backspaces(count) {
+            log::debug!("macos backspaces: {e}");
         }
     }) {
         log::debug!("macos backspaces: run_on_main_thread failed: {e}");
