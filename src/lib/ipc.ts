@@ -106,7 +106,8 @@ export const setConfig = (config: Config) => invoke<void>("set_config", { config
 /** Toggle launch-at-login (flips the OS autostart entry + persists). */
 export const setAutostart = (enabled: boolean) =>
   invoke<void>("set_autostart", { enabled });
-/** Persist a drag-set orb position (logical screen px) as orb_position custom-x-y. */
+/** Persist a drag-set orb position (logical screen px). Takes the orb square's
+ *  top-left; Rust stores the CENTRE ("center-x-y") so resizes scale in place. */
 export const setOrbPosition = (x: number, y: number) =>
   invoke<void>("set_orb_position", { x, y });
 

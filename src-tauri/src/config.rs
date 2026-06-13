@@ -125,7 +125,8 @@ pub struct Config {
 
     pub use_orb_overlay: bool,
     pub orb_color_theme: String,
-    /// named anchor (bottom-center, ...) or "custom-X-Y"
+    /// named anchor (bottom-center, ...) or drag-set "center-X-Y" (orb centre,
+    /// logical px; legacy "custom-X-Y" = orb top-left, converted in migrate())
     pub orb_position: String,
     pub orb_idle_pulse: bool,
     /// ping | sphere | sonar | bars | wave | classic
@@ -473,6 +474,22 @@ impl Config {
             self.sound_start_enabled = self.sound_enabled;
             self.sound_paste_enabled = self.sound_enabled;
             self.sound_split_migrated = true;
+        }
+        // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
+        // of its top-left ("custom-x-y"), so size changes scale the orb in place
+        // around that point instead of letting it drift. Convert legacy values
+        // using the currently configured size (the best available estimate of
+        // the diameter they were saved with). Self-guarding: once converted, the
+        // prefix is "center-" and this never matches again.
+        if let Some(rest) = self.orb_position.clone().strip_prefix("custom-") {
+            if let Some((x, y)) = crate::overlay::parse_pos_pair(rest) {
+                let dim = crate::overlay::orb_dim(self.orb_overlay_size as f64);
+                self.orb_position = format!(
+                    "center-{}-{}",
+                    (x + dim / 2.0).round() as i64,
+                    (y + dim / 2.0).round() as i64
+                );
+            }
         }
         self.route_default_engine();
     }

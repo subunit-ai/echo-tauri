@@ -453,13 +453,21 @@ pub fn meetings_list() -> Vec<serde_json::Value> {
     crate::store::list_meetings()
 }
 
-/// Persist a drag-set overlay position (logical screen px) as `custom-x-y` so
-/// the orb reopens where the user dropped it. Called from the overlay on drag.
+/// Persist a drag-set overlay position (logical screen px) as `center-x-y` —
+/// the orb's CENTRE, not its top-left — so later size changes scale the orb in
+/// place around that point instead of letting it drift. The overlay still
+/// reports the orb square's top-left (its historical contract); the centre is
+/// derived here from the configured size. Called from the overlay on drag.
 #[tauri::command]
 pub fn set_orb_position(app: AppHandle, state: State<'_, AppState>, x: f64, y: f64) -> Result<(), String> {
     let cfg = {
         let mut c = state.config.lock();
-        c.orb_position = format!("custom-{}-{}", x.round() as i64, y.round() as i64);
+        let dim = crate::overlay::orb_dim(c.orb_overlay_size as f64);
+        c.orb_position = format!(
+            "center-{}-{}",
+            (x + dim / 2.0).round() as i64,
+            (y + dim / 2.0).round() as i64
+        );
         c.clone()
     };
     cfg.save().map_err(|e| e.to_string())?;
