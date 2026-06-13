@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { keyName, modifierName, parseCombo } from "../../lib/hotkeys";
+import { onState } from "../../lib/ipc";
 import { useConfig } from "../../state/ConfigContext";
 import { VirtualKeyboard, keyLabel } from "../VirtualKeyboard";
 import { VoiceCanvas } from "../VoiceCanvas";
@@ -26,6 +27,11 @@ export function Finale({ finish }: SceneProps) {
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   const hadPartial = useRef(false);
+  // Synchronous re-entry guard: keyup + window-blur can fire in the same tick,
+  // and phaseRef only updates after the re-render — without this, a double
+  // stop() would run transcribe_preview twice and the second call's
+  // "no_recording" error would overwrite a perfectly good transcript.
+  const stopping = useRef(false);
 
   const combo = useMemo(() => parseCombo(config?.hotkey ?? ""), [config?.hotkey]);
   const comboKey = combo.find((k) => !["ctrl", "shift", "alt", "cmd"].includes(k)) ?? "";
@@ -50,21 +56,26 @@ export function Finale({ finish }: SceneProps) {
       if (phaseRef.current === "recording" || phaseRef.current === "transcribing") return;
       if (!matchesKey(e) || !modsHeld(e)) return;
       e.preventDefault();
+      stopping.current = false;
       setErrMsg(null);
       setText("");
       setPartial("");
       hadPartial.current = false;
       setPhase("recording");
       invoke("start_recording").catch(() => {});
-      // Live partials: the growing recording is re-transcribed in the
-      // background and streams into the card while you're still speaking.
+      // Live partials: the recording streams to the server over one WebSocket
+      // and partial transcripts flow back while you're still speaking.
       invoke("intro_stream_start").catch(() => {});
     };
 
     const stop = async () => {
+      if (stopping.current) return;
+      stopping.current = true;
       setPhase("transcribing");
       setAttempted(true);
-      invoke("intro_stream_stop").catch(() => {});
+      // No stream_stop here — transcribe_preview FINISHES the stream: it
+      // flushes the audio tail and takes the server's final without
+      // re-uploading. Cancelling first would throw that away.
       try {
         const result = await invoke<string>("transcribe_preview");
         setText(result);
@@ -105,13 +116,30 @@ export function Finale({ finish }: SceneProps) {
     };
   }, [comboKey, comboMods, t]);
 
-  // Live partials stream in while recording (ignored in any other phase —
-  // a request that was in flight on release must not overwrite the final).
+  // Live partials stream in while recording — and during "transcribing",
+  // where a late lookahead can still land while the final computes. Once the
+  // phase is done/error the final owns the card.
   useEffect(() => {
-    const sub = listen<string>("echo://intro-partial", (e) => {
-      if (phaseRef.current !== "recording") return;
+    const sub = listen<string>("echo://stream-partial", (e) => {
+      if (phaseRef.current !== "recording" && phaseRef.current !== "transcribing") return;
       hadPartial.current = true;
       setPartial(e.payload);
+    });
+    return () => {
+      sub.then((un) => un());
+    };
+  }, []);
+
+  // Mic-open failures (no device / busy / permission) surface as engine error
+  // states, not as a transcribe_preview rejection — without this listener a
+  // dead mic would read as a confusing "nothing heard" after release.
+  useEffect(() => {
+    const sub = onState((p) => {
+      if (p.state === "error" && phaseRef.current === "recording" && p.detail) {
+        setErrMsg(p.detail);
+        setPhase("error");
+        invoke("intro_stream_stop").catch(() => {});
+      }
     });
     return () => {
       sub.then((un) => un());
@@ -175,6 +203,10 @@ export function Finale({ finish }: SceneProps) {
           ) : (
             typed.shown
           )
+        ) : partial ? (
+          // Error after live partials: keep the user's words on screen (the
+          // hint below explains) instead of wiping them with an error line.
+          partial
         ) : (
           (errMsg ?? "…")
         )}
@@ -182,7 +214,12 @@ export function Finale({ finish }: SceneProps) {
       {phase === "done" && (hadPartial.current || typed.done) && (
         <p className="intro-hint intro-fade-late">{t("intro.finaleSuccess")}</p>
       )}
-      {phase === "error" && <p className="intro-hint">{t("intro.finaleSkipHint")}</p>}
+      {phase === "error" && (
+        <p className="intro-hint">
+          {partial && errMsg ? `${errMsg} · ` : ""}
+          {t("intro.finaleSkipHint")}
+        </p>
+      )}
       <div className="intro-nav">
         {attempted ? (
           <button type="button" className="intro-btn" onClick={finish}>

@@ -7,6 +7,10 @@ import i18n from "../i18n";
 /** Minimal structural event type — works for React and native KeyboardEvent. */
 export interface KeyLike {
   key: string;
+  /** Physical-key code (e.g. "KeyD"); preferred for letters/digits because on
+   *  macOS `key` reports the COMPOSED character for Option-combos (⌥D → "∂"),
+   *  which the global-shortcut parser could never register. */
+  code?: string;
   ctrlKey: boolean;
   shiftKey: boolean;
   altKey: boolean;
@@ -29,7 +33,14 @@ export function modifierName(key: string): string | null {
 export function keyName(e: KeyLike): string | null {
   const k = e.key;
   if (MODIFIER_KEYS[k]) return null; // pure modifier — keep waiting
-  if (k === " " || k === "Spacebar") return "space";
+  // Letters/digits via the PHYSICAL code: with Option/Shift held, `key` is the
+  // composed character (⌥D → "∂", ⇧2 → "\"") — useless as an accelerator token.
+  const code = e.code ?? "";
+  const letter = /^Key([A-Z])$/.exec(code);
+  if (letter) return letter[1].toLowerCase();
+  const digit = /^Digit([0-9])$/.exec(code);
+  if (digit) return digit[1];
+  if (k === " " || k === "Spacebar" || code === "Space") return "space";
   const map: Record<string, string> = {
     ArrowUp: "up",
     ArrowDown: "down",
@@ -42,7 +53,7 @@ export function keyName(e: KeyLike): string | null {
     Delete: "delete",
   };
   if (map[k]) return map[k];
-  return k.toLowerCase(); // letters, digits, F-keys (f1…)
+  return k.toLowerCase(); // F-keys (f1…) and the rest
 }
 
 /** Modifier tokens currently held, in canonical order. */
