@@ -38,6 +38,15 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
     if account == "local" {
         return Ok(());
     }
+    // Refresh the access token BEFORE using it. At startup (and after a long
+    // idle) the token loaded from disk is usually expired — without this the
+    // very first sync 401s (TJ's log: "presets sync 401" right after launch)
+    // and orb profiles never reach the cloud until the token happens to be
+    // fresh. ensure_fresh is a fast no-op when the token is still valid, and
+    // serialized so it can't race the other refreshers. Re-read the config
+    // afterwards to pick up the rotated access token.
+    crate::auth::ensure_fresh(app);
+    let cfg = app.state::<AppState>().config.lock().clone();
     if cfg.subunit_access_token.is_empty() && cfg.subunit_api_key.is_empty() {
         return Ok(());
     }
@@ -48,7 +57,7 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(6))
         .build()?;
-    let mut req = client.post(endpoint(cfg)).json(&body);
+    let mut req = client.post(endpoint(&cfg)).json(&body);
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);
     } else {
