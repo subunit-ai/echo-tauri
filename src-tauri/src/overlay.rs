@@ -32,6 +32,12 @@ fn window_size(dim: f64) -> (f64, f64) {
     (dim + 2.0 * GUTTER_X, dim + GUTTER_TOP + GUTTER_BOTTOM)
 }
 
+/// Orb diameter (logical px) for a configured size multiplier — the ONE place
+/// this formula lives; config migration and the drag-save derive centres from it.
+pub fn orb_dim(size_mult: f64) -> f64 {
+    (150.0 * size_mult).clamp(80.0, 480.0)
+}
+
 /// Start the cursor hit-test loop (idempotent via `hit_test_active`). While the
 /// orb is shown it polls the global cursor and runs a small engage state machine:
 /// disengaged → the only hot zone is the orb's inscribed circle (bottom-center
@@ -118,7 +124,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         let c = st.config.lock();
         (c.orb_overlay_size as f64, c.orb_position.clone(), c.use_orb_overlay)
     };
-    let dim = (150.0 * size_mult).clamp(80.0, 480.0);
+    let dim = orb_dim(size_mult);
     let (w, h) = window_size(dim);
 
     let win = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
@@ -187,7 +193,7 @@ pub fn apply_config(app: &AppHandle) {
     let Some(win) = app.get_webview_window("overlay") else {
         return;
     };
-    let dim = (150.0 * size_mult).clamp(80.0, 480.0);
+    let dim = orb_dim(size_mult);
     let (w, h) = window_size(dim);
     let _ = win.set_size(LogicalSize::new(w, h));
     // Orb = dynamic cursor hit-test (idempotent), bubble = always click-through.
@@ -217,11 +223,28 @@ pub fn apply_config(app: &AppHandle) {
     );
 }
 
-/// Place the overlay so the ORB (not the window) sits at the anchor. The anchor
-/// string — including drag-saved "custom-<x>-<y>" values from before the gutter
-/// remodel — always describes the orb square's top-left in logical screen px;
-/// the window extends beyond it by the gutters. The final window position is
-/// clamped fully on-screen so the satellite islands always have room to open.
+/// Parse the "<x>-<y>" tail of a saved position. x can itself be negative
+/// (monitor left of primary → "…--12-300"), so a fixed split on the first '-'
+/// mis-parses; try every '-' as the separator until both halves parse.
+pub fn parse_pos_pair(rest: &str) -> Option<(f64, f64)> {
+    rest.match_indices('-').find_map(|(i, _)| {
+        if i == 0 {
+            return None; // leading '-' is x's sign, not the separator
+        }
+        match (rest[..i].parse::<f64>(), rest[i + 1..].parse::<f64>()) {
+            (Ok(x), Ok(y)) => Some((x, y)),
+            _ => None,
+        }
+    })
+}
+
+/// Place the overlay so the ORB (not the window) sits at the anchor. Drag-set
+/// positions are stored as "center-<x>-<y>" — the orb's CENTRE in logical
+/// screen px — so a size change scales the orb in place around that point
+/// instead of letting it wander (TJ: "es muss an der Stelle bleiben").
+/// Legacy "custom-<x>-<y>" values (orb top-left; pre-0.5.4 saves, normally
+/// converted by Config::migrate) still place correctly. The final window
+/// position is clamped fully on-screen so the islands always have room.
 fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let monitor = match win.current_monitor() {
         Ok(Some(m)) => m,
@@ -232,21 +255,11 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
     let mpos = monitor.position().to_logical::<f64>(scale);
     let (w, h) = window_size(dim);
 
-    // Drag-set custom position: "custom-<x>-<y>" (orb top-left, logical px).
-    // x can itself be negative (monitor left of primary → "custom--12-300"), so
-    // a fixed split on the first '-' mis-parses; try every '-' as the separator
-    // until both halves parse as numbers.
-    let custom = anchor.strip_prefix("custom-").and_then(|rest| {
-        rest.match_indices('-').find_map(|(i, _)| {
-            if i == 0 {
-                return None; // leading '-' is x's sign, not the separator
-            }
-            match (rest[..i].parse::<f64>(), rest[i + 1..].parse::<f64>()) {
-                (Ok(x), Ok(y)) => Some((x, y)),
-                _ => None,
-            }
-        })
-    });
+    let custom = anchor
+        .strip_prefix("center-")
+        .and_then(parse_pos_pair)
+        .map(|(cx, cy)| (cx - dim / 2.0, cy - dim / 2.0))
+        .or_else(|| anchor.strip_prefix("custom-").and_then(parse_pos_pair));
 
     let (orb_x, orb_y) = custom.unwrap_or_else(|| {
         let margin = 40.0;
@@ -275,7 +288,7 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
         .min(mpos.y + msize.height - h)
         .max(mpos.y);
     // Tell the orb this move is OURS (anchor placement), not a user drag — its
-    // onMoved handler would otherwise debounce-save the new spot as "custom-…",
+    // onMoved handler would otherwise debounce-save the new spot as "center-…",
     // silently overwriting a freshly-picked named anchor like "bottom-center"
     // (the dropdown choice never stuck).
     let _ = win.emit("echo://orb-anchored", ());

@@ -564,17 +564,18 @@ export function Settings() {
               <ColorSwatch value={c.orb_color_error} onChange={(v) => set("orb_color_error", v)} />
             </Row>
             <Row name={t("settings.orbPosition")}>
-              {/* After a drag the saved value is "custom-<x>-<y>", which matches
-                  no named option — without a visible "custom" entry the select
-                  rendered blank/first-option and re-picking an anchor felt like
-                  it did nothing. Show the truth, and make every named pick fire. */}
+              {/* After a drag the saved value is "center-<x>-<y>" (legacy:
+                  "custom-<x>-<y>"), which matches no named option — without a
+                  visible "custom" entry the select rendered blank/first-option
+                  and re-picking an anchor felt like it did nothing. Show the
+                  truth, and make every named pick fire. */}
               <Sel
-                value={c.orb_position.startsWith("custom") ? "custom" : c.orb_position}
+                value={/^(custom|center)-/.test(c.orb_position) ? "custom" : c.orb_position}
                 onChange={(v) => {
                   if (v !== "custom") set("orb_position", v);
                 }}
                 options={[
-                  ...(c.orb_position.startsWith("custom")
+                  ...(/^(custom|center)-/.test(c.orb_position)
                     ? [["custom", t("settings.posCustom")] as [string, string]]
                     : []),
                   ["bottom-center", t("settings.posBottomCenter")],
