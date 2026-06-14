@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { onState, type EngineState } from "../lib/ipc";
-import { playSound } from "../lib/sounds";
+import { playSound, preloadSounds } from "../lib/sounds";
 import { useConfig } from "../state/ConfigContext";
 
 /** Subtle UI sounds: an activation cue on record-start, a paste cue on done.
@@ -12,6 +12,9 @@ export function SoundFx() {
   const last = useRef<EngineState>("idle");
 
   useEffect(() => {
+    // Decode the cues + warm the AudioContext up front so the very first
+    // record-start sound is instant (no fetch/decode/resume on the hot path).
+    preloadSounds();
     const un = onState((p) => {
       const c = cfgRef.current;
       const vol = c?.sound_volume ?? 0.6;
