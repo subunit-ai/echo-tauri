@@ -93,7 +93,7 @@ pub fn live_injected_chars() -> usize {
 // so a thread-local needs no locking.
 struct DebugRec {
     start: Instant,
-    partials: Vec<(u64, String, String)>, // (t_ms, partial_text, server committed prefix)
+    partials: Vec<(u64, String, String)>, // (t_ms, partial_text, server stable prefix)
 }
 thread_local! {
     static DBG: std::cell::RefCell<Option<DebugRec>> = const { std::cell::RefCell::new(None) };
@@ -103,11 +103,11 @@ fn dbg_begin() {
         DBG.with(|d| *d.borrow_mut() = Some(DebugRec { start: Instant::now(), partials: Vec::new() }));
     }
 }
-fn dbg_partial(text: &str, committed: Option<&str>) {
+fn dbg_partial(text: &str, stable: Option<&str>) {
     DBG.with(|d| {
         if let Some(r) = d.borrow_mut().as_mut() {
             let t = r.start.elapsed().as_millis() as u64;
-            r.partials.push((t, text.to_string(), committed.unwrap_or_default().to_string()));
+            r.partials.push((t, text.to_string(), stable.unwrap_or_default().to_string()));
         }
     });
 }
@@ -126,7 +126,7 @@ fn dbg_finish(final_text: &str) {
         let fixture = serde_json::json!({
             "final": final_text,
             "t_final_ms": t_final,
-            "partials": r.partials.iter().map(|(t, s, c)| serde_json::json!({"t_ms": t, "text": s, "committed": c})).collect::<Vec<_>>(),
+            "partials": r.partials.iter().map(|(t, s, c)| serde_json::json!({"t_ms": t, "text": s, "stable": c})).collect::<Vec<_>>(),
         });
         let path = dir.join(format!("{ts}.json"));
         if std::fs::write(&path, serde_json::to_string_pretty(&fixture).unwrap_or_default()).is_ok() {
@@ -159,29 +159,25 @@ fn agreed_stable(prev: &str, cur: &str) -> String {
     }
 }
 
-/// A live partial arrived — steer the typed text toward its agreed-stable prefix.
-/// Crucially this must NOT freeze when the server revises already-typed text
-/// (e.g. inserts a comma / recases a word once the tail settles): the old
-/// "append only if `stable` still starts with `confirmed`" guard stalled there
-/// and dumped the remainder late at finish ("breaks after the comma"). We now
-/// reconcile toward the stable text on every partial instead (bounded — see
-/// `apply_target`), so typing keeps flowing.
-fn live_commit(l: &mut Live, cur: &str, _committed: Option<&str>) {
-    // Type the client agreed-stable prefix of the partial text: the common prefix
-    // of two consecutive partials, trimmed to a word boundary, so only text that
-    // survived two decodes is typed (LocalAgreement). It tracks ~1 word behind
-    // live speech and flows continuously WITHOUT needing a pause.
-    //
-    // We deliberately do NOT mix in the server's `committed` prefix here. With the
-    // hybrid server (whole-buffer COMMIT passes + uncommitted-tail LIVE passes) the
-    // partial text is `committed (frozen) + tail`, so the committed region never
-    // wobbles and is already a prefix of agreed-stable — agreed-stable ≥ committed
-    // by construction. Typing committed separately only risked a raw/cleaned
-    // divergence mid-sentence (→ a multi-second WAIT freeze). agreed-stable alone
-    // is monotonic-enough; plan_target bounds the rare tail revision (recase/comma
-    // ≤ MAX_REWRITE) and never wild-deletes. `committed` is still used at the final
-    // reconcile via the server's authoritative final.
-    let target = agreed_stable(&l.prev_partial, cur);
+/// A live partial arrived — steer the typed text toward the server's word-level
+/// `stable` prefix when present, else the client agreed-stable of two partials.
+///
+/// The server (Option 1) now accumulates an APPEND-ONLY word-level LocalAgreement
+/// prefix and ships it as `stable`: a word joins once it survived two consecutive
+/// decodes, compared case/punctuation-insensitively. That normalisation is the
+/// key — it lets the whole-buffer COMMIT pass and the context-window LIVE pass
+/// agree (they differ only in punctuation/casing of the overlap, which collapsed
+/// the client's char-level agreed-stable and froze typing mid-sentence). `stable`
+/// grows word-by-word even during a pauseless run-on and never shrinks, so typing
+/// it is a near-pure append. Fallback to client agreed-stable for an older server
+/// that doesn't send `stable`. Either way `plan_target`/`apply_target` bound any
+/// divergence and never wild-delete; the release-time reconcile fixes residuals.
+fn live_commit(l: &mut Live, cur: &str, stable: Option<&str>) {
+    let target = match stable {
+        Some(s) if !s.is_empty() => s.to_string(),
+        Some(_) => return, // server sent an empty stable prefix → nothing to type yet
+        None => agreed_stable(&l.prev_partial, cur),
+    };
     l.prev_partial = cur.to_string();
     if !target.is_empty() {
         apply_target(l, &target, false);
@@ -615,12 +611,12 @@ fn drain_partials(
                 if v.get("type").and_then(|t| t.as_str()) == Some("partial") {
                     if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                         let _ = app.emit("echo://stream-partial", text.to_string());
-                        let committed = v.get("committed").and_then(|c| c.as_str());
-                        dbg_partial(text, committed);
-                        // Live mode: type the client agreed-stable prefix (committed
-                        // is carried only for the final reconcile — see live_commit).
+                        // `stable` = server word-level append-only prefix (Option 1);
+                        // that is what the live path types. Captured for the fixture.
+                        let stable = v.get("stable").and_then(|c| c.as_str());
+                        dbg_partial(text, stable);
                         if let Some(l) = live.as_deref_mut() {
-                            live_commit(l, text, committed);
+                            live_commit(l, text, stable);
                         }
                     }
                 }
@@ -753,15 +749,17 @@ mod tests {
                 }
             }
         };
-        for (t, cur, committed) in partials {
+        for (t, cur, stable) in partials {
             max_partial_gap = max_partial_gap.max(t.saturating_sub(prev_t));
             prev_t = *t;
-            // Mirror live_commit: type the client agreed-stable prefix of the RAW
-            // partial text only. (Mixing in the server's CLEANED committed prefix
-            // diverged from the raw-typed buffer mid-sentence → plan_target WAIT →
-            // multi-second freeze. committed is left for the final reconcile.)
-            let _ = committed;
-            let target = agreed_stable(&prev, cur);
+            // Mirror live_commit: type the server's word-level append-only `stable`
+            // prefix when the fixture carries one (Option 1); else fall back to the
+            // client agreed-stable of two consecutive partials (older fixtures).
+            let target = if !stable.is_empty() {
+                stable.clone()
+            } else {
+                agreed_stable(&prev, cur)
+            };
             prev = cur.clone();
             if target.is_empty() {
                 continue;
@@ -888,10 +886,13 @@ mod tests {
                         match v["type"].as_str() {
                             Some("partial") => {
                                 if let Some(s) = v["text"].as_str() {
+                                    let stable = v["stable"].as_str()
+                                        .or_else(|| v["committed"].as_str())
+                                        .unwrap_or_default();
                                     partials.push((
                                         start.elapsed().as_millis() as u64,
                                         s.to_string(),
-                                        v["committed"].as_str().unwrap_or_default().to_string(),
+                                        stable.to_string(),
                                     ));
                                 }
                             }
@@ -960,7 +961,10 @@ mod tests {
                 (
                     p["t_ms"].as_u64().unwrap_or(0),
                     p["text"].as_str().unwrap_or_default().to_string(),
-                    p["committed"].as_str().unwrap_or_default().to_string(),
+                    p["stable"].as_str()
+                        .or_else(|| p["committed"].as_str())
+                        .unwrap_or_default()
+                        .to_string(),
                 )
             })
             .collect();
@@ -1140,7 +1144,7 @@ fn finish_flow(
                         // Late lookahead while the final computes — still useful.
                         if let Some(text) = v.get("text").and_then(|t| t.as_str()) {
                             let _ = app.emit("echo://stream-partial", text.to_string());
-                            dbg_partial(text, v.get("committed").and_then(|c| c.as_str()));
+                            dbg_partial(text, v.get("stable").and_then(|c| c.as_str()));
                         }
                     }
                     Some("error") => {
