@@ -166,24 +166,22 @@ fn agreed_stable(prev: &str, cur: &str) -> String {
 /// and dumped the remainder late at finish ("breaks after the comma"). We now
 /// reconcile toward the stable text on every partial instead (bounded — see
 /// `apply_target`), so typing keeps flowing.
-fn live_commit(l: &mut Live, cur: &str, committed: Option<&str>) {
-    // Type the LONGER of two stable targets:
-    //  - agreed-stable (client LocalAgreement): the common prefix of two consecutive
-    //    partials, trimmed to a word boundary. Tracks ~1 word behind live speech, so
-    //    it flows continuously WITHOUT needing a pause.
-    //  - the server's committed prefix: final-quality and FROZEN (only ever extended),
-    //    but it ONLY advances at VAD silence boundaries — through a long run-on
-    //    sentence it stays put for many seconds (that was the freeze: first chunk
-    //    typed, then nothing until the next pause / the final).
-    // Whichever is longer wins: agreed-stable keeps typing during continuous speech,
-    // committed leaps ahead with quality-corrected text at pauses. plan_target bounds
-    // any divergence (small recase/comma → ≤MAX_REWRITE rewrite; large mid-sentence →
-    // wait, then append-only at the final) so this never wild-deletes.
-    let ag = agreed_stable(&l.prev_partial, cur);
-    let target = match committed {
-        Some(c) if c.chars().count() > ag.chars().count() => c.to_string(),
-        _ => ag,
-    };
+fn live_commit(l: &mut Live, cur: &str, _committed: Option<&str>) {
+    // Type the client agreed-stable prefix of the partial text: the common prefix
+    // of two consecutive partials, trimmed to a word boundary, so only text that
+    // survived two decodes is typed (LocalAgreement). It tracks ~1 word behind
+    // live speech and flows continuously WITHOUT needing a pause.
+    //
+    // We deliberately do NOT mix in the server's `committed` prefix here. With the
+    // hybrid server (whole-buffer COMMIT passes + uncommitted-tail LIVE passes) the
+    // partial text is `committed (frozen) + tail`, so the committed region never
+    // wobbles and is already a prefix of agreed-stable — agreed-stable ≥ committed
+    // by construction. Typing committed separately only risked a raw/cleaned
+    // divergence mid-sentence (→ a multi-second WAIT freeze). agreed-stable alone
+    // is monotonic-enough; plan_target bounds the rare tail revision (recase/comma
+    // ≤ MAX_REWRITE) and never wild-deletes. `committed` is still used at the final
+    // reconcile via the server's authoritative final.
+    let target = agreed_stable(&l.prev_partial, cur);
     l.prev_partial = cur.to_string();
     if !target.is_empty() {
         apply_target(l, &target, false);
@@ -619,7 +617,8 @@ fn drain_partials(
                         let _ = app.emit("echo://stream-partial", text.to_string());
                         let committed = v.get("committed").and_then(|c| c.as_str());
                         dbg_partial(text, committed);
-                        // Live mode: type the server's committed (frozen) prefix.
+                        // Live mode: type the client agreed-stable prefix (committed
+                        // is carried only for the final reconcile — see live_commit).
                         if let Some(l) = live.as_deref_mut() {
                             live_commit(l, text, committed);
                         }
@@ -757,22 +756,23 @@ mod tests {
         for (t, cur, committed) in partials {
             max_partial_gap = max_partial_gap.max(t.saturating_sub(prev_t));
             prev_t = *t;
-            // Mirror live_commit: type the LONGER of agreed-stable and the server's
-            // committed prefix. agreed-stable tracks ~1 word behind live speech (fast,
-            // no pause needed); committed is final-quality but only advances at VAD
-            // pauses (it would freeze through long run-on sentences). The longer wins:
-            // fast during continuous speech, quality-corrected at pauses.
-            let ag = agreed_stable(&prev, cur);
-            let target = if committed.chars().count() > ag.chars().count() {
-                committed.clone()
-            } else {
-                ag
-            };
+            // Mirror live_commit: type the client agreed-stable prefix of the RAW
+            // partial text only. (Mixing in the server's CLEANED committed prefix
+            // diverged from the raw-typed buffer mid-sentence → plan_target WAIT →
+            // multi-second freeze. committed is left for the final reconcile.)
+            let _ = committed;
+            let target = agreed_stable(&prev, cur);
             prev = cur.clone();
             if target.is_empty() {
                 continue;
             }
             let (ops, newc) = plan_target(&confirmed, &target, false);
+            if std::env::var_os("ECHO_TRACE").is_some() {
+                println!("  t={t:>6} ag={:>3} conf={:>3} ops={} | tail={:?}",
+                    target.chars().count(), confirmed.chars().count(),
+                    if ops.is_empty() {"WAIT"} else {"TYPE"},
+                    target.chars().rev().take(28).collect::<String>().chars().rev().collect::<String>());
+            }
             if ops.is_empty() {
                 max_gap = max_gap.max(t.saturating_sub(last_progress));
             } else {
