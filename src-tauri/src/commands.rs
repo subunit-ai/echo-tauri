@@ -120,6 +120,18 @@ pub fn do_start(app: &AppHandle) {
     }
     emit_state(app, EngineState::Recording, None);
 
+    // Record-start cue, played NATIVELY (sound.rs) so it's instant even when the
+    // main window is hidden to the tray — a hidden WKWebView suspends its
+    // AudioContext, which delayed the webview-played cue. Only the bundled
+    // "standard" cue is native; synth presets stay in the webview (SoundFx skips
+    // "standard" so there's no double-play).
+    {
+        let c = state.config.lock();
+        if c.sound_start_enabled && c.sound_start_id == "standard" {
+            crate::sound::play_start(c.sound_volume);
+        }
+    }
+
     // Open the dictation WebSocket NOW (cloud + streaming on) so the server
     // decodes the take incrementally while the key is held — by release only the
     // tail remains. start() is a cloud-only no-op internally; the mode flag is the

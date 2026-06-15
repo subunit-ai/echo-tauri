@@ -25,6 +25,7 @@ mod presets_sync; // /v1/presets cloud sync
 mod synapse;
 mod overlay;
 mod recorder;
+mod sound; // native record-start cue (instant even when the window is hidden)
 mod store; // SQLite history + meetings + orb profiles (echo.db)
 mod transcribe;
 
@@ -178,6 +179,11 @@ pub fn run() {
                 std::env::consts::OS,
                 std::env::consts::ARCH,
             );
+
+            // Open the native audio output stream up front so the record-start cue
+            // is instant on the first press — it's played from Rust, not the webview
+            // (a hidden main window suspends the webview's AudioContext). See sound.rs.
+            crate::sound::init();
 
             // History/meetings live in SQLite (echo.db) — durable, searchable,
             // and a finishing dictation no longer rewrites the whole config file.

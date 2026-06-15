@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.5.31"
+version = "0.5.32"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -51,6 +51,12 @@ log = "0.4"
 cpal = "0.15"
 # WAV encoding for the cloud multipart upload.
 hound = "3"
+# Native playback of the record-start cue. The webview's AudioContext suspends
+# whenever the main window is hidden to the tray (WebKit pauses hidden pages),
+# which delayed the old webview-played cue; playing it natively makes it instant
+# regardless of window state. `wav`-only (reuses hound, no extra decoders); 0.19
+# matches the cpal 0.15 already in the tree. See sound.rs.
+rodio = { version = "0.19", default-features = false, features = ["wav"] }
 # Vocabulary post-replace (whole-word, case-insensitive).
 regex = "1"
 # Synthetic input (paste-back / Unicode-type) + clipboard.

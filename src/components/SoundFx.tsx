@@ -19,7 +19,12 @@ export function SoundFx() {
       const c = cfgRef.current;
       const vol = c?.sound_volume ?? 0.6;
       if (p.state === "recording" && last.current !== "recording") {
-        if (c?.sound_start_enabled) playSound(c.sound_start_id || "standard", "start", vol);
+        const id = c?.sound_start_id || "standard";
+        // The "standard" record-start cue is played NATIVELY by Rust (instant even
+        // when the main window is hidden to the tray — WebKit suspends a hidden
+        // page's AudioContext, which delayed this). Here we only play the synth
+        // presets for record-start; the paste cue still plays from the webview.
+        if (c?.sound_start_enabled && id !== "standard") playSound(id, "start", vol);
       } else if (p.state === "done" && last.current !== "done") {
         if (c?.sound_paste_enabled) playSound(c.sound_paste_id || "standard", "paste", vol);
       }
