@@ -33,12 +33,20 @@ pub const GUTTER_BOTTOM: f64 = 64.0;
 /// reported by the webview: the orb, a visible chip, or the open panel. The
 /// hit-test loop makes the window mouse-opaque only over the union of these, so
 /// the transparent gaps between them pass clicks through to the app behind.
-#[derive(Clone, Copy, serde::Deserialize)]
+/// `panel` labels which satellite the rect belongs to (mode/language/cleanup) so
+/// the loop can tell the webview which panel to OPEN — driven by the global
+/// cursor poll, NOT by webview DOM hover (a non-key macOS window gets no
+/// mouseMoved, so the islands were dead until you clicked the orb to focus it).
+#[derive(Clone, serde::Deserialize)]
 pub struct HotRect {
     pub x: f64,
     pub y: f64,
     pub w: f64,
     pub h: f64,
+    /// "mode" | "language" | "cleanup" for a satellite's chip / open panel zone;
+    /// None for the orb, the console chip, and plain hit-only rects.
+    #[serde(default)]
+    pub panel: Option<String>,
 }
 
 impl HotRect {
@@ -52,6 +60,7 @@ impl HotRect {
             y: self.y - p,
             w: self.w + 2.0 * p,
             h: self.h + 2.0 * p,
+            panel: None,
         }
     }
 }
@@ -110,6 +119,11 @@ pub fn ensure_hit_test(app: &AppHandle) {
         let mut last_ignore: Option<bool> = None;
         let mut engaged = false;
         let mut left_at: Option<Instant> = None;
+        // Which satellite the cursor is over right now (mode/language/cleanup) —
+        // emitted so the webview OPENS that panel without needing DOM hover (a
+        // non-key window gets no mouseMoved, so the islands were unreachable until
+        // you clicked the orb to focus the window). None = over the orb / a gap.
+        let mut last_over: Option<String> = None;
         // Engage slack around every interactive rect, so crossing the air between
         // the orb and a chip keeps the menu up.
         const PAD: f64 = 36.0;
@@ -133,13 +147,14 @@ pub fn ensure_hit_test(app: &AppHandle) {
                     let _ = win.set_ignore_cursor_events(true);
                     last_ignore = Some(true);
                 }
-                if engaged {
+                if engaged || last_over.is_some() {
                     engaged = false;
+                    last_over = None;
                     let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": false }));
                 }
                 continue;
             }
-            let (capture, inside_engage) = match (
+            let (capture, inside_engage, over) = match (
                 app.cursor_position(),
                 win.outer_position(),
                 win.outer_size(),
@@ -159,15 +174,22 @@ pub fn ensure_hit_test(app: &AppHandle) {
                         y: GUTTER_TOP,
                         w: dim,
                         h: dim,
+                        panel: None,
                     };
                     let rects = app.state::<AppState>().overlay_hot_rects.lock().clone();
                     let cap =
                         orb.contains(lx, ly) || rects.iter().any(|r| r.contains(lx, ly));
                     let eng = orb.inflated(PAD).contains(lx, ly)
                         || rects.iter().any(|r| r.inflated(PAD).contains(lx, ly));
-                    (cap, eng)
+                    // Which satellite zone (chip or its merged panel rect) the cursor
+                    // sits in — drives the open panel from the global poll.
+                    let over = rects
+                        .iter()
+                        .find(|r| r.panel.is_some() && r.contains(lx, ly))
+                        .and_then(|r| r.panel.clone());
+                    (cap, eng, over)
                 }
-                _ => (false, false),
+                _ => (false, false, None),
             };
             // Engage is sticky (grace); capture is immediate (gaps click-through now).
             let want = if inside_engage {
@@ -179,9 +201,16 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 }
                 matches!(left_at, Some(t) if t.elapsed() < GRACE)
             };
-            if want != engaged {
+            // `over` only matters while engaged; emit when EITHER hover or the
+            // hovered satellite changes (the webview opens that panel).
+            let over = if want { over } else { None };
+            if want != engaged || over != last_over {
                 engaged = want;
-                let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": engaged }));
+                last_over = over.clone();
+                let _ = app.emit(
+                    "echo://orb-hover",
+                    serde_json::json!({ "hover": engaged, "over": over }),
+                );
             }
             let ignore = !capture;
             if last_ignore != Some(ignore) {

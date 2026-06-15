@@ -138,9 +138,11 @@ export const orbSet = (which: "mode" | "language" | "cleanup", value: string) =>
 /** Report the overlay's interactive rectangles (logical px, window-local: the
  *  orb plus any visible chips / the open panel) so the Rust hit-test makes the
  *  window mouse-opaque ONLY over them — the transparent gaps between stay
- *  click-through, so clicks land on the app behind the overlay. */
+ *  click-through, so clicks land on the app behind the overlay. `panel` labels a
+ *  satellite's zone (mode/language/cleanup) so the Rust poll can tell us which
+ *  panel to OPEN — DOM hover doesn't fire while the overlay window isn't focused. */
 export const overlaySetHotRects = (
-  rects: { x: number; y: number; w: number; h: number }[],
+  rects: { x: number; y: number; w: number; h: number; panel?: string }[],
 ) => invoke<void>("overlay_set_hot_rects", { rects });
 
 // ---- Orb profiles (per-account, local-first, cloud-synced) ----------------

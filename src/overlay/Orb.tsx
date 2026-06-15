@@ -266,12 +266,17 @@ export function Orb() {
       if (typeof p.speed === "number") speed.current = p.speed;
       if (p.quick) setQuick(p.quick);
     });
-    // Engagement from the Rust hit-test loop: shows/hides the islands. On
-    // disengage the panels also fold back so the next hover starts calm.
-    const unHover = listen<{ hover: boolean }>("echo://orb-hover", (e) => {
-      setHover(e.payload.hover);
-      if (!e.payload.hover) setOpenPanel(null);
-    });
+    // Engagement from the Rust hit-test loop: shows/hides the islands AND drives
+    // which panel is open. Rust derives `over` from the global cursor poll, so the
+    // islands react even when the overlay window isn't focused — a non-key macOS
+    // window gets no DOM mouseMoved, so hover-to-open used to need a click first.
+    const unHover = listen<{ hover: boolean; over?: "mode" | "language" | "cleanup" | null }>(
+      "echo://orb-hover",
+      (e) => {
+        setHover(e.payload.hover);
+        setOpenPanel(e.payload.hover ? e.payload.over ?? null : null);
+      },
+    );
     return () => {
       un.then((f) => f());
       unCfg.then((f) => f());
@@ -398,14 +403,25 @@ export function Orb() {
   // transparent gaps stay click-through (clicks reach the app behind). The orb
   // is always reported; chips while engaged; the open panel while it's open.
   useEffect(() => {
-    const rects: Rect[] = [layout.orb];
+    const merge = (a: Rect, b: Rect): Rect => {
+      const x = Math.min(a.x, b.x);
+      const y = Math.min(a.y, b.y);
+      return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+    };
+    const rects: (Rect & { panel?: string })[] = [layout.orb];
     if (hover) {
       rects.push(layout.chips.console);
       if (quick) {
-        rects.push(layout.chips.mode, layout.chips.language, layout.chips.cleanup);
+        (["mode", "language", "cleanup"] as const).forEach((key) => {
+          // While a panel is open, report ONE merged chip+panel zone (labelled) so
+          // the 10px gap between them still counts as "over" that panel (no
+          // open/close flicker as the cursor crosses it) and the whole zone catches
+          // the mouse. Closed → just the chip carries the label.
+          const zone = openPanel === key ? merge(layout.chips[key], layout.panels[key]) : layout.chips[key];
+          rects.push({ ...zone, panel: key });
+        });
       }
     }
-    if (openPanel && quick) rects.push(layout.panels[openPanel]);
     overlaySetHotRects(rects).catch(() => {});
   }, [layout, hover, openPanel, quick]);
 
@@ -462,10 +478,10 @@ export function Orb() {
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Orb square between the gutters. Returning here folds the panels back. */}
+      {/* Orb square between the gutters. Returning here folds the panels back
+          (Rust emits over=null over the orb). */}
       <div
         ref={boxRef}
-        onMouseEnter={() => setOpenPanel(null)}
         style={{
           position: "absolute",
           left: GUTTER_X,
@@ -489,7 +505,6 @@ export function Orb() {
           <button
             className="orb-chip"
             title={t("overlay.tooltipMode", { value: quick.mode })}
-            onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...chipBase,
               ...chipVis(hover),
@@ -508,7 +523,6 @@ export function Orb() {
           <button
             className="orb-chip"
             title={t("overlay.tooltipLanguage", { value: quick.language })}
-            onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...chipBase,
               ...chipVis(hover),
@@ -522,7 +536,6 @@ export function Orb() {
           <button
             className="orb-chip"
             title={t("overlay.tooltipCleanup", { value: quick.cleanup })}
-            onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...chipBase,
               ...chipVis(hover),
@@ -537,7 +550,6 @@ export function Orb() {
           {/* ---- Expanded panel: blooms BEYOND the hovered chip, never on it ---- */}
           {/* Mode — beyond the mode chip (further left) */}
           <div
-            onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...panelBase,
               ...panelVis("mode", "right center"),
@@ -560,7 +572,6 @@ export function Orb() {
           </div>
           {/* Language — beyond the language chip (further up) */}
           <div
-            onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...panelBase,
               ...panelVis("language", "center bottom"),
@@ -589,7 +600,6 @@ export function Orb() {
           </div>
           {/* Cleanup — beyond the cleanup chip (further right) */}
           <div
-            onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...panelBase,
               ...panelVis("cleanup", "left center"),
