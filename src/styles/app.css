@@ -1009,8 +1009,10 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 240px;
-  padding: 14px;
+  gap: 8px;
+  /* height hugs the orb now (inline min-height = orb px + padding) instead of a
+     fixed oversized box — the field is only as tall as the orb it shows. */
+  padding: 12px;
   border-radius: 14px;
   /* a calm spotlight so the orb pops regardless of theme */
   background:
@@ -1018,6 +1020,40 @@ input:focus {
     rgba(4, 10, 22, 0.55);
   border: 1px solid rgba(150, 190, 240, 0.1);
   overflow: hidden;
+}
+/* ‹ › style steppers flanking the orb — quiet glass discs that brighten on hover. */
+.oc-arrow {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+.oc-arrow:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+}
+.oc-arrow:active {
+  transform: scale(0.92);
+}
+.oc-style-name {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 .oc-controls {
   display: flex;

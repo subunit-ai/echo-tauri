@@ -17,12 +17,15 @@ interface Props {
   state?: EngineState;
   /** Run a built-in voice/state demo so the preview reacts like a live session. */
   demo?: boolean;
+  /** Called whenever the demo's current state changes — lets the parent light up
+   *  a state legend (idle / active / done / error) in sync with the playback. */
+  onPhase?: (s: EngineState) => void;
   /** Logical pixel size of the square canvas. */
   size?: number;
   className?: string;
 }
 
-export function OrbCanvas({ visual, state = "idle", demo = false, size = 220, className }: Props) {
+export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size = 220, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Live values the RAF loop reads — synced from props so changing config never
   // restarts the animation (keeps in-flight rings/blips, no flicker).
@@ -30,7 +33,9 @@ export function OrbCanvas({ visual, state = "idle", demo = false, size = 220, cl
   const stateRef = useRef<EngineState>(state);
   const demoRef = useRef(demo);
   const levelRef = useRef(0);
+  const onPhaseRef = useRef(onPhase);
   visualRef.current = visual;
+  onPhaseRef.current = onPhase;
   // While demoing we own the state; otherwise it follows the prop.
   if (!demo) stateRef.current = state;
   demoRef.current = demo;
@@ -54,17 +59,26 @@ export function OrbCanvas({ visual, state = "idle", demo = false, size = 220, cl
     // layered sines plus a slow envelope, shaped to feel like real speech.
     let tick = 0;
     let phase: EngineState = "idle";
+    let lastPhase: EngineState | null = null;
 
     const loop = () => {
       if (demoRef.current) {
         tick += 1;
-        const cycle = tick % 520;
-        if (cycle < 90) phase = "idle";
-        else if (cycle < 380) phase = "recording";
-        else if (cycle < 430) phase = "transcribing";
-        else if (cycle < 490) phase = "done";
+        // Cycle through EVERY state so each legend entry lights up in turn,
+        // incl. a brief error flash: idle → recording → transcribing → done →
+        // error → idle.
+        const cycle = tick % 560;
+        if (cycle < 70) phase = "idle";
+        else if (cycle < 310) phase = "recording";
+        else if (cycle < 360) phase = "transcribing";
+        else if (cycle < 420) phase = "done";
+        else if (cycle < 480) phase = "error";
         else phase = "idle";
         stateRef.current = phase;
+        if (phase !== lastPhase) {
+          lastPhase = phase;
+          onPhaseRef.current?.(phase);
+        }
         if (phase === "recording") {
           // syllable-like envelope: bursts of energy with brief gaps
           const f = tick * 0.13;

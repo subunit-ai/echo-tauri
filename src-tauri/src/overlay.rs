@@ -126,6 +126,19 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 break;
             }
             let win = win.unwrap();
+            // Hidden (idle-"hide" mode) → fully click-through, never engage, so
+            // hovering the orb's old spot opens nothing (#32).
+            if !win.is_visible().unwrap_or(true) {
+                if last_ignore != Some(true) {
+                    let _ = win.set_ignore_cursor_events(true);
+                    last_ignore = Some(true);
+                }
+                if engaged {
+                    engaged = false;
+                    let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": false }));
+                }
+                continue;
+            }
             let (capture, inside_engage) = match (
                 app.cursor_position(),
                 win.outer_position(),
@@ -186,6 +199,32 @@ pub fn ensure_hit_test(app: &AppHandle) {
     });
 }
 
+/// Pin the overlay to the frontmost layer on macOS: raise the NSWindow level
+/// above floating + the Dock and let it join every Space / sit over other apps'
+/// fullscreen, so the orb is ALWAYS visible. Tauri's `always_on_top` only reaches
+/// the floating level (3), which other floating/fullscreen windows can still
+/// cover. No-op elsewhere (their `always_on_top` already suffices).
+#[cfg(target_os = "macos")]
+fn pin_topmost(win: &WebviewWindow) {
+    use objc::runtime::Object;
+    use objc::{msg_send, sel, sel_impl};
+    let Ok(ptr) = win.ns_window() else {
+        return;
+    };
+    let ns = ptr as *mut Object;
+    // NSStatusWindowLevel (25): above normal windows + the Dock (20), below the
+    // intrusive menu/screensaver levels. canJoinAllSpaces(1<<0) | stationary(1<<4)
+    // | fullScreenAuxiliary(1<<8) → present on every Space and over fullscreen.
+    let level: i64 = 25;
+    let behavior: u64 = (1 << 0) | (1 << 4) | (1 << 8);
+    unsafe {
+        let _: () = msg_send![ns, setLevel: level];
+        let _: () = msg_send![ns, setCollectionBehavior: behavior];
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn pin_topmost(_win: &WebviewWindow) {}
+
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     if app.get_webview_window("overlay").is_some() {
         return Ok(());
@@ -218,6 +257,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     // while the cursor is over the orb. Bubble mode stays click-through throughout.
     let _ = win.set_ignore_cursor_events(true);
     position_window(&win, &position, dim);
+    pin_topmost(&win); // always the frontmost layer (macOS NSWindow level)
     if orb_mode {
         ensure_hit_test(app);
     }
@@ -278,6 +318,19 @@ pub fn apply_config(app: &AppHandle) {
         let _ = win.set_ignore_cursor_events(true);
     }
     position_window(&win, &position, dim);
+    pin_topmost(&win); // re-assert the frontmost level after any config change
+
+    // #32: reflect the idle-"hide" choice now — a hidden window is physically
+    // gone (no hover flyout over its old spot), not just a blank canvas. Don't
+    // hide mid-session; emit_state flips visibility as the engine state changes.
+    if orb_mode {
+        let recording = app.state::<AppState>().recorder.is_recording();
+        if idle_mode == "hide" && !recording {
+            let _ = win.hide();
+        } else {
+            let _ = win.show();
+        }
+    }
 
     // Push the visual config; the overlay root picks Orb vs Bubble from `orbEnabled`
     // and the Orb restyles from the rest — all without a reload.

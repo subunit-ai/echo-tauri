@@ -114,6 +114,35 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
   { key: "smaragd", label: "Smaragd", idle: "#2dd4bf", working: "#10b981", done: "#a3e635" },
 ];
 
+/** Every orb style in display order — the SINGLE source for both the picker
+ *  dropdown and the configurator's ‹ › arrow-cycle (keep them in sync). The
+ *  "ping" label is localised at the call site; the rest are proper names. */
+const ORB_STYLES: [string, string][] = [
+  ["ping", "Ping"],
+  ["ping2", "Ping V2"],
+  ["sphere", "Sphere"],
+  ["sonar", "Sonar"],
+  ["sonar2", "Sonar V2 (Radar)"],
+  ["bars", "Bars"],
+  ["bars2", "Bars V2 (EQ)"],
+  ["bars3", "Bars V3 (Hybrid)"],
+  ["duobars", "Duo Bars V1"],
+  ["duobars2", "Duo Bars V2"],
+  ["duobars3", "Duo Bars V3 (Hybrid)"],
+  ["wave", "Wave"],
+  ["wave2", "Wave V2"],
+  ["ribbon", "Ribbon (Liquid)"],
+  ["classic", "Classic"],
+  ["halo", "Halo"],
+  ["orbit", "Orbit"],
+  ["helix", "Helix (DNA)"],
+  ["nova", "Nova"],
+  ["droplet", "Droplet (Liquid)"],
+  ["constellation", "Constellation"],
+  ["aurora", "Aurora"],
+  ["spectrum", "Spectrum"],
+];
+
 /** Phase-1 manager for saved Orb profiles (the FULL look — colours, style,
  *  speed, reactivity — per account, cloud-synced). The richer live "orb
  *  configurator" (big preview, effect/voice pickers) builds on these same
@@ -283,15 +312,16 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
 }
 
 /** The live Orb configurator preview. Renders the orb EXACTLY like the floating
- *  overlay (shared `drawOrb`), big and centred, reacting live to every setting
- *  below it. A "Demo-Stimme" run drives a synthetic speaking envelope so the
- *  voice reaction is visible right in the app; otherwise the state chips let you
- *  inspect each per-state colour (idle / active / done / error). This is the
- *  visible half of the Orb-configurator the foundation was built for. */
-function OrbConfigurator({ c }: { c: Config }) {
+ *  overlay (shared `drawOrb`), centred and hugging the orb's real size, reacting
+ *  live to every setting below it. ‹ › arrows step through every orb style right
+ *  here. A "Demo-Stimme" run drives a synthetic speaking envelope so the voice
+ *  reaction is visible in-app, and the state legend (idle / active / done /
+ *  error) lights up in sync with whatever the demo is currently playing. */
+function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => void }) {
   const { t } = useTranslation();
   const [demo, setDemo] = useState(true);
   const [previewState, setPreviewState] = useState<EngineState>("idle");
+  const [demoPhase, setDemoPhase] = useState<EngineState>("idle");
 
   const visual: OrbVisual = {
     style: c.orb_overlay_style,
@@ -309,12 +339,25 @@ function OrbConfigurator({ c }: { c: Config }) {
   const sizeFactor = c.orb_overlay_size ?? 1;
   const px = Math.round(Math.max(120, Math.min(300, 170 * sizeFactor)));
 
+  // ‹ › cycle through every style live in the preview (applies immediately).
+  const styleIdx = Math.max(0, ORB_STYLES.findIndex(([k]) => k === c.orb_overlay_style));
+  const styleLabel = ORB_STYLES[styleIdx]?.[1] ?? c.orb_overlay_style;
+  const cycleStyle = (dir: number) =>
+    onStyle(ORB_STYLES[(styleIdx + dir + ORB_STYLES.length) % ORB_STYLES.length][0]);
+
   const STATES: { key: EngineState; labelKey: string }[] = [
     { key: "idle", labelKey: "settings.orbStateIdle" },
     { key: "recording", labelKey: "settings.orbStateActive" },
     { key: "done", labelKey: "settings.orbStateDone" },
     { key: "error", labelKey: "settings.orbStateError" },
   ];
+  // Which legend entry is lit: during the demo it follows the live phase
+  // (transcribing counts as "active"); otherwise the manually-picked state.
+  const liveKey: EngineState = demo
+    ? demoPhase === "transcribing"
+      ? "recording"
+      : demoPhase
+    : previewState;
 
   return (
     <div className="orb-config">
@@ -322,23 +365,30 @@ function OrbConfigurator({ c }: { c: Config }) {
         <div className="oc-title">{t("settings.orbConfigurator")}</div>
         <div className="oc-sub">{t("settings.orbConfiguratorHint")}</div>
       </div>
-      <div className="oc-stage">
-        <OrbCanvas visual={visual} state={previewState} demo={demo} size={px} />
+      <div className="oc-stage" style={{ minHeight: px + 32 }}>
+        <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label="prev" title={styleLabel}>
+          ‹
+        </button>
+        <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} />
+        <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label="next" title={styleLabel}>
+          ›
+        </button>
       </div>
+      <div className="oc-style-name">{styleLabel}</div>
       <div className="oc-controls">
-        <button
-          className={`oc-demo ${demo ? "active" : ""}`}
-          onClick={() => setDemo((d) => !d)}
-        >
+        <button className={`oc-demo ${demo ? "active" : ""}`} onClick={() => setDemo((d) => !d)}>
           {demo ? `■ ${t("settings.orbDemoStop")}` : `▶ ${t("settings.orbDemoPlay")}`}
         </button>
         <div className="oc-states">
           {STATES.map((s) => (
             <button
               key={s.key}
-              className={!demo && previewState === s.key ? "active" : ""}
-              disabled={demo}
-              onClick={() => setPreviewState(s.key)}
+              className={liveKey === s.key ? "active" : ""}
+              onClick={() => {
+                // Clicking a state inspects it — stop the demo and pin that look.
+                setDemo(false);
+                setPreviewState(s.key);
+              }}
             >
               {t(s.labelKey)}
             </button>
@@ -780,7 +830,7 @@ export function Settings() {
 
         {tab === "overlay" && (
           <>
-            <OrbConfigurator c={c} />
+            <OrbConfigurator c={c} onStyle={(v) => set("orb_overlay_style", v)} />
             <Row name={t("settings.showOrbOverlay")}>
               <Toggle checked={c.use_orb_overlay} onChange={(v) => set("use_orb_overlay", v)} />
             </Row>
@@ -788,26 +838,12 @@ export function Settings() {
               <Sel
                 value={c.orb_overlay_style}
                 onChange={(v) => set("orb_overlay_style", v)}
-                options={[
-                  ["ping", t("settings.orbStylePing")],
-                  ["ping2", "Ping V2"],
-                  ["sphere", "Sphere"],
-                  ["sonar", "Sonar"],
-                  ["sonar2", "Sonar V2 (Radar)"],
-                  ["bars", "Bars"],
-                  ["bars2", "Bars V2 (EQ)"],
-                  ["bars3", "Bars V3 (Hybrid)"],
-                  ["duobars", "Duo Bars V1"],
-                  ["duobars2", "Duo Bars V2"],
-                  ["duobars3", "Duo Bars V3 (Hybrid)"],
-                  ["wave", "Wave"],
-                  ["wave2", "Wave V2"],
-                  ["classic", "Classic"],
-                  ["halo", "Halo"],
-                  ["orbit", "Orbit"],
-                  ["aurora", "Aurora"],
-                  ["spectrum", "Spectrum"],
-                ]}
+                options={ORB_STYLES.map(
+                  ([k, label]): [string, string] => [
+                    k,
+                    k === "ping" ? t("settings.orbStylePing") : label,
+                  ],
+                )}
               />
             </Row>
             <Row name={t("settings.orbPreset")} hint={t("settings.orbPresetHint")}>

@@ -31,10 +31,13 @@ export interface OrbAnim {
   blips: { ang: number; dist: number; a: number }[];
   peaks: number[];
   lvlAvg: number;
+  /** Onset-driven envelope (0..1, decays) — styles that "flare" on syllables
+   *  (nova/droplet) bump this on a voice spike and let it fall. */
+  pulse: number;
 }
 
 export function newOrbAnim(): OrbAnim {
-  return { t: 0, frame: 0, rings: [], blips: [], peaks: new Array(16).fill(0), lvlAvg: 0 };
+  return { t: 0, frame: 0, rings: [], blips: [], peaks: new Array(16).fill(0), lvlAvg: 0, pulse: 0 };
 }
 
 function hexA(hex: string, a: number): string {
@@ -566,6 +569,201 @@ export function drawOrb(
       ctx.fillStyle = hexA(base, 0.9);
       ctx.beginPath();
       ctx.arc(cx, cy, dotR * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "ribbon": {
+      // Ribbon — a filled, flowing waveform BAND (a liquid sibling of wave2):
+      // a closed shape between a top and bottom sine edge, vertical-gradient
+      // filled with a soft glow, tapered to the ends. Height tracks the real
+      // mic level while recording. The two edges share a phase but the band
+      // thickness breathes with energy, so it reads as a glossy liquid stream.
+      const half = size * 0.42;
+      const amp = idleStill
+        ? size * 0.015
+        : speaking
+          ? size * (0.03 + lvl * 0.4)
+          : size * 0.16 * (0.18 + energy);
+      const thick = size * (0.03 + 0.03 * energy);
+      const grad = ctx.createLinearGradient(0, cy - amp - thick, 0, cy + amp + thick);
+      grad.addColorStop(0, hexA(base, 0));
+      grad.addColorStop(0.5, hexA(base, 0.85));
+      grad.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = grad;
+      ctx.shadowBlur = size * 0.05;
+      ctx.shadowColor = base;
+      ctx.beginPath();
+      for (let x = -half; x <= half; x += 3) {
+        const env = Math.pow(Math.cos((x / half) * (Math.PI / 2)), 1.3);
+        const y = Math.sin(x * 0.045 + ph * 0.22) * amp * env;
+        const px = cx + x;
+        const py = cy + y - (thick * env + thick * 0.25);
+        x === -half ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      for (let x = half; x >= -half; x -= 3) {
+        const env = Math.pow(Math.cos((x / half) * (Math.PI / 2)), 1.3);
+        const y = Math.sin(x * 0.045 + ph * 0.22) * amp * env;
+        ctx.lineTo(cx + x, cy + y + (thick * env + thick * 0.25));
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      break;
+    }
+    case "helix": {
+      // Helix — a DNA double-strand: two dot strands running left→right, each a
+      // sine offset π apart, with faint rungs where they cross. `depth` (the
+      // cosine) fades the dots front/back so it reads 3-D as it rotates. The
+      // strands widen with energy.
+      const half = size * 0.38;
+      const amp = size * (0.11 + 0.13 * energy);
+      const turns = 2.2;
+      const N = 26;
+      const dot = size * 0.02;
+      for (let i = 0; i <= N; i++) {
+        const x = -half + 2 * half * (i / N);
+        const a = (i / N) * Math.PI * 2 * turns + ph * 0.06;
+        const y1 = Math.sin(a) * amp;
+        const y2 = Math.sin(a + Math.PI) * amp;
+        const d1 = (Math.cos(a) + 1) / 2;
+        const d2 = (Math.cos(a + Math.PI) + 1) / 2;
+        if (i % 2 === 0) {
+          ctx.strokeStyle = hexA(base, 0.1 + 0.12 * energy);
+          ctx.lineWidth = Math.max(1, size * 0.006);
+          ctx.beginPath();
+          ctx.moveTo(cx + x, cy + y1);
+          ctx.lineTo(cx + x, cy + y2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = hexA(base, 0.35 + 0.6 * d1);
+        ctx.beginPath();
+        ctx.arc(cx + x, cy + y1, dot * (0.55 + 0.7 * d1), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = hexA(base, 0.35 + 0.6 * d2);
+        ctx.beginPath();
+        ctx.arc(cx + x, cy + y2, dot * (0.55 + 0.7 * d2), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case "nova": {
+      // Nova — a radiant core with rays that FLARE on voice onsets. Rays rotate
+      // slowly and dance on their own phase; a syllable spike bumps `pulse`,
+      // which lengthens + brightens every ray and swells the core. Energetic
+      // without the constant motion of sonar.
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.5 + lvl * 0.5) : 0);
+      const flare = energy * 0.5 + an.pulse;
+      const N = 18;
+      const r0 = dotR * 0.7;
+      ctx.lineCap = "round";
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 + ph * 0.01;
+        const long = i % 3 === 0;
+        const len =
+          size *
+          (0.07 + (long ? 0.17 : 0.09) * flare) *
+          (0.7 + 0.5 * Math.abs(Math.sin(ph * 0.1 + i)));
+        ctx.strokeStyle = hexA(base, (long ? 0.7 : 0.4) * (0.45 + 0.55 * flare));
+        ctx.lineWidth = Math.max(1.2, size * (long ? 0.012 : 0.007));
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+      const r = dotR * (0.8 + flare * 0.5);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.8);
+      grad.addColorStop(0, hexA(base, 0.95));
+      grad.addColorStop(0.5, hexA(base, 0.4));
+      grad.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "droplet": {
+      // Droplet — a glossy LIQUID blob: a circle whose radius is perturbed by a
+      // few sine harmonics so the surface wobbles like a water bead, with a
+      // radial gradient body and a specular highlight (very "liquid glass"). A
+      // voice onset ripples the surface harder via `pulse`.
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.92, onset ? Math.min(1, 0.5 + lvl * 0.5) : 0);
+      const R = dotR * (1.5 + energy * 0.7);
+      const wob = 0.05 + 0.12 * energy + 0.18 * an.pulse;
+      ctx.beginPath();
+      const STEPS = 60;
+      for (let i = 0; i <= STEPS; i++) {
+        const a = (i / STEPS) * Math.PI * 2;
+        const rr =
+          R *
+          (1 +
+            wob *
+              (0.5 * Math.sin(a * 3 + ph * 0.12) +
+                0.3 * Math.sin(a * 5 - ph * 0.16) +
+                0.2 * Math.sin(a * 2 + ph * 0.09)));
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      const grad = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.3, R * 0.1, cx, cy, R * 1.3);
+      grad.addColorStop(0, hexA(base, 0.95));
+      grad.addColorStop(0.7, hexA(base, 0.5));
+      grad.addColorStop(1, hexA(base, 0.12));
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // specular gloss
+      ctx.fillStyle = "rgba(255,255,255,0.22)";
+      ctx.beginPath();
+      ctx.ellipse(cx - R * 0.34, cy - R * 0.4, R * 0.28, R * 0.16, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "constellation": {
+      // Constellation — a living network: nodes on a ring linked to each other
+      // and the centre; the nodes jitter and the links brighten as you speak,
+      // like a graph waking up. Calm and geometric at rest.
+      const NODES = 9;
+      const R = size * (0.2 + 0.06 * energy);
+      const pts: [number, number][] = [];
+      for (let i = 0; i < NODES; i++) {
+        const a = (i / NODES) * Math.PI * 2 + ph * 0.012;
+        const jit = idleStill ? 0 : (0.08 + energy * 0.2) * Math.sin(ph * 0.2 + i * 1.7);
+        const rr = R * (1 + jit);
+        pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
+      }
+      ctx.lineWidth = Math.max(1, size * 0.005);
+      for (let i = 0; i < NODES; i++) {
+        const [x, y] = pts[i];
+        const [nx, ny] = pts[(i + 1) % NODES];
+        ctx.strokeStyle = hexA(base, 0.12 + 0.32 * energy);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+        ctx.strokeStyle = hexA(base, 0.06 + 0.2 * energy);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+      }
+      for (const [x, y] of pts) {
+        ctx.fillStyle = hexA(base, 0.85);
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(1.5, size * 0.016 * (0.8 + energy)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = hexA(base, 0.95);
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR * 0.5 * (1 + energy * 0.3), 0, Math.PI * 2);
       ctx.fill();
       break;
     }

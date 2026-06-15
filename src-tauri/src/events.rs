@@ -53,6 +53,11 @@ pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Op
         let _ = tray.set_tooltip(Some(tip));
     }
 
+    // #32: when idle-"hide" is on, the overlay window is physically hidden while
+    // idle and shown the instant a session starts — keep that in sync here, the
+    // one place every state transition flows through.
+    sync_overlay_idle_hide(app, state);
+
     // Done and Error are TRANSIENT: settle back to Idle after a beat so the overlay's
     // idle behaviour (calm idle colour, dim/hide) re-engages. Without this the state
     // stuck on Error forever after a failed transcription → the orb sat at the fixed
@@ -67,6 +72,28 @@ pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Op
                 emit_state(&app, EngineState::Idle, None);
             }
         });
+    }
+}
+
+/// #32: when `orb_idle_mode == "hide"`, the overlay must be physically gone while
+/// idle (a hidden window — not merely a blank canvas — so the hover flyout never
+/// opens over its old spot), and reappear the moment a session leaves idle.
+/// Generic over the runtime so it can sit on this central state hook.
+fn sync_overlay_idle_hide<R: Runtime>(app: &AppHandle<R>, state: EngineState) {
+    let hide_when_idle = {
+        let st = app.state::<crate::commands::AppState>();
+        let c = st.config.lock();
+        c.use_orb_overlay && c.orb_idle_mode == "hide"
+    };
+    if !hide_when_idle {
+        return;
+    }
+    if let Some(w) = app.get_webview_window("overlay") {
+        if matches!(state, EngineState::Idle) {
+            let _ = w.hide();
+        } else {
+            let _ = w.show();
+        }
     }
 }
 

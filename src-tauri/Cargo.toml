@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.5.26"
+version = "0.5.27"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -114,6 +114,10 @@ core-foundation = "0.9"
 # instead of enigo's racy 3-call chord that can land a bare "v". Matches core-foundation
 # 0.9 (already in the enigo dependency tree).
 core-graphics = "0.23"
+# Raise the orb overlay's NSWindow level above floating/Dock + join all Spaces so
+# it's ALWAYS the frontmost layer (Tauri's always_on_top only reaches floating
+# level). One msg_send in overlay::pin_topmost; objc is already in the macOS tree.
+objc = "0.2"
 
 [features]
 default = []
