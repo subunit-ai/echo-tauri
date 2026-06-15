@@ -9,6 +9,17 @@ on:
       - "v*"
   workflow_dispatch:
 
+# GitHub forces every JavaScript action onto Node 24 from 2026-06-16 (Node 20 is
+# deprecated). Opt in NOW so our release actions (checkout / setup-node /
+# msvc-dev-cmd / rust-cache / tauri-action / vulkan-sdk) run on Node 24 today —
+# several of them have no Node-24-native release yet, so a version bump alone
+# can't fix it; this env is the one lever that covers them all, and it lets us
+# catch any incompatibility on our own schedule instead of at the forced cutover.
+# NOTE: this controls the ACTION runtime only — the build toolchain Node stays 20
+# (setup-node `node-version: 20` below), which is a separate, deliberate choice.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build:
     permissions:
