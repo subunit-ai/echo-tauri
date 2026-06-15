@@ -131,7 +131,11 @@ pub fn ensure_hit_test(app: &AppHandle) {
         const GRACE: Duration = Duration::from_millis(150);
         loop {
             tick.tick().await;
-            let orb_on = app.state::<AppState>().config.lock().use_orb_overlay;
+            let (orb_on, click_mode) = {
+                let st = app.state::<AppState>();
+                let c = st.config.lock();
+                (c.use_orb_overlay, c.orb_trigger == "click")
+            };
             let win = app.get_webview_window("overlay");
             if !orb_on || win.is_none() {
                 if let Some(w) = &win {
@@ -191,8 +195,18 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 }
                 _ => (false, false, None),
             };
-            // Engage is sticky (grace); capture is immediate (gaps click-through now).
-            let want = if inside_engage {
+            // Engage source depends on the trigger mode:
+            //  • click: the islands show only while the overlay WINDOW is focused —
+            //    a click on the orb activates it; merely hovering never reveals
+            //    them (TJ: hover-reveal "stört und nervt"). Focus also means the
+            //    window is key, so its mouse events flow normally.
+            //  • hover: sticky cursor-in-cluster with a short grace.
+            // `capture` is always immediate so the orb stays clickable and gaps
+            // stay click-through in both modes.
+            let want = if click_mode {
+                left_at = None;
+                win.is_focused().unwrap_or(false)
+            } else if inside_engage {
                 left_at = None;
                 true
             } else {

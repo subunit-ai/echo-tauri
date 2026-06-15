@@ -33,6 +33,8 @@ export interface Config {
   orb_overlay_auto_hide: boolean;
   /** Idle behaviour: "normal" | "dim" | "hide". */
   orb_idle_mode: string;
+  /** How the islands are revealed: "hover" | "click". */
+  orb_trigger: string;
   orb_speed: number;
   /** Voice-reactivity of the orb/bubble meters (perceptual VU mapping). */
   orb_noise_floor: number;

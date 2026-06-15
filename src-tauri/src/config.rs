@@ -146,6 +146,12 @@ pub struct Config {
     pub orb_idle_mode: String,
     /// One-time guard: seed `orb_idle_mode` from the legacy auto-hide bool once.
     pub orb_idle_migrated: bool,
+    /// How the satellite islands are revealed: "hover" = appear while the cursor
+    /// is over the orb cluster; "click" = stay hidden until the orb (overlay
+    /// window) is clicked/focused, so they never pop up just from passing over the
+    /// orb (TJ: hover-reveal "stört und nervt"). Click also sidesteps the macOS
+    /// non-key-window mouse quirk — the activating click makes the window key.
+    pub orb_trigger: String,
     /// Animation speed multiplier for the overlay (orb AND bubble): scales every
     /// pulse/ring/wave frequency uniformly. 1.0 = the original cadence; lower =
     /// calmer/slower. User-settable (TJ: the default frequency felt too fast).
@@ -309,6 +315,7 @@ impl Default for Config {
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),
             orb_idle_migrated: false,
+            orb_trigger: "click".to_string(),
             orb_speed: 0.6,
             orb_noise_floor: 0.01,
             orb_gain: 7.5,

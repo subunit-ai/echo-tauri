@@ -923,6 +923,16 @@ export function Settings() {
                 </span>
               </div>
             </Row>
+            <Row name={t("settings.orbTrigger")} hint={t("settings.orbTriggerHint")}>
+              <Sel
+                value={c.orb_trigger === "hover" ? "hover" : "click"}
+                onChange={(v) => set("orb_trigger", v)}
+                options={[
+                  ["click", t("settings.orbTriggerClick")],
+                  ["hover", t("settings.orbTriggerHover")],
+                ]}
+              />
+            </Row>
             <Row name={t("settings.idleMode")} hint={t("settings.idleModeHint")}>
               <Sel
                 value={c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide" ? c.orb_idle_mode : "normal"}
