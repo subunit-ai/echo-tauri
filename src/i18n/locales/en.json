@@ -496,12 +496,25 @@
       "copy": "Copy",
       "insert": "Insert into the app behind",
       "saveToLibrary": "Save to library",
+      "refine": "Refine with AI",
       "coach": "Open Prompt Coach",
       "library": "Open library",
       "glass": "Cycle glass level",
       "target": "Toggle dictation target",
       "tabPrefix": "Tab:",
       "libPrefix": "Library:"
+    },
+    "refine": {
+      "button": "Refine with AI",
+      "hint": "Rewrite into a clean, well-structured prompt via AI",
+      "loading": "Refining …",
+      "title": "AI-refined",
+      "viewDiff": "Diff",
+      "viewResult": "Result",
+      "accept": "Apply",
+      "reject": "Discard",
+      "noChange": "Already well-structured — no change needed.",
+      "failed": "Refine failed — check connection/login and retry."
     },
     "coach": {
       "title": "Prompt Coach",

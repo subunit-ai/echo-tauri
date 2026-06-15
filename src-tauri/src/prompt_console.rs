@@ -196,3 +196,25 @@ pub fn prompt_insert(app: AppHandle, text: String) -> Result<(), String> {
     });
     Ok(())
 }
+
+/// AI-Coach "Refine": rewrite the draft into a clean, well-structured prompt via
+/// the server's `/v1/cleanup` `style: "prompt"` (the same subscription-Claude
+/// path the dictation cleanup uses — NOT a metered API call). Ignores
+/// `cleanup_enabled` (Refine is an explicit user action). ASYNC + spawn_blocking:
+/// the round trip can take tens of seconds, and sync commands run on the main
+/// thread — blocking it would freeze the whole UI (same reasoning as `login`).
+#[tauri::command]
+pub async fn prompt_refine(app: AppHandle, text: String) -> Result<String, String> {
+    if text.trim().is_empty() {
+        return Err("leerer Prompt".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        // Meetings can sit a while; a draft can too — refresh the cloud token
+        // first, exactly like `process_meeting`.
+        crate::auth::ensure_fresh(&app);
+        let cfg = app.state::<AppState>().config.lock().clone();
+        crate::cleanup::run_style(&cfg, &text, "prompt").map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("refine task: {e}"))?
+}

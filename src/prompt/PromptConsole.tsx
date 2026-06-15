@@ -69,6 +69,7 @@ const ICONS = {
   search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M21 21l-4.8-4.8"],
   dup: ["M9 9h10v10H9z", "M5 15H4V5h10v1"],
   cmd: ["M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"],
+  spark: ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z"],
 };
 
 /** Glass intensity levels — cycled from the header droplet. The CSS multiplies
@@ -140,6 +141,43 @@ interface PalCmd {
   run: () => void;
 }
 
+// ---- Word-level diff for the AI-Coach "Refine" before/after view. ----
+// Tokenize keeping whitespace so reconstruction is lossless, then LCS-diff the
+// token streams. A heavy rewrite stays readable: kept words render plain,
+// removed words struck through, added words highlighted.
+type DiffSeg = { type: "same" | "add" | "del"; text: string };
+const DIFF_TOKEN_CAP = 1200; // beyond this, skip the O(n·m) DP (see refine view)
+
+const tokenizeDiff = (s: string) => s.split(/(\s+)/).filter((x) => x.length > 0);
+
+function wordDiff(a: string, b: string): DiffSeg[] {
+  const A = tokenizeDiff(a);
+  const B = tokenizeDiff(b);
+  // dp[i][j] = LCS length of A[i:] and B[j:].
+  const dp: number[][] = Array.from({ length: A.length + 1 }, () => new Array(B.length + 1).fill(0));
+  for (let i = A.length - 1; i >= 0; i--) {
+    for (let j = B.length - 1; j >= 0; j--) {
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out: DiffSeg[] = [];
+  const push = (type: DiffSeg["type"], text: string) => {
+    const last = out[out.length - 1];
+    if (last && last.type === type) last.text += text;
+    else out.push({ type, text });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < A.length && j < B.length) {
+    if (A[i] === B[j]) push("same", A[i++]), j++;
+    else if (dp[i + 1][j] >= dp[i][j + 1]) push("del", A[i++]);
+    else push("add", B[j++]);
+  }
+  while (i < A.length) push("del", A[i++]);
+  while (j < B.length) push("add", B[j++]);
+  return out;
+}
+
 export function PromptConsole() {
   const { t } = useTranslation();
   const [data, setData] = useState<PromptData | null>(null);
@@ -152,6 +190,15 @@ export function PromptConsole() {
   const [libQuery, setLibQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
+  // AI-Coach "Refine": rewrite the draft into a structured prompt, show a
+  // before/after diff, accept or discard. `refineReq` guards against a stale
+  // in-flight result landing after the user cancelled / started a new one.
+  const [refining, setRefining] = useState(false);
+  const [refineBase, setRefineBase] = useState("");
+  const [refineResult, setRefineResult] = useState<string | null>(null);
+  const [refineErr, setRefineErr] = useState<string | null>(null);
+  const [refineView, setRefineView] = useState<"diff" | "result">("diff");
+  const refineReq = useRef(0);
   // Terminal-grade tab chrome: right-click context menu + command palette.
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -475,6 +522,48 @@ export function PromptConsole() {
     setCoachOpen(false);
   };
 
+  // ---- AI-Coach: Refine via /v1/cleanup style "prompt" ----
+  const runRefine = () => {
+    const base = active.text;
+    if (!base.trim() || refining) return;
+    const id = ++refineReq.current;
+    flushNow();
+    setRefineErr(null);
+    setRefineResult(null);
+    setRefineView("diff");
+    setRefining(true);
+    invoke<string>("prompt_refine", { text: base })
+      .then((res) => {
+        if (id !== refineReq.current) return; // cancelled / superseded
+        setRefining(false);
+        if (!res || !res.trim() || res.trim() === base.trim()) {
+          setRefineErr(t("prompt.refine.noChange"));
+          return;
+        }
+        setRefineBase(base);
+        setRefineResult(res);
+      })
+      .catch(() => {
+        if (id !== refineReq.current) return;
+        setRefining(false);
+        setRefineErr(t("prompt.refine.failed"));
+      });
+  };
+
+  const cancelRefine = () => {
+    refineReq.current++; // ignore any in-flight result
+    setRefining(false);
+    setRefineResult(null);
+  };
+
+  const acceptRefine = () => {
+    if (refineResult) setText(refineResult);
+    refineReq.current++;
+    setRefineResult(null);
+    setRefining(false);
+    editorRef.current?.focus();
+  };
+
   const hide = () => {
     flushNow();
     invoke("prompt_console_toggle").catch(() => {});
@@ -489,6 +578,7 @@ export function PromptConsole() {
     { id: "copy", label: t("prompt.cmd.copy"), run: copy },
     { id: "insert", label: t("prompt.cmd.insert"), run: insert },
     { id: "save", label: t("prompt.cmd.saveToLibrary"), run: saveToLibrary },
+    { id: "refine", label: t("prompt.cmd.refine"), run: runRefine },
     { id: "coach", label: t("prompt.cmd.coach"), run: openCoach },
     { id: "lib", label: t("prompt.cmd.library"), run: openLibrary },
     { id: "glass", label: t("prompt.cmd.glass"), run: cycleGlass },
@@ -530,6 +620,7 @@ export function PromptConsole() {
     togglePalette: () => (paletteOpen ? setPaletteOpen(false) : openPalette()),
     escape: () => {
       if (paletteOpen) return setPaletteOpen(false);
+      if (refining || refineResult) return cancelRefine();
       if (menu) return setMenu(null);
       if (renaming) return setRenaming(null);
       hide();
@@ -537,6 +628,10 @@ export function PromptConsole() {
   };
 
   const menuDraft = menu ? data.drafts.find((x) => x.id === menu.id) : null;
+  const diffSegs =
+    refineResult && refineBase.length + refineResult.length < DIFF_TOKEN_CAP * 12
+      ? wordDiff(refineBase, refineResult)
+      : null;
 
   return (
     <div className="pc-shell" data-glass={glass} style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}>
@@ -665,6 +760,18 @@ export function PromptConsole() {
               </div>
               <span className="pc-score-num">{score}%</span>
             </div>
+            <div className="pc-refine-bar">
+              <button
+                className="pc-btn primary refine"
+                onClick={runRefine}
+                disabled={refining || !active.text.trim()}
+                title={t("prompt.refine.hint")}
+              >
+                <Ico paths={ICONS.spark} filled size={12} />
+                {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
+              </button>
+              {refineErr && <span className="pc-refine-err">{refineErr}</span>}
+            </div>
             <div className="pc-coach-list">
               {score === 100 && <div className="pc-coach-all">✓ {t("prompt.coach.allGood")}</div>}
               {/* All 7 building blocks, ALWAYS in the same order — rows change
@@ -743,6 +850,59 @@ export function PromptConsole() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {(refining || refineResult) && (
+          <div className="pc-refine">
+            <div className="pc-refine-head">
+              <span className="pc-refine-title">
+                <Ico paths={ICONS.spark} filled size={12} /> {t("prompt.refine.title")}
+              </span>
+              {refineResult && diffSegs && (
+                <div className="pc-seg">
+                  <button
+                    className={refineView === "diff" ? "on" : ""}
+                    onClick={() => setRefineView("diff")}
+                  >
+                    {t("prompt.refine.viewDiff")}
+                  </button>
+                  <button
+                    className={refineView === "result" ? "on" : ""}
+                    onClick={() => setRefineView("result")}
+                  >
+                    {t("prompt.refine.viewResult")}
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="pc-refine-body">
+              {refining ? (
+                <div className="pc-refine-loading">
+                  <span className="pc-spinner" />
+                  {t("prompt.refine.loading")}
+                </div>
+              ) : refineView === "diff" && diffSegs ? (
+                <div className="pc-diff">
+                  {diffSegs.map((s, i) => (
+                    <span key={i} className={`pc-d-${s.type}`}>
+                      {s.text}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="pc-diff">{refineResult}</div>
+              )}
+            </div>
+            {refineResult && (
+              <div className="pc-refine-foot">
+                <button className="pc-btn" onClick={cancelRefine}>
+                  {t("prompt.refine.reject")}
+                </button>
+                <button className="pc-btn primary" onClick={acceptRefine}>
+                  {t("prompt.refine.accept")}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

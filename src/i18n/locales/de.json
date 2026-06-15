@@ -495,12 +495,25 @@
       "copy": "Kopieren",
       "insert": "In App dahinter einfügen",
       "saveToLibrary": "In Bibliothek speichern",
+      "refine": "Mit KI verbessern (Refine)",
       "coach": "Prompt-Coach öffnen",
       "library": "Bibliothek öffnen",
       "glass": "Glas-Stufe wechseln",
       "target": "Diktat-Ziel umschalten",
       "tabPrefix": "Tab:",
       "libPrefix": "Bibliothek:"
+    },
+    "refine": {
+      "button": "Mit KI verbessern",
+      "hint": "Per KI in einen klar strukturierten Prompt umschreiben",
+      "loading": "Verbessere …",
+      "title": "KI-verbessert",
+      "viewDiff": "Diff",
+      "viewResult": "Ergebnis",
+      "accept": "Übernehmen",
+      "reject": "Verwerfen",
+      "noChange": "Schon klar strukturiert — keine Änderung nötig.",
+      "failed": "Verbessern fehlgeschlagen — Verbindung/Login prüfen und nochmal."
     },
     "coach": {
       "title": "Prompt-Coach",
