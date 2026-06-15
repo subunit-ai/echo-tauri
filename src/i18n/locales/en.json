@@ -44,7 +44,7 @@
     "tooltipMode": "Mode: {{value}}",
     "tooltipLanguage": "Language: {{value}}",
     "tooltipCleanup": "Cleanup: {{value}}",
-    "tooltipPrompt": "Open Prompt Console",
+    "tooltipPrompt": "Open Prompt Terminal",
     "langAuto": "Auto"
   },
   "common": {
@@ -398,10 +398,10 @@
     "replayIntroHint": "Watch the app's first-run introduction again.",
     "replayIntroBtn": "Watch again",
     "autoSaveNote": "Changes are saved automatically",
-    "promptHotkey": "Prompt Console hotkey",
-    "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Console",
-    "promptAsTarget": "Console as dictation target",
-    "promptAsTargetHint": "Every transcription lands in the Prompt Console instead of the active app"
+    "promptHotkey": "Prompt Terminal hotkey",
+    "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Terminal",
+    "promptAsTarget": "Terminal as dictation target",
+    "promptAsTargetHint": "Every transcription lands in the Prompt Terminal instead of the active app"
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
@@ -444,7 +444,7 @@
     "verdictFail": "Assessment: a local meeting isn't sensible on this device — the cloud variant will deliver the better result here."
   },
   "prompt": {
-    "title": "Prompt Console",
+    "title": "Prompt Terminal",
     "placeholder": "Write or dictate your prompt …",
     "copy": "Copy",
     "copied": "✓ Copied",
@@ -468,12 +468,54 @@
     "words": "words",
     "tokens": "tokens",
     "tabUntitled": "Untitled",
-    "tabHint": "Double-click to rename",
+    "tabHint": "Double-click: rename · Right-click: menu · Drag: reorder",
     "tabArchive": "Close (archived to the library)",
     "tabClose": "Close",
     "pin": "Always on top",
     "close": "Hide (content is kept)",
-    "targetHint": "Console as target: dictations land here instead of the app",
+    "paletteHint": "Commands & jump (⌘P)",
+    "targetHint": "Terminal as target: dictations land here instead of the app",
+    "menu": {
+      "rename": "Rename",
+      "duplicate": "Duplicate",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "archive": "Close → Library",
+      "close": "Close"
+    },
+    "palette": {
+      "placeholder": "Type a command or jump to a tab/library entry …",
+      "empty": "No matches."
+    },
+    "cmd": {
+      "newTab": "New tab",
+      "closeTab": "Close tab",
+      "duplicate": "Duplicate tab",
+      "pin": "Pin tab",
+      "unpin": "Unpin tab",
+      "copy": "Copy",
+      "insert": "Insert into the app behind",
+      "saveToLibrary": "Save to library",
+      "refine": "Refine with AI",
+      "coach": "Open Prompt Coach",
+      "library": "Open library",
+      "glass": "Cycle glass level",
+      "target": "Toggle dictation target",
+      "tabPrefix": "Tab:",
+      "libPrefix": "Library:"
+    },
+    "refine": {
+      "button": "Refine with AI",
+      "hint": "Rewrite into a clean, well-structured prompt via AI",
+      "loading": "Refining …",
+      "title": "AI-refined",
+      "viewDiff": "Diff",
+      "viewResult": "Result",
+      "accept": "Apply",
+      "reject": "Discard",
+      "noChange": "Already well-structured — no change needed.",
+      "failed": "Refine failed — check connection/login and retry."
+    },
     "coach": {
       "title": "Prompt Coach",
       "add": "+ Block",

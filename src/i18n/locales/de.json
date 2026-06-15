@@ -43,7 +43,7 @@
     "tooltipMode": "Modus: {{value}}",
     "tooltipLanguage": "Sprache: {{value}}",
     "tooltipCleanup": "Cleanup: {{value}}",
-    "tooltipPrompt": "Prompt-Konsole öffnen",
+    "tooltipPrompt": "Prompt Terminal öffnen",
     "langAuto": "Automatisch"
   },
   "common": {
@@ -397,10 +397,10 @@
     "replayIntroHint": "Die erste Einführung der App erneut ansehen.",
     "replayIntroBtn": "Erneut ansehen",
     "autoSaveNote": "Änderungen werden automatisch gespeichert",
-    "promptHotkey": "Prompt-Konsole Hotkey",
-    "promptHotkeyHint": "Globale Tastenkombi, die die schwebende Prompt-Konsole öffnet/versteckt",
-    "promptAsTarget": "Konsole als Diktat-Ziel",
-    "promptAsTargetHint": "Jede Transkription landet in der Prompt-Konsole statt in der aktiven App"
+    "promptHotkey": "Prompt Terminal Hotkey",
+    "promptHotkeyHint": "Globale Tastenkombi, die das schwebende Prompt Terminal öffnet/versteckt",
+    "promptAsTarget": "Terminal als Diktat-Ziel",
+    "promptAsTargetHint": "Jede Transkription landet im Prompt Terminal statt in der aktiven App"
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",
@@ -443,7 +443,7 @@
     "verdictFail": "Einschätzung: Lokales Meeting ist auf diesem Gerät nicht sinnvoll — die Cloud-Variante liefert hier das bessere Ergebnis."
   },
   "prompt": {
-    "title": "Prompt-Konsole",
+    "title": "Prompt Terminal",
     "placeholder": "Schreib oder diktiere deinen Prompt …",
     "copy": "Kopieren",
     "copied": "✓ Kopiert",
@@ -467,12 +467,54 @@
     "words": "Wörter",
     "tokens": "Tokens",
     "tabUntitled": "Ohne Titel",
-    "tabHint": "Doppelklick zum Umbenennen",
+    "tabHint": "Doppelklick: umbenennen · Rechtsklick: Menü · Ziehen: sortieren",
     "tabArchive": "Schließen (wird in die Bibliothek archiviert)",
     "tabClose": "Schließen",
     "pin": "Immer im Vordergrund",
     "close": "Ausblenden (Inhalt bleibt erhalten)",
-    "targetHint": "Konsole als Ziel: Diktate landen hier statt in der App",
+    "paletteHint": "Befehle & Sprung (⌘P)",
+    "targetHint": "Terminal als Ziel: Diktate landen hier statt in der App",
+    "menu": {
+      "rename": "Umbenennen",
+      "duplicate": "Duplizieren",
+      "pin": "Anheften",
+      "unpin": "Lösen",
+      "archive": "Schließen → Bibliothek",
+      "close": "Schließen"
+    },
+    "palette": {
+      "placeholder": "Befehl tippen oder zu Tab/Bibliothek springen …",
+      "empty": "Keine Treffer."
+    },
+    "cmd": {
+      "newTab": "Neuer Tab",
+      "closeTab": "Tab schließen",
+      "duplicate": "Tab duplizieren",
+      "pin": "Tab anheften",
+      "unpin": "Tab lösen",
+      "copy": "Kopieren",
+      "insert": "In App dahinter einfügen",
+      "saveToLibrary": "In Bibliothek speichern",
+      "refine": "Mit KI verbessern (Refine)",
+      "coach": "Prompt-Coach öffnen",
+      "library": "Bibliothek öffnen",
+      "glass": "Glas-Stufe wechseln",
+      "target": "Diktat-Ziel umschalten",
+      "tabPrefix": "Tab:",
+      "libPrefix": "Bibliothek:"
+    },
+    "refine": {
+      "button": "Mit KI verbessern",
+      "hint": "Per KI in einen klar strukturierten Prompt umschreiben",
+      "loading": "Verbessere …",
+      "title": "KI-verbessert",
+      "viewDiff": "Diff",
+      "viewResult": "Ergebnis",
+      "accept": "Übernehmen",
+      "reject": "Verwerfen",
+      "noChange": "Schon klar strukturiert — keine Änderung nötig.",
+      "failed": "Verbessern fehlgeschlagen — Verbindung/Login prüfen und nochmal."
+    },
     "coach": {
       "title": "Prompt-Coach",
       "add": "+ Baustein",

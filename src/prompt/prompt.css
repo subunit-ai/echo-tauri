@@ -38,7 +38,7 @@ body {
      --pc-glass scales EVERY tint alpha (set inline from config; the header
      droplet cycles clear → regular → rich), so "clear" is genuinely
      see-through instead of merely darker. */
-  --pc-glass: 0.45;
+  --pc-glass: 0.25;
   background: linear-gradient(
     160deg,
     rgb(36 58 92 / calc(0.3 * var(--pc-glass))) 0%,
@@ -196,6 +196,27 @@ body {
 .pc-tab-label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Pinned tab: small filled pin glyph, no close-x (protected from one-click
+   close — unpin via the context menu first). */
+.pc-tab.pinned {
+  border-color: rgba(34, 211, 238, 0.28);
+}
+
+.pc-tab-pin {
+  display: inline-flex;
+  color: var(--cyan);
+  margin-right: -2px;
+}
+
+/* Drag-reorder feedback: the tab under the cursor gets a cyan insertion edge. */
+.pc-tab[draggable="true"] {
+  cursor: grab;
+}
+
+.pc-tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--cyan);
 }
 
 .pc-tab-x {
@@ -596,4 +617,280 @@ body {
 
 .pc-btn.primary:hover:not(:disabled) {
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.42), rgba(8, 145, 178, 0.48));
+}
+
+/* ---- Overlays: shared transparent backdrop (closes the menu/palette) ---- */
+.pc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+/* ---- Tab context menu (right-click) ---- */
+.pc-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 156px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: rgb(10 22 42 / 0.86);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: pc-rise 0.12s ease;
+}
+
+.pc-menu button {
+  text-align: left;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--ink2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pc-menu button:hover {
+  background: var(--fill-ghost-hover);
+  color: var(--ink);
+}
+
+.pc-menu button.danger:hover {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fecdd3;
+}
+
+/* ---- Command palette (⌘P) ---- */
+.pc-palette {
+  position: fixed;
+  z-index: 50;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100% - 36px));
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  background: rgb(10 22 42 / 0.9);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge2);
+  border-radius: 16px;
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim-soft);
+  overflow: hidden;
+  animation: pc-rise 0.16s ease;
+}
+
+.pc-palette-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+  color: var(--cyan);
+  flex: none;
+}
+
+.pc-palette-input input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pc-palette-input input::placeholder {
+  color: var(--ink3);
+}
+
+.pc-palette-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.pc-palette-row {
+  padding: 8px 11px;
+  border-radius: 9px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc-palette-row.active {
+  background: var(--fill-ghost-hover);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--cyan);
+}
+
+.pc-palette-empty {
+  color: var(--ink3);
+  font-size: 12px;
+  text-align: center;
+  padding: 22px 12px;
+}
+
+/* ---- AI-Coach: Refine bar (in the coach panel) ---- */
+.pc-refine-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 12px 4px;
+  flex: none;
+}
+
+.pc-btn.refine {
+  width: 100%;
+  justify-content: center;
+  padding: 8px 11px;
+}
+
+.pc-refine-err {
+  font-size: 11px;
+  color: var(--ink3);
+  text-align: center;
+}
+
+/* ---- Refine overlay (loading + before/after diff) ---- */
+.pc-refine {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: rgb(10 22 42 / calc(0.45 + 0.3 * var(--pc-glass)));
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  animation: pc-rise 0.16s ease;
+}
+
+.pc-refine-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.pc-refine-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--cyan);
+}
+
+/* Diff / Result segmented toggle. */
+.pc-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--fill-weak);
+  border: 1px solid var(--glass-edge);
+  border-radius: 8px;
+}
+
+.pc-seg button {
+  padding: 3px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink3);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pc-seg button.on {
+  background: var(--fill-ghost-hover);
+  color: var(--ink);
+}
+
+.pc-refine-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.pc-refine-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink2);
+  font-size: 12.5px;
+  padding: 16px 2px;
+}
+
+.pc-spinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid rgba(150, 185, 225, 0.25);
+  border-top-color: var(--cyan);
+  animation: pc-spin 0.7s linear infinite;
+}
+
+@keyframes pc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The diff itself — monospace so structure reads like the editor. */
+.pc-diff {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pc-d-same {
+  color: var(--ink2);
+}
+
+.pc-d-add {
+  background: rgba(52, 211, 153, 0.18);
+  color: #d7f7e9;
+  border-radius: 3px;
+}
+
+.pc-d-del {
+  background: rgba(244, 63, 94, 0.16);
+  color: #fecdd3;
+  text-decoration: line-through;
+  text-decoration-color: rgba(244, 63, 94, 0.6);
+  border-radius: 3px;
+}
+
+.pc-refine-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+
+.is-windows .pc-refine {
+  background: #0e1c30;
 }
