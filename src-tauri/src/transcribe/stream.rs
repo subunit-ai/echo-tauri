@@ -369,10 +369,9 @@ fn session_thread(
         None
     };
 
-    // Sent watermark in DOWNSAMPLED samples. The last 2 samples of every pass
-    // are held back: the linear resampler's tail depends on samples that
-    // haven't arrived yet, so only the stable prefix ever goes on the wire.
-    let mut sent: usize = 0;
+    // Incremental 16 kHz resampler: tracks the output watermark so each tick
+    // resamples + ships only the newly-stable tail (O(tail), not O(whole buffer)).
+    let mut feed = Resampler16k::default();
 
     loop {
         match ctl_rx.recv_timeout(FEED_TICK) {
@@ -382,12 +381,12 @@ fn session_thread(
                 return;
             }
             Ok(Ctl::Finish) => {
-                let result = finish_flow(&app, &mut ws, &mut sent, live_state.as_mut());
+                let result = finish_flow(&app, &mut ws, &mut feed, live_state.as_mut());
                 let _ = done_tx.send(result);
                 return;
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                if let Err(e) = feed_delta(&app, &mut ws, &mut sent, false) {
+                if let Err(e) = feed_delta(&app, &mut ws, &mut feed, false) {
                     // Mid-stream break: the recording continues locally — hand
                     // the failure over and let finish() fall back classically.
                     log::warn!("stream: feed failed ({}) — degrading to classic", e.message);
@@ -570,29 +569,86 @@ fn set_read_timeout(ws: &mut Ws, t: Duration) {
     }
 }
 
-/// Snapshot the recorder, downsample, and send everything past the watermark.
-/// `flush` sends the full tail (release); otherwise the last 2 samples are
-/// held back for resampler determinism.
+/// Incremental 16 kHz resampler over the append-only capture buffer.
+///
+/// `feed_delta` used to re-run `downsample_to_16k` over the WHOLE growing buffer
+/// every 150 ms and ship only the new tail — O(n) work per tick, O(n²) over a
+/// take. Since the capture buffer only ever grows (samples are appended, never
+/// rewritten), every 16 kHz output sample is FINAL the moment its right
+/// interpolation neighbour exists. So we keep an output watermark and emit only
+/// the newly-stable samples, reading just the tail each tick. The bytes put on
+/// the wire are byte-identical to the old whole-buffer path (proven in
+/// `resampler_matches_whole_buffer_downsample`), so the server decodes exactly
+/// the same audio — zero accuracy impact, just less client CPU on long takes.
+#[derive(Default)]
+struct Resampler16k {
+    out_idx: usize, // next 16 kHz output-sample index to emit
+}
+
+impl Resampler16k {
+    /// Int16-LE bytes for output samples that became stable since the last call,
+    /// given the full source captured so far. `flush` also emits the final
+    /// boundary samples (release) — mirrors `downsample_to_16k`'s `out_len`.
+    fn pull(&mut self, src: &[f32], sr: u32, flush: bool) -> Vec<u8> {
+        if sr == 16_000 {
+            // No resample; hold back the last 2 samples mid-stream for parity with
+            // the resampled branch (a sub-millisecond audio tail), flush sends all.
+            let stable = if flush { src.len() } else { src.len().saturating_sub(2) };
+            if stable <= self.out_idx {
+                return Vec::new();
+            }
+            let mut out = Vec::with_capacity((stable - self.out_idx) * 2);
+            for &s in &src[self.out_idx..stable] {
+                out.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+            }
+            self.out_idx = stable;
+            return out;
+        }
+        let ratio = 16_000f64 / sr as f64;
+        let out_len = ((src.len() as f64) * ratio) as usize; // == downsample_to_16k's out_len
+        let mut out = Vec::new();
+        let mut i = self.out_idx;
+        while i < out_len {
+            let pos = i as f64 / ratio;
+            let idx = pos.floor() as usize;
+            // Mid-stream: only emit samples whose right neighbour already exists, so
+            // the interpolated value can never change once shipped. Flush emits the
+            // rest (the last sample falls back to b = a, exactly like downsample).
+            if !flush && idx + 1 >= src.len() {
+                break;
+            }
+            if idx >= src.len() {
+                break;
+            }
+            let frac = (pos - idx as f64) as f32;
+            let a = src[idx];
+            let b = src.get(idx + 1).copied().unwrap_or(a);
+            let s = a + (b - a) * frac;
+            out.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+            i += 1;
+        }
+        self.out_idx = i;
+        out
+    }
+}
+
+/// Snapshot the recorder, resample the new tail to 16 kHz, and ship it.
+/// `flush` emits the full tail (release); otherwise boundary samples are held
+/// back until their interpolation neighbour arrives (see `Resampler16k`).
 fn feed_delta(
     app: &AppHandle,
     ws: &mut Ws,
-    sent: &mut usize,
+    feed: &mut Resampler16k,
     flush: bool,
 ) -> Result<(), EngineError> {
     let state = app.state::<AppState>();
     let Some(cap) = state.recorder.snapshot() else {
         return Ok(()); // recorder not live yet — next tick
     };
-    let (down, _) = super::downsample_to_16k(&cap.samples, cap.sample_rate);
-    let stable = if flush { down.len() } else { down.len().saturating_sub(2) };
-    if stable <= *sent {
+    let bytes = feed.pull(&cap.samples, cap.sample_rate, flush);
+    if bytes.is_empty() {
         return Ok(());
     }
-    let mut bytes = Vec::with_capacity((stable - *sent) * 2);
-    for &s in &down[*sent..stable] {
-        bytes.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
-    }
-    *sent = stable;
     ws.send(Message::Binary(bytes))
         .map_err(|e| EngineError::new("network", format!("Stream-Audio: {e}")))
 }
@@ -712,6 +768,65 @@ mod tests {
         let (ops, c) = plan_target(confirmed, target, true);
         assert_eq!(ops, vec![LiveOp::Type(" noch mehr".into())]);
         assert_eq!(c, format!("{confirmed} noch mehr"));
+    }
+
+    // ── Incremental resampler (H1) ───────────────────────────────────────────
+    // The streaming feed resamples + ships only the new tail each tick. These
+    // prove the bytes put on the wire are byte-identical to the old whole-buffer
+    // `downsample_to_16k` for ANY chunk split, so the server decodes exactly the
+    // same audio — the safety net that makes the O(n²)→O(n) change zero-risk.
+
+    fn whole_buffer_bytes(src: &[f32], sr: u32) -> Vec<u8> {
+        let (down, _) = crate::transcribe::downsample_to_16k(src, sr);
+        let mut b = Vec::with_capacity(down.len() * 2);
+        for &s in &down {
+            b.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+        }
+        b
+    }
+
+    fn incremental_bytes(src: &[f32], sr: u32, chunk: usize) -> Vec<u8> {
+        let mut r = Resampler16k::default();
+        let mut got = Vec::new();
+        let mut len = 0;
+        while len < src.len() {
+            len = (len + chunk).min(src.len());
+            got.extend(r.pull(&src[..len], sr, false));
+        }
+        got.extend(r.pull(src, sr, true)); // release flush
+        got
+    }
+
+    #[test]
+    fn resampler_matches_whole_buffer_downsample() {
+        // A speech-like signal at the common 48 kHz mic rate.
+        let src: Vec<f32> = (0..20_011)
+            .map(|i| (i as f32 * 0.013).sin() * 0.6 + (i as f32 * 0.071).sin() * 0.3)
+            .collect();
+        let reference = whole_buffer_bytes(&src, 48_000);
+        // Every feed cadence must yield the SAME total bytes as one whole-buffer pass.
+        for chunk in [1usize, 137, 999, 4096, 7777, 19_999, 21_000] {
+            assert_eq!(
+                incremental_bytes(&src, 48_000, chunk),
+                reference,
+                "split={chunk}"
+            );
+        }
+    }
+
+    #[test]
+    fn resampler_passthrough_16k_and_upsample_8k() {
+        let src: Vec<f32> = (0..5_003).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
+        // 16k: passthrough must still equal the reference path.
+        assert_eq!(
+            incremental_bytes(&src, 16_000, 333),
+            whole_buffer_bytes(&src, 16_000)
+        );
+        // 8k (e.g. Bluetooth HFP): upsampled 2× — must still match the whole-buffer math.
+        assert_eq!(
+            incremental_bytes(&src, 8_000, 333),
+            whole_buffer_bytes(&src, 8_000)
+        );
     }
 
     // ── Live-typing test center ─────────────────────────────────────────────
@@ -1069,10 +1184,10 @@ mod tests {
 fn finish_flow(
     app: &AppHandle,
     ws: &mut Ws,
-    sent: &mut usize,
+    feed: &mut Resampler16k,
     mut live: Option<&mut Live>,
 ) -> Result<StreamFinal, StreamFailure> {
-    let flush_result = feed_delta(app, ws, sent, true)
+    let flush_result = feed_delta(app, ws, feed, true)
         .and_then(|()| {
             ws.send(Message::Text(r#"{"type":"end"}"#.into()))
                 .map_err(|e| EngineError::new("network", format!("Stream-End: {e}")))
