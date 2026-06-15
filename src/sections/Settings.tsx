@@ -716,15 +716,13 @@ export function Settings() {
             <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
               <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
             </Row>
-            <Row name={t("settings.cloudQuality")}>
+            <Row name={t("settings.cloudQuality")} hint={t("settings.cloudQualityHint")}>
               <Sel
                 value={c.cloud_quality_mode}
                 onChange={(v) => set("cloud_quality_mode", v)}
                 options={[
                   ["quality", t("settings.cloudQualityQuality")],
-                  ["fast", t("settings.cloudQualityFast")],
-                  ["instant", t("settings.cloudQualityInstant")],
-                  ["auto", t("settings.cloudQualityAuto")],
+                  ["highest", t("settings.cloudQualityHighest")],
                 ]}
               />
             </Row>

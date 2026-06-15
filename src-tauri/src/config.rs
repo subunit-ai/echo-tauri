@@ -465,8 +465,12 @@ impl Config {
         if self.cleanup_style == "tidy" {
             self.cleanup_style = "prompt".to_string();
         }
-        if self.cloud_quality_mode.is_empty() || self.cloud_quality_mode == "auto" {
-            // v0.9.14: auto's instant/fast tiers degraded German accuracy.
+        if self.cloud_quality_mode.is_empty()
+            || matches!(self.cloud_quality_mode.as_str(), "auto" | "fast" | "instant")
+        {
+            // auto's instant/fast tiers degraded German accuracy and are gone from
+            // the UI — fold any saved value onto quality (turbo). "highest" (full
+            // large-v3, best accuracy) passes through unchanged.
             self.cloud_quality_mode = "quality".to_string();
         }
         // v0.4.4: Echo should launch at login by default. Existing installs saved
