@@ -38,7 +38,7 @@ body {
      --pc-glass scales EVERY tint alpha (set inline from config; the header
      droplet cycles clear → regular → rich), so "clear" is genuinely
      see-through instead of merely darker. */
-  --pc-glass: 0.45;
+  --pc-glass: 0.25;
   background: linear-gradient(
     160deg,
     rgb(36 58 92 / calc(0.3 * var(--pc-glass))) 0%,

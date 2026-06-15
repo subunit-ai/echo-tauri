@@ -77,7 +77,7 @@ const ICONS = {
  *  see-through, not just dimmer. */
 const GLASS_LEVELS = ["clear", "regular", "rich"] as const;
 type GlassLevel = (typeof GLASS_LEVELS)[number];
-const GLASS_MUL: Record<GlassLevel, number> = { clear: 0.45, regular: 0.9, rich: 1.5 };
+const GLASS_MUL: Record<GlassLevel, number> = { clear: 0.25, regular: 0.7, rich: 1.4 };
 const asGlass = (v: string): GlassLevel =>
   (GLASS_LEVELS as readonly string[]).includes(v) ? (v as GlassLevel) : "clear";
 

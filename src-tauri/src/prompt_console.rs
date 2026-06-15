@@ -66,10 +66,21 @@ fn build_window(app: &AppHandle, effects: bool) -> tauri::Result<WebviewWindow> 
     // semi-transparent panel without the OS blur — still coherent.
     #[cfg(target_os = "macos")]
     if effects {
-        use tauri::window::{Effect, EffectsBuilder};
+        use tauri::window::{Effect, EffectState, EffectsBuilder};
         // Radius matches the CSS shell's border-radius (22px) so the native
         // blur layer never peeks past the rounded corners.
-        b = b.effects(EffectsBuilder::new().effect(Effect::HudWindow).radius(22.0).build());
+        // EffectState::Active (instead of the default FollowsWindowActiveState):
+        // keep the translucent HUD look even when the console isn't the key
+        // window — otherwise macOS renders the vibrancy in its INACTIVE
+        // appearance (darker / more opaque) the moment focus moves to another
+        // app, which is exactly when the floating console is meant to stay glassy.
+        b = b.effects(
+            EffectsBuilder::new()
+                .effect(Effect::HudWindow)
+                .state(EffectState::Active)
+                .radius(22.0)
+                .build(),
+        );
     }
     #[cfg(target_os = "windows")]
     if effects {
