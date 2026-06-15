@@ -65,7 +65,10 @@ pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Op
     // to idle/working/done, never to error). Skip if a recording resumed meanwhile.
     if matches!(state, EngineState::Done | EngineState::Error) {
         let app = app.clone();
-        let delay_ms = if matches!(state, EngineState::Error) { 2500 } else { 1600 };
+        // Done = a brief confirmation flash then back to idle (TJ: 1600 ms felt too
+        // long — the orb lingered / took too long to disappear). Error stays longer
+        // so a failure is actually noticed.
+        let delay_ms = if matches!(state, EngineState::Error) { 2500 } else { 700 };
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(delay_ms));
             if !app.state::<crate::commands::AppState>().recorder.is_recording() {
