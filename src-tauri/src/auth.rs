@@ -184,11 +184,27 @@ pub fn ensure_fresh(app: &AppHandle) {
             c.subunit_token_issued_at = now;
             let _ = c.save();
         }
-        Err(e) => {
-            log::warn!("token refresh failed: {e}");
-            // The access token is expired (that's why we refreshed) and refresh
-            // failed → drop it so the X-API-Key fallback in cloud.rs can apply.
-            // Keep the refresh token for a later retry.
+        Err(RefreshFail::TokenDead) => {
+            log::warn!("refresh token rejected by server (4xx) — clearing it; re-login required");
+            // The token is permanently invalid (revoked/rotated/reuse). Drop BOTH
+            // tokens: keeping the dead refresh token makes ensure_fresh retry it on
+            // every call, and each retry past the server grace window triggers a
+            // reuse-kill of all the user's sessions (the 90+/day logout loop Erik
+            // hit running Echo + Sonar on one tablet). X-API-Key fallback in cloud.rs
+            // still applies until the user logs in again.
+            let st = app.state::<AppState>();
+            let mut c = st.config.lock();
+            c.subunit_access_token.clear();
+            c.subunit_refresh_token.clear();
+            c.subunit_token_issued_at = 0.0;
+            c.subunit_token_expires_in = 0;
+            let _ = c.save();
+        }
+        Err(RefreshFail::Transient(e)) => {
+            log::warn!("token refresh failed (transient): {e}");
+            // Network/5xx/429 — the token may still be valid. Drop only the access
+            // token (X-API-Key fallback in cloud.rs applies); KEEP the refresh token
+            // so a later cycle can retry.
             let st = app.state::<AppState>();
             let mut c = st.config.lock();
             c.subunit_access_token.clear();
@@ -199,23 +215,43 @@ pub fn ensure_fresh(app: &AppHandle) {
     }
 }
 
-fn do_refresh(refresh_token: &str) -> anyhow::Result<(String, String, i32)> {
+/// Why a refresh failed — decides whether the refresh token is kept or dropped.
+enum RefreshFail {
+    /// Server rejected the token (HTTP 4xx except 429): revoked/rotated/reuse — it
+    /// will never work again. Drop it so we stop hammering /refresh, which past the
+    /// server's grace window triggers a reuse-kill of every session. Re-login needed.
+    TokenDead,
+    /// Transient (network, timeout, 5xx, 429). Keep the token and retry later.
+    Transient(String),
+}
+
+fn do_refresh(refresh_token: &str) -> Result<(String, String, i32), RefreshFail> {
     let resp = crate::http::client()
         .post(format!("{AUTH_BASE}/refresh"))
         .timeout(Duration::from_secs(20))
         .json(&serde_json::json!({ "refresh_token": refresh_token }))
-        .send()?;
-    if !resp.status().is_success() {
-        anyhow::bail!("refresh {}", resp.status());
+        .send()
+        .map_err(|e| RefreshFail::Transient(e.to_string()))?;
+    let status = resp.status();
+    if !status.is_success() {
+        // 4xx (except 429 rate-limit) = the token itself is rejected → dead.
+        if status.is_client_error() && status.as_u16() != 429 {
+            return Err(RefreshFail::TokenDead);
+        }
+        return Err(RefreshFail::Transient(format!("refresh {status}")));
     }
-    let j: serde_json::Value = resp.json()?;
+    let j: serde_json::Value = resp
+        .json()
+        .map_err(|e| RefreshFail::Transient(e.to_string()))?;
     let access = j
         .get("access_token")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
     if access.is_empty() {
-        anyhow::bail!("refresh returned no access token");
+        return Err(RefreshFail::Transient(
+            "refresh returned no access token".into(),
+        ));
     }
     Ok((
         access,
