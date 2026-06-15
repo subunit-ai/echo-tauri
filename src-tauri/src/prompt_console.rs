@@ -51,7 +51,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
 fn build_window(app: &AppHandle, effects: bool) -> tauri::Result<WebviewWindow> {
     #[allow(unused_mut)]
     let mut b = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("prompt.html".into()))
-        .title("Echo Prompt")
+        .title("Echo Prompt Terminal")
         .inner_size(460.0, 560.0)
         .min_inner_size(340.0, 380.0)
         .decorations(false)

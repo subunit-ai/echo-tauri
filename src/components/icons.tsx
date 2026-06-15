@@ -42,7 +42,7 @@ export const MIC_PATHS = [
   "M12 19v3",
 ];
 
-// ---- Orb-Overlay-Inseln (Modus / Sprache / Cleanup / Konsole) ----
+// ---- Orb-Overlay-Inseln (Modus / Sprache / Cleanup / Terminal) ----
 
 /** Lokal-Modus: Schild mit Haken (wie BigModeSwitch). */
 export const SHIELD_CHECK_PATHS = [
@@ -99,7 +99,7 @@ export const WAND_PATHS = [
   "M11 3H9",
 ];
 
-/** Prompt-Konsole: Vierzack-Stern (ersetzt das ✦-Textzeichen). */
+/** Prompt Terminal: Vierzack-Stern (ersetzt das ✦-Textzeichen). */
 export const STAR4_PATHS = ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z"];
 
 export function MicIcon({ size = 15 }: { size?: number }) {
