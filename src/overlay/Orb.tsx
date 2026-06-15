@@ -21,6 +21,7 @@ import {
   onState,
   orbQuick,
   orbSet,
+  overlaySetHotRects,
   setOrbPosition,
   type EngineState,
   type OrbQuick,
@@ -37,15 +38,87 @@ const DEFAULT_DONE = "#50dc82";
 const DEFAULT_ERROR = "#ffc450";
 
 // ---- Island layout --------------------------------------------------------
-// The window is the orb square PLUS transparent gutters where the islands live
-// (left / right / above / below) so they never cover the canvas drawing.
-// KEEP IN SYNC with GUTTER_* in src-tauri/src/overlay.rs.
-const GUTTER_X = 168;
-const GUTTER_TOP = 168;
+// The window is the orb square PLUS transparent gutters where the chips and
+// their panels live (left / right / above / below). A chip sits one GAP from the
+// orb; its panel blooms BEYOND the chip (one PANEL_GAP further out) so it never
+// covers the chip you're pointing at, and the chip stays put. Only GUTTER_* must
+// match the Rust side (src-tauri/src/overlay.rs — it sizes the window from them);
+// everything else is the webview's own layout, reported to Rust as hit-rects
+// (overlaySetHotRects) so the window catches the mouse ONLY over real elements.
+const GUTTER_X = 224;
+const GUTTER_TOP = 190;
 const GUTTER_BOTTOM = 64;
-const GAP = 18; // clear air between the orb canvas and an island
-const CHIP = 38; // collapsed island (icon chip) diameter
-const PANEL_W = GUTTER_X - GAP; // expanded island width — fills its gutter
+const GAP = 18; // clear air between the orb canvas and a chip
+const CHIP = 38; // collapsed chip (icon) diameter
+const PANEL_W = 150; // expanded panel width
+const PANEL_GAP = 10; // clear air between a chip and ITS panel
+const ROW_H = 34; // one option row (keep in sync with rowStyle height)
+const ROW_GAP = 2; // panelBase gap
+const PANEL_PAD = 6; // panelBase padding
+const panelH = (rows: number) => rows * ROW_H + (rows - 1) * ROW_GAP + 2 * PANEL_PAD;
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+// All chip + panel boxes as plain numbers, derived from the live window size and
+// the constants above. Used for BOTH rendering AND the hit-rects we report to
+// Rust, so the click-catch region hugs exactly what's drawn — no
+// getBoundingClientRect, no transform-scale ambiguity during the bloom.
+function computeLayout(): {
+  w: number;
+  h: number;
+  dim: number;
+  orb: Rect;
+  chips: Record<"mode" | "language" | "cleanup" | "console", Rect>;
+  panels: Record<"mode" | "language" | "cleanup", Rect>;
+} {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dim = Math.max(1, w - 2 * GUTTER_X);
+  const midY = GUTTER_TOP + dim / 2; // vertical centre of the orb square
+  const cx = w / 2;
+  // Keep a tall panel fully on-window (small orbs): clamp its top edge.
+  const clampTop = (top: number, ph: number) =>
+    Math.min(Math.max(top, 6), Math.max(6, h - ph - 6));
+  const chips = {
+    mode: { x: GUTTER_X - GAP - CHIP, y: midY - CHIP / 2, w: CHIP, h: CHIP },
+    cleanup: { x: GUTTER_X + dim + GAP, y: midY - CHIP / 2, w: CHIP, h: CHIP },
+    language: { x: cx - CHIP / 2, y: GUTTER_TOP - GAP - CHIP, w: CHIP, h: CHIP },
+    console: {
+      x: cx - CHIP / 2,
+      y: GUTTER_TOP + dim + (GUTTER_BOTTOM - CHIP) / 2,
+      w: CHIP,
+      h: CHIP,
+    },
+  };
+  const panels = {
+    mode: {
+      x: chips.mode.x - PANEL_GAP - PANEL_W,
+      y: clampTop(midY - panelH(2) / 2, panelH(2)),
+      w: PANEL_W,
+      h: panelH(2),
+    },
+    cleanup: {
+      x: chips.cleanup.x + CHIP + PANEL_GAP,
+      y: clampTop(midY - panelH(6) / 2, panelH(6)),
+      w: PANEL_W,
+      h: panelH(6),
+    },
+    language: {
+      x: cx - PANEL_W / 2,
+      y: chips.language.y - PANEL_GAP - panelH(3),
+      w: PANEL_W,
+      h: panelH(3),
+    },
+  };
+  return {
+    w,
+    h,
+    dim,
+    orb: { x: GUTTER_X, y: GUTTER_TOP, w: dim, h: dim },
+    chips,
+    panels,
+  };
+}
 
 const MODE_COLOR: Record<string, string> = {
   local: "#22d3ee",
@@ -147,6 +220,8 @@ export function Orb() {
   // Which single satellite is expanded (null = just the icon chips). Hovering a
   // chip opens ONLY its own panel — not all three at once (TJ).
   const [openPanel, setOpenPanel] = useState<"mode" | "language" | "cleanup" | null>(null);
+  // Chip/panel geometry as numbers — recomputed when the window (orb size) changes.
+  const [layout, setLayout] = useState(computeLayout);
 
   useEffect(() => {
     invoke<Record<string, unknown>>("get_config")
@@ -310,13 +385,33 @@ export function Orb() {
     };
   }, []);
 
+  // Recompute the chip/panel geometry whenever the overlay window resizes (the
+  // only time it changes is an orb-size change in Settings → Rust set_size).
+  useEffect(() => {
+    const onResize = () => setLayout(computeLayout());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Report our interactive rectangles to Rust so the window catches the mouse
+  // ONLY over the orb + the currently-visible chips / open panel — the
+  // transparent gaps stay click-through (clicks reach the app behind). The orb
+  // is always reported; chips while engaged; the open panel while it's open.
+  useEffect(() => {
+    const rects: Rect[] = [layout.orb];
+    if (hover) {
+      rects.push(layout.chips.console);
+      if (quick) {
+        rects.push(layout.chips.mode, layout.chips.language, layout.chips.cleanup);
+      }
+    }
+    if (openPanel && quick) rects.push(layout.panels[openPanel]);
+    overlaySetHotRects(rects).catch(() => {});
+  }, [layout, hover, openPanel, quick]);
+
   const pick = (which: "mode" | "language" | "cleanup", value: string) => () => {
     orbSet(which, value).then(setQuick).catch(() => {});
   };
-
-  // Vertical center of the orb square, as a CSS calc (the orb sits between the
-  // top and bottom gutters; its box height is only known to CSS).
-  const orbMidY = `calc(${GUTTER_TOP}px + (100% - ${GUTTER_TOP + GUTTER_BOTTOM}px) / 2)`;
 
   const chipBase: CSSProperties = {
     ...glassSurface,
@@ -333,8 +428,9 @@ export function Orb() {
     padding: 0,
     transition: `opacity 0.18s ease, transform 0.22s ${EASE}`,
   };
-  // A chip shows while engaged, EXCEPT the one whose own panel is currently open
-  // (that panel takes its place). The others stay as chips so you can switch.
+  // All chips show while engaged and STAY put when their panel opens (the panel
+  // blooms beyond the chip, it doesn't replace it) — so the icon you pointed at
+  // never disappears and you can hop straight to another chip.
   const chipVis = (vis: boolean): CSSProperties => ({
     opacity: vis ? 1 : 0,
     transform: vis ? "scale(1)" : "scale(0.7)",
@@ -387,19 +483,18 @@ export function Orb() {
 
       {quick && (
         <>
-          {/* ---- Collapsed chips: icon-only, floating clear of the orb.
-               Hovering ANY of them blooms all three option panels. ---- */}
-          {/* W — transcription mode */}
+          {/* ---- Collapsed chips: icon-only, one GAP from the orb. Hovering a
+               chip blooms its own panel BEYOND it (the chip stays put). ---- */}
+          {/* W — transcription mode (left of the orb) */}
           <button
             className="orb-chip"
             title={t("overlay.tooltipMode", { value: quick.mode })}
             onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...chipBase,
-              ...chipVis(hover && openPanel !== "mode"),
-              left: GUTTER_X - GAP - CHIP,
-              top: orbMidY,
-              marginTop: -CHIP / 2,
+              ...chipVis(hover),
+              left: layout.chips.mode.x,
+              top: layout.chips.mode.y,
               color: MODE_COLOR[quick.mode] ?? "#cfe0f2",
             }}
           >
@@ -409,47 +504,45 @@ export function Orb() {
               strokeWidth={1.9}
             />
           </button>
-          {/* N — language */}
+          {/* N — language (above the orb) */}
           <button
             className="orb-chip"
             title={t("overlay.tooltipLanguage", { value: quick.language })}
             onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...chipBase,
-              ...chipVis(hover && openPanel !== "language"),
-              left: `calc(50% - ${CHIP / 2}px)`,
-              top: GUTTER_TOP - GAP - CHIP,
+              ...chipVis(hover),
+              left: layout.chips.language.x,
+              top: layout.chips.language.y,
             }}
           >
             <StrokeIcon paths={GLOBE_PATHS} size={17} strokeWidth={1.9} />
           </button>
-          {/* E — cleanup style */}
+          {/* E — cleanup style (right of the orb) */}
           <button
             className="orb-chip"
             title={t("overlay.tooltipCleanup", { value: quick.cleanup })}
             onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...chipBase,
-              ...chipVis(hover && openPanel !== "cleanup"),
-              left: `calc(100% - ${GUTTER_X - GAP}px)`,
-              top: orbMidY,
-              marginTop: -CHIP / 2,
+              ...chipVis(hover),
+              left: layout.chips.cleanup.x,
+              top: layout.chips.cleanup.y,
               color: quick.cleanup === "off" ? "#7d8da3" : "#22d3ee",
             }}
           >
             <StrokeIcon paths={SPARKLES_PATHS} size={17} strokeWidth={1.9} />
           </button>
 
-          {/* ---- Expanded island: ONLY the hovered chip's panel blooms ---- */}
-          {/* Mode — left of the orb */}
+          {/* ---- Expanded panel: blooms BEYOND the hovered chip, never on it ---- */}
+          {/* Mode — beyond the mode chip (further left) */}
           <div
             onMouseEnter={() => setOpenPanel("mode")}
             style={{
               ...panelBase,
               ...panelVis("mode", "right center"),
-              left: 0,
-              top: orbMidY,
-              translate: "0 -50%",
+              left: layout.panels.mode.x,
+              top: layout.panels.mode.y,
             }}
           >
             <Row
@@ -465,14 +558,14 @@ export function Orb() {
               onClick={pick("mode", "cloud")}
             />
           </div>
-          {/* Language — above the orb */}
+          {/* Language — beyond the language chip (further up) */}
           <div
             onMouseEnter={() => setOpenPanel("language")}
             style={{
               ...panelBase,
               ...panelVis("language", "center bottom"),
-              left: `calc(50% - ${PANEL_W / 2}px)`,
-              bottom: `calc(100% - ${GUTTER_TOP - GAP}px)`,
+              left: layout.panels.language.x,
+              top: layout.panels.language.y,
             }}
           >
             <Row
@@ -494,15 +587,14 @@ export function Orb() {
               onClick={pick("language", "auto")}
             />
           </div>
-          {/* Cleanup — right of the orb */}
+          {/* Cleanup — beyond the cleanup chip (further right) */}
           <div
             onMouseEnter={() => setOpenPanel("cleanup")}
             style={{
               ...panelBase,
               ...panelVis("cleanup", "left center"),
-              left: `calc(100% - ${PANEL_W}px)`,
-              top: orbMidY,
-              translate: "0 -50%",
+              left: layout.panels.cleanup.x,
+              top: layout.panels.cleanup.y,
             }}
           >
             <Row
@@ -546,7 +638,7 @@ export function Orb() {
         </>
       )}
 
-      {/* S — Prompt Console (action chip, stays a chip in both stages) */}
+      {/* S — Prompt Console (action chip, below the orb; no panel) */}
       <button
         className="orb-chip"
         title={t("overlay.tooltipPrompt")}
@@ -556,8 +648,8 @@ export function Orb() {
         style={{
           ...chipBase,
           ...chipVis(hover),
-          left: `calc(50% - ${CHIP / 2}px)`,
-          top: `calc(100% - ${GUTTER_BOTTOM - 14}px)`,
+          left: layout.chips.console.x,
+          top: layout.chips.console.y,
           color: "#a78bfa",
         }}
       >

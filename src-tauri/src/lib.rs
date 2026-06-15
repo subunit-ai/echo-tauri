@@ -124,6 +124,7 @@ pub fn run() {
             commands::orb_quick,
             commands::orb_cycle,
             commands::orb_set,
+            overlay::overlay_set_hot_rects,
             prompt_console::prompt_console_toggle,
             prompt_console::prompts_load,
             prompt_console::prompts_save,

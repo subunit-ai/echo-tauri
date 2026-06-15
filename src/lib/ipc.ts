@@ -135,6 +135,13 @@ export const orbCycle = (which: "mode" | "language" | "cleanup") =>
 /** Set one satellite directly (expanded island panels pick instead of cycling). */
 export const orbSet = (which: "mode" | "language" | "cleanup", value: string) =>
   invoke<OrbQuick>("orb_set", { which, value });
+/** Report the overlay's interactive rectangles (logical px, window-local: the
+ *  orb plus any visible chips / the open panel) so the Rust hit-test makes the
+ *  window mouse-opaque ONLY over them — the transparent gaps between stay
+ *  click-through, so clicks land on the app behind the overlay. */
+export const overlaySetHotRects = (
+  rects: { x: number; y: number; w: number; h: number }[],
+) => invoke<void>("overlay_set_hot_rects", { rects });
 
 // ---- Orb profiles (per-account, local-first, cloud-synced) ----------------
 // A profile is the FULL orb look. `payload` is an opaque blob (forward-compatible

@@ -20,6 +20,13 @@ pub struct AppState {
     pub target: Mutex<Option<Target>>,
     /// Guards the single overlay cursor hit-test loop (see [`crate::overlay`]).
     pub hit_test_active: std::sync::atomic::AtomicBool,
+    /// Interactive hit-rects reported by the overlay webview (logical px,
+    /// window-local): the orb plus any currently-visible chips / open panel.
+    /// The hit-test loop makes the window mouse-opaque ONLY over these, so the
+    /// transparent gaps between them stay click-through (clicks reach the app
+    /// behind). Empty until the overlay reports; the loop falls back to the orb
+    /// square so first-hover always engages. See [`crate::overlay`].
+    pub overlay_hot_rects: Mutex<Vec<crate::overlay::HotRect>>,
     /// Active meeting recording (mic + system loopback), None when not recording.
     pub meeting_capture: Mutex<Option<crate::meeting_capture::MeetingCapture>>,
     /// True while a record session is in progress. Set in [`do_start`], cleared
@@ -43,6 +50,7 @@ impl AppState {
             recorder: Recorder::new(),
             target: Mutex::new(None),
             hit_test_active: std::sync::atomic::AtomicBool::new(false),
+            overlay_hot_rects: Mutex::new(Vec::new()),
             meeting_capture: Mutex::new(None),
             session_active: AtomicBool::new(false),
             prompt_pending: Mutex::new(Vec::new()),

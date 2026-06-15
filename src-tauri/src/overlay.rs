@@ -11,7 +11,7 @@
 //! interactive); leaving the window rect disengages back to click-through.
 
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
@@ -22,10 +22,47 @@ use crate::commands::AppState;
 
 // Transparent space around the orb square for the satellite islands, in logical
 // px. KEEP IN SYNC with the same constants in src/overlay/Orb.tsx — the React
-// side lays the canvas + islands out against these exact insets.
-pub const GUTTER_X: f64 = 168.0;
-pub const GUTTER_TOP: f64 = 168.0;
+// side lays the canvas + islands out against these exact insets. The side/top
+// gutters are wide enough that an expanded panel blooms BEYOND its chip (further
+// from the orb) instead of on top of it, with the chip staying put.
+pub const GUTTER_X: f64 = 224.0;
+pub const GUTTER_TOP: f64 = 190.0;
 pub const GUTTER_BOTTOM: f64 = 64.0;
+
+/// One interactive rectangle of the overlay (logical px, window-local), as
+/// reported by the webview: the orb, a visible chip, or the open panel. The
+/// hit-test loop makes the window mouse-opaque only over the union of these, so
+/// the transparent gaps between them pass clicks through to the app behind.
+#[derive(Clone, Copy, serde::Deserialize)]
+pub struct HotRect {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl HotRect {
+    fn contains(&self, px: f64, py: f64) -> bool {
+        px >= self.x && px <= self.x + self.w && py >= self.y && py <= self.y + self.h
+    }
+    /// Grow the rect by `p` on every side (the engage slack — see the loop).
+    fn inflated(&self, p: f64) -> HotRect {
+        HotRect {
+            x: self.x - p,
+            y: self.y - p,
+            w: self.w + 2.0 * p,
+            h: self.h + 2.0 * p,
+        }
+    }
+}
+
+/// The overlay webview reports its interactive rectangles here whenever they
+/// change (hover toggles, a panel opens/closes, the orb is resized). The
+/// hit-test loop reads them to decide where the window catches the mouse.
+#[tauri::command]
+pub fn overlay_set_hot_rects(state: tauri::State<'_, AppState>, rects: Vec<HotRect>) {
+    *state.overlay_hot_rects.lock() = rects;
+}
 
 /// Overlay window size for a given orb diameter (logical px).
 fn window_size(dim: f64) -> (f64, f64) {
@@ -39,14 +76,24 @@ pub fn orb_dim(size_mult: f64) -> f64 {
 }
 
 /// Start the cursor hit-test loop (idempotent via `hit_test_active`). While the
-/// orb is shown it polls the global cursor and runs a small engage state machine:
-/// disengaged → the only hot zone is the orb's inscribed circle (bottom-center
-/// of the window); touching it engages the WHOLE window so the satellite islands
-/// in the gutters are reachable. Moving outside the window rect disengages back
-/// to click-through. Every transition is pushed to the webview via
-/// `echo://orb-hover`, which is what shows/hides the islands (the webview gets
-/// no mouse events while click-through, so it can't track hover itself). Exits
-/// (and restores click-through) when the orb is hidden or the window closes.
+/// orb is shown it polls the global cursor and maintains TWO independent things:
+///
+/// * **capture** (`set_ignore_cursor_events`): the window catches the mouse ONLY
+///   when the cursor is over a real interactive rectangle — the orb square, or a
+///   chip / open panel the webview reported via `overlay_set_hot_rects`. Over the
+///   transparent GAPS between them the window is click-through, so clicks reach
+///   the app behind (the gutters no longer block anything). No grace period —
+///   gaps go through at once.
+/// * **engage** (`echo://orb-hover`): whether the satellite chips are shown. This
+///   is sticky — true within a generous pad around the cluster, and it lingers a
+///   short grace after the cursor leaves so traversing the gaps (or the frame
+///   before the webview re-reports its rects) never flickers the menu. The
+///   webview gets no mouse events while click-through, so it relies on this
+///   signal — it can't track hover itself.
+///
+/// The orb square is always treated as hot/engageable (computed from the window
+/// size) so first-hover works even before the webview has reported anything.
+/// Exits (and restores click-through) when the orb is hidden or the window closes.
 pub fn ensure_hit_test(app: &AppHandle) {
     if app
         .state::<AppState>()
@@ -57,9 +104,17 @@ pub fn ensure_hit_test(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut tick = tokio::time::interval(Duration::from_millis(50));
+        // Poll fast — this only reads the cursor + does a few point-in-rect tests,
+        // so 16 ms keeps both the hover-open and the click-through toggle instant.
+        let mut tick = tokio::time::interval(Duration::from_millis(16));
         let mut last_ignore: Option<bool> = None;
         let mut engaged = false;
+        let mut left_at: Option<Instant> = None;
+        // Engage slack around every interactive rect, so crossing the air between
+        // the orb and a chip keeps the menu up.
+        const PAD: f64 = 36.0;
+        // Keep the menu up this long after the cursor leaves the cluster.
+        const GRACE: Duration = Duration::from_millis(150);
         loop {
             tick.tick().await;
             let orb_on = app.state::<AppState>().config.lock().use_orb_overlay;
@@ -71,42 +126,58 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 break;
             }
             let win = win.unwrap();
-            let inside = match (
+            let (capture, inside_engage) = match (
                 app.cursor_position(),
                 win.outer_position(),
                 win.outer_size(),
                 win.scale_factor(),
             ) {
                 (Ok(cur), Ok(pos), Ok(size), Ok(scale)) => {
-                    let (px, py) = (pos.x as f64, pos.y as f64);
-                    let (w, h) = (size.width as f64, size.height as f64);
-                    if engaged {
-                        // Stay engaged anywhere inside the window rect.
-                        cur.x >= px && cur.x <= px + w && cur.y >= py && cur.y <= py + h
-                    } else {
-                        // Engage only via the orb circle (bottom-center square).
-                        let orb_d = (w - 2.0 * GUTTER_X * scale).max(1.0);
-                        let cx = px + w / 2.0;
-                        let cy = py + GUTTER_TOP * scale + orb_d / 2.0;
-                        let r = orb_d / 2.0;
-                        let (dx, dy) = (cur.x - cx, cur.y - cy);
-                        dx * dx + dy * dy <= r * r
-                    }
+                    // Cursor in window-local LOGICAL px — same space as the rects
+                    // the webview reports (getBoundingClientRect-equivalent).
+                    let lx = (cur.x - pos.x as f64) / scale;
+                    let ly = (cur.y - pos.y as f64) / scale;
+                    let wl = size.width as f64 / scale;
+                    let dim = (wl - 2.0 * GUTTER_X).max(1.0);
+                    // The orb square is always hot (engage + drag), even before the
+                    // webview reports — guarantees first-hover engages.
+                    let orb = HotRect {
+                        x: GUTTER_X,
+                        y: GUTTER_TOP,
+                        w: dim,
+                        h: dim,
+                    };
+                    let rects = app.state::<AppState>().overlay_hot_rects.lock().clone();
+                    let cap =
+                        orb.contains(lx, ly) || rects.iter().any(|r| r.contains(lx, ly));
+                    let eng = orb.inflated(PAD).contains(lx, ly)
+                        || rects.iter().any(|r| r.inflated(PAD).contains(lx, ly));
+                    (cap, eng)
                 }
-                _ => false,
+                _ => (false, false),
             };
-            if inside != engaged {
-                engaged = inside;
+            // Engage is sticky (grace); capture is immediate (gaps click-through now).
+            let want = if inside_engage {
+                left_at = None;
+                true
+            } else {
+                if engaged && left_at.is_none() {
+                    left_at = Some(Instant::now());
+                }
+                matches!(left_at, Some(t) if t.elapsed() < GRACE)
+            };
+            if want != engaged {
+                engaged = want;
                 let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": engaged }));
             }
-            let ignore = !engaged;
+            let ignore = !capture;
             if last_ignore != Some(ignore) {
                 let _ = win.set_ignore_cursor_events(ignore);
                 last_ignore = Some(ignore);
             }
         }
         if engaged {
-            // The loop can exit mid-engage (orb toggled off) — hide the islands.
+            // The loop can exit mid-engage (orb toggled off) — hide the chips.
             let _ = app.emit("echo://orb-hover", serde_json::json!({ "hover": false }));
         }
         app.state::<AppState>()
@@ -138,6 +209,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .shadow(false)
         .focused(false)
         .build()?;
+
+    // Fresh window → drop any stale hit-rects from a previous overlay instance;
+    // the webview re-reports them on mount.
+    app.state::<AppState>().overlay_hot_rects.lock().clear();
 
     // Start click-through; the hit-test loop (orb mode) enables interactivity only
     // while the cursor is over the orb. Bubble mode stays click-through throughout.
