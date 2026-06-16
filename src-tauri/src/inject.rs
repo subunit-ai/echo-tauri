@@ -218,6 +218,44 @@ fn short_title(title: &str) -> String {
     }
 }
 
+/// Windows: the executable basename (lowercased, without ".exe") of the process
+/// that owns `hwnd` — the robust Auto-Mode app signal (`CURATED_APPS`). Best-effort:
+/// returns "" if the process can't be opened/queried (the title still drives the
+/// fallback). Uses `PROCESS_QUERY_LIMITED_INFORMATION`, which a normal-integrity
+/// app can open against most foreground processes.
+#[cfg(target_os = "windows")]
+unsafe fn win_process_name(hwnd: windows::Win32::Foundation::HWND) -> String {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(hwnd, Some(&mut pid as *mut u32));
+    if pid == 0 {
+        return String::new();
+    }
+    let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+        return String::new();
+    };
+    let mut buf = [0u16; 260];
+    let mut size = buf.len() as u32;
+    let res =
+        QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size);
+    let _ = CloseHandle(handle);
+    if res.is_err() || size == 0 {
+        return String::new();
+    }
+    // Lowercase the whole path first, then take the basename and drop ".exe":
+    // "C:\\Users\\x\\AppData\\…\\Code.exe" → "code".
+    let full = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
+    let base = full.rsplit(['\\', '/']).next().unwrap_or(&full);
+    base.strip_suffix(".exe").unwrap_or(base).to_string()
+}
+
 /// Capture the currently focused window so we can paste back into it later.
 pub fn capture_active_window() -> Target {
     #[cfg(target_os = "linux")]
@@ -264,12 +302,21 @@ pub fn capture_active_window() -> Target {
                 } else {
                     String::new()
                 };
+                // App name = the foreground process's executable basename (e.g.
+                // "code", "cursor", "windowsterminal", "powershell") — the ROBUST
+                // Auto-Mode signal that macOS/Linux already have. Without it Windows
+                // fell back to title-only matching, so the curated app rules
+                // (terminals, editors, AI apps) never fired there. Browsers report
+                // their own exe ("chrome"/"msedge"/…) which matches no app rule, so
+                // the in-tab site keeps deciding via the window title.
+                let app = win_process_name(hwnd);
                 let id = (hwnd.0 as isize).to_string();
-                log::debug!("capture: win target hwnd={id} title=\"{}\"", short_title(&title));
+                log::debug!(
+                    "capture: win target hwnd={id} app=\"{app}\" title=\"{}\"",
+                    short_title(&title)
+                );
                 // Encode the HWND pointer as a decimal string so Target stays Send.
-                // App name: Windows titles conventionally end in "… - <App>", which
-                // Auto-Mode's title matching already covers.
-                return Target { id, title, app: String::new() };
+                return Target { id, title, app };
             }
         }
         log::debug!("capture: no foreground window (win)");
