@@ -107,6 +107,10 @@ windows = { version = "0.58", features = [
   # paste-back path, where its non-atomic 3-call Ctrl+V chord raced (double-paste
   # / bare "v"). See inject.rs `win` module.
   "Win32_UI_Input_KeyboardAndMouse",
+  # Foreground process exe name for Auto-Mode (OpenProcess +
+  # QueryFullProcessImageNameW) — the robust app signal on Windows. See
+  # inject.rs `win_process_name`.
+  "Win32_System_Threading",
 ] }
 # System-audio loopback capture for meeting recording (the "other side" of a
 # Teams/Zoom/Meet call). The `wasapi` crate wraps the Core Audio COM dance

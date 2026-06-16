@@ -16,6 +16,10 @@ const CURATED_APPS: &[(&[&str], &str)] = &[
             "intellij", "pycharm", "webstorm", "goland", "clion", "rider", "phpstorm",
             "terminal", "iterm", "warp", "ghostty", "alacritty", "kitty", "konsole", "hyper",
             "neovim", "nvim",
+            // Windows shell exes (capture_active_window now yields the process exe
+            // name on Windows): "WindowsTerminal" is caught by "terminal";
+            // powershell/pwsh/cmd (also Cmder) are not, so list them explicitly.
+            "powershell", "pwsh", "cmd",
         ],
         "prompt",
     ),
@@ -152,6 +156,26 @@ mod tests {
         assert_eq!(style("Microsoft Teams", "", &overrides), "slack");
         assert_eq!(style("Microsoft Word", "", &overrides), "formal");
         assert_eq!(style("Claude", "", &overrides), "prompt");
+    }
+
+    #[test]
+    fn test_windows_exe_app_names() {
+        // On Windows capture_active_window now yields the process exe basename
+        // (lowercased, ".exe" stripped) — exercise the app-rule path with those.
+        let ov = HashMap::new();
+        assert_eq!(style("code", "", &ov), "prompt"); // Code.exe
+        assert_eq!(style("cursor", "", &ov), "prompt"); // Cursor.exe
+        assert_eq!(style("windowsterminal", "", &ov), "prompt"); // → contains "terminal"
+        assert_eq!(style("powershell", "", &ov), "prompt"); // powershell.exe
+        assert_eq!(style("pwsh", "", &ov), "prompt"); // PowerShell 7
+        assert_eq!(style("cmd", "", &ov), "prompt"); // cmd.exe
+        assert_eq!(style("outlook", "", &ov), "email"); // outlook.exe
+        assert_eq!(style("slack", "", &ov), "slack"); // slack.exe
+        assert_eq!(style("winword", "", &ov), "formal"); // winword.exe → contains "word"
+        // Browsers report their own exe → no app rule fires; the tab title decides.
+        assert_eq!(style("chrome", "", &ov), "default");
+        assert_eq!(style("chrome", "ChatGPT - Google Chrome", &ov), "prompt");
+        assert_eq!(style("msedge", "Posteingang - Outlook", &ov), "email");
     }
 
     #[test]
