@@ -1105,15 +1105,17 @@ pub fn meet_local_available(state: State<AppState>) -> MeetLocalAvailability {
 #[cfg(feature = "local-meet")]
 #[tauri::command]
 pub fn meet_local_start(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    let (plan, mic, model, language) = {
+    let (plan, mic, model) = {
         let c = state.config.lock();
-        let lang = if c.language == "auto" || c.language.is_empty() {
-            None
-        } else {
-            Some(c.language.clone())
-        };
-        (c.plan.clone(), c.mic_device_name.clone(), c.local_model.clone(), lang)
+        (c.plan.clone(), c.mic_device_name.clone(), c.local_model.clone())
     };
+    // Meetings laufen IMMER mit Sprach-Auto-Detect (None) — anders als das Diktat,
+    // wo `config.language` bewusst pinbar ist (z.B. DE für niedrige Latenz). Ein
+    // Meeting hat mehrere Sprecher, oft gemischtsprachig, und darf nicht am Diktat-
+    // Pin hängen (sonst würde ein englisches Meeting fälschlich auf die Diktat-
+    // Sprache gezwungen). Konsistent mit dem Cloud-Meet, das serverseitig ebenfalls
+    // auf "auto" defaultet.
+    let language: Option<String> = None;
     if !meet_local_plan_ok(&plan) {
         return Err("Lokale Meeting-Verarbeitung ist ein Pro-Feature.".into());
     }
