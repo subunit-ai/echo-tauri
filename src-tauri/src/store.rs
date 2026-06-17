@@ -60,7 +60,19 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             dirty      INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (account, id)
          );
-         CREATE INDEX IF NOT EXISTS idx_profiles_account ON preset_profiles(account, updated_at);",
+         CREATE INDEX IF NOT EXISTS idx_profiles_account ON preset_profiles(account, updated_at);
+         CREATE TABLE IF NOT EXISTS vocab_candidates (
+            key         TEXT PRIMARY KEY,
+            variants    TEXT    NOT NULL DEFAULT '[]',
+            total       INTEGER NOT NULL DEFAULT 0,
+            suggestion  TEXT,
+            confidence  REAL,
+            status      TEXT    NOT NULL DEFAULT 'pending',
+            added_term  TEXT,
+            created_at  INTEGER NOT NULL,
+            updated_at  INTEGER NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_vcand_status ON vocab_candidates(status, updated_at DESC);",
     )?;
     *DB.lock() = Some(conn);
     log::info!("store: opened {}", path.display());
@@ -424,6 +436,110 @@ pub fn apply_server_profiles(account: &str, server_rows: &[Value]) {
                 "DELETE FROM preset_profiles WHERE account = ?1 AND id = ?2",
                 params![account, id],
             );
+        }
+    }
+}
+
+// ── Auto-vocab candidates (autovocab.rs detection → hybrid learn flow) ──────
+
+/// Current status of a candidate if seen before ("pending" | "added" | "ignored").
+pub fn vcand_status(key: &str) -> Option<String> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT status FROM vocab_candidates WHERE key = ?1",
+        params![key],
+        |r| r.get::<_, String>(0),
+    )
+    .ok()
+}
+
+/// Insert/refresh a PENDING candidate. Never resurrects an 'added'/'ignored' row
+/// (the WHERE guard scopes updates to still-pending ones), so a handled term
+/// stays handled.
+pub fn upsert_vcand_pending(key: &str, variants_json: &str, total: i64, now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO vocab_candidates (key, variants, total, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'pending', ?4, ?4)
+         ON CONFLICT(key) DO UPDATE SET
+            variants = excluded.variants, total = excluded.total, updated_at = excluded.updated_at
+         WHERE status = 'pending'",
+        params![key, variants_json, total, now],
+    );
+}
+
+/// Record the LLM suggestion + resulting status (+ the added term, for undo).
+pub fn set_vcand(
+    key: &str,
+    suggestion: Option<&str>,
+    confidence: Option<f64>,
+    status: &str,
+    added_term: Option<&str>,
+    now: i64,
+) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "UPDATE vocab_candidates SET suggestion = ?2, confidence = ?3, status = ?4,
+            added_term = ?5, updated_at = ?6 WHERE key = ?1",
+        params![key, suggestion, confidence, status, added_term, now],
+    );
+}
+
+/// One candidate row by key (variants/suggestion/added_term — for confirm/undo).
+pub fn get_vcand(key: &str) -> Option<Value> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT key, variants, total, suggestion, confidence, status, added_term
+         FROM vocab_candidates WHERE key = ?1",
+        params![key],
+        |r| {
+            let variants: String = r.get(1)?;
+            Ok(json!({
+                "key": r.get::<_, String>(0)?,
+                "variants": serde_json::from_str::<Value>(&variants).unwrap_or_else(|_| json!([])),
+                "total": r.get::<_, i64>(2)?,
+                "suggestion": r.get::<_, Option<String>>(3)?,
+                "confidence": r.get::<_, Option<f64>>(4)?,
+                "status": r.get::<_, String>(5)?,
+                "added_term": r.get::<_, Option<String>>(6)?,
+            }))
+        },
+    )
+    .ok()
+}
+
+/// Candidates with a given status, newest first (for the UI panels).
+pub fn list_vcand(status: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT key, variants, total, suggestion, confidence, status, added_term, updated_at
+         FROM vocab_candidates WHERE status = ?1 ORDER BY updated_at DESC, total DESC",
+    ) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![status], |r| {
+        let variants: String = r.get(1)?;
+        Ok(json!({
+            "key": r.get::<_, String>(0)?,
+            "variants": serde_json::from_str::<Value>(&variants).unwrap_or_else(|_| json!([])),
+            "total": r.get::<_, i64>(2)?,
+            "suggestion": r.get::<_, Option<String>>(3)?,
+            "confidence": r.get::<_, Option<f64>>(4)?,
+            "status": r.get::<_, String>(5)?,
+            "added_term": r.get::<_, Option<String>>(6)?,
+            "updated_at": r.get::<_, i64>(7)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(e) => {
+            log::warn!("store: vcand query failed: {e}");
+            Vec::new()
         }
     }
 }

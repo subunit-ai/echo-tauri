@@ -206,6 +206,33 @@ export const deleteHistoryEntry = (id: number) =>
   invoke<void>("delete_history_entry", { id });
 /** Clear the whole transcription history. */
 export const clearHistory = () => invoke<void>("clear_history");
+
+// ── Auto-vocabulary ────────────────────────────────────────────────────────
+/** A detected recurring mis-heard term (cluster of spelling variants). */
+export type VocabCandidate = {
+  key: string;
+  /** [variant, count] pairs, most frequent first. */
+  variants: [string, number][];
+  total: number;
+  /** Backend-guessed correct spelling (null if it couldn't guess). */
+  suggestion: string | null;
+  confidence: number | null;
+  status: "pending" | "added" | "ignored";
+  added_term: string | null;
+  updated_at: number;
+};
+/** Candidates by status: "pending" (ask) or "added" (auto-learned). */
+export const vocabCandidates = (status: "pending" | "added" = "pending") =>
+  invoke<VocabCandidate[]>("vocab_candidates", { status });
+/** Trigger a background scan of recent history for new candidates. */
+export const vocabScan = () => invoke<void>("vocab_scan");
+/** Confirm a pending suggestion (spelling may be edited) → learn it. */
+export const vocabConfirm = (key: string, spelling: string) =>
+  invoke<void>("vocab_confirm", { key, spelling });
+/** Dismiss a candidate so it never resurfaces. */
+export const vocabIgnore = (key: string) => invoke<void>("vocab_ignore", { key });
+/** Undo an auto-learned term (removes its vocab entry). */
+export const vocabUndo = (key: string) => invoke<void>("vocab_undo", { key });
 /** Fired after a transcription lands in the store — refresh history views. */
 export const onHistoryChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen("echo://history-changed", () => cb());
