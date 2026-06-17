@@ -265,17 +265,11 @@ body {
   position: relative;
   flex: 1;
   display: flex;
-  /* Editor sits ~3/4 tall with breathing room above + below (TJ: a new note's
-     text field shouldn't unfold all the way to the top). The coach drawer is an
-     absolute inset:0 overlay, so this only affects the editor. */
-  flex-direction: column;
-  justify-content: center;
   min-height: 0;
 }
 
 .pc-editor {
-  flex: 0 1 auto;
-  height: 76%;
+  flex: 1;
   width: 100%;
   background: transparent;
   border: none;
