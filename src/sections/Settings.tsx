@@ -619,14 +619,19 @@ export function Settings() {
               </div>
             </Row>
             <Row name={t("settings.volume")} hint={t("settings.volumeHint")}>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={c.sound_volume}
-                onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={c.sound_volume}
+                  onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
+                />
+                <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, fontSize: "0.8rem", opacity: 0.8 }}>
+                  {Math.round((c.sound_volume ?? 0) * 100)}%
+                </span>
+              </div>
             </Row>
             <Row name={t("settings.theme")}>
               <Sel
