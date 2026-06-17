@@ -1,9 +1,125 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { VocabEntry } from "../lib/ipc";
+import { listen } from "@tauri-apps/api/event";
+import {
+  vocabCandidates,
+  vocabConfirm,
+  vocabIgnore,
+  vocabScan,
+  vocabUndo,
+  type VocabCandidate,
+  type VocabEntry,
+} from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
 const CATS = ["Person", "Company", "Tech", "Place", "Other"];
+
+/** Auto-vocabulary: surfaces recurring mis-heard terms detected from history.
+ *  High-confidence ones were already learned silently (shown under "gelernt"
+ *  with undo); the rest are pending suggestions the user confirms/corrects. */
+function AutoVocab() {
+  const { t } = useTranslation();
+  const [pending, setPending] = useState<VocabCandidate[]>([]);
+  const [learned, setLearned] = useState<VocabCandidate[]>([]);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+
+  const reload = () => {
+    vocabCandidates("pending").then(setPending).catch(() => {});
+    vocabCandidates("added").then(setLearned).catch(() => {});
+  };
+  useEffect(() => {
+    vocabScan().catch(() => {}); // refresh candidates when the section opens
+    reload();
+    const un = listen("echo://vocab-candidates-changed", reload);
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, []);
+
+  if (pending.length === 0 && learned.length === 0) return null;
+
+  const spelling = (c: VocabCandidate) => edits[c.key] ?? c.suggestion ?? c.key;
+  const variants = (c: VocabCandidate) => c.variants.map(([v]) => v).join(", ");
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="name" style={{ opacity: 0.7, marginBottom: 4 }}>{t("vocab.autoTitle")}</div>
+      <p className="section-sub" style={{ marginTop: 0 }}>{t("vocab.autoSub")}</p>
+
+      {pending.map((c) => (
+        <div
+          key={c.key}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "9px 0",
+            borderTop: "1px solid var(--glass-edge)",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 180, fontSize: 13 }}>
+            {t("vocab.autoHeard", { variants: variants(c), count: c.total })}
+          </div>
+          <input
+            style={{ width: 170 }}
+            value={spelling(c)}
+            placeholder={t("vocab.autoSpellingPlaceholder")}
+            onChange={(e) => setEdits({ ...edits, [c.key]: e.target.value })}
+          />
+          <button
+            className="sub-tab"
+            style={{ borderColor: "var(--accent)", color: "var(--accent-bright)" }}
+            onClick={() => vocabConfirm(c.key, spelling(c)).then(reload)}
+          >
+            {t("vocab.autoAdd")}
+          </button>
+          <button className="sub-tab" onClick={() => vocabIgnore(c.key).then(reload)}>
+            {t("vocab.autoIgnore")}
+          </button>
+        </div>
+      ))}
+
+      {learned.length > 0 && (
+        <div style={{ marginTop: pending.length ? 14 : 4 }}>
+          <div className="name" style={{ opacity: 0.6, fontSize: 12 }}>{t("vocab.autoLearned")}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+            {learned.map((c) => (
+              <span
+                key={c.key}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "3px 6px 3px 11px",
+                  borderRadius: 999,
+                  border: "1px solid var(--border-strong)",
+                  fontSize: 12,
+                }}
+              >
+                {c.added_term}
+                <button
+                  onClick={() => vocabUndo(c.key).then(reload)}
+                  title={t("vocab.autoUndo")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "inherit",
+                    cursor: "pointer",
+                    padding: "0 2px",
+                    opacity: 0.7,
+                  }}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Vocabulary() {
   const { config, patch } = useConfig();
@@ -49,6 +165,7 @@ export function Vocabulary() {
     <div>
       <h1 className="section-title">{t("vocab.title")}</h1>
       <p className="section-sub">{t("vocab.subtitle")}</p>
+      <AutoVocab />
       <div className="card">
         <table className="vocab">
           <thead>

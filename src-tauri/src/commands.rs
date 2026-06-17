@@ -545,6 +545,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Done (and Error) settle back to Idle centrally in emit_state — so the overlay
     // idle behaviour re-engages and the orb never gets stuck on done-green/error-amber.
     emit_state(app, EngineState::Done, None);
+    // Auto-vocab: throttled background scan of recent history for recurring
+    // mis-heard terms (this dictation is already in history above). Off-thread.
+    crate::autovocab::maybe_scan(app);
     Ok(result)
 }
 
@@ -643,6 +646,38 @@ pub fn history_list(query: Option<String>, limit: Option<u32>, offset: Option<u3
         limit.unwrap_or(200).min(1000),
         offset.unwrap_or(0),
     )
+}
+
+// ── Auto-vocabulary (detect recurring mis-heard terms → hybrid learn) ───────
+
+/// List candidates by status ("pending" suggestions or "added" auto-learned).
+#[tauri::command]
+pub fn vocab_candidates(status: Option<String>) -> Vec<serde_json::Value> {
+    crate::store::list_vcand(status.as_deref().unwrap_or("pending"))
+}
+
+/// Trigger a background scan now (network suggest runs off-thread; never blocks).
+#[tauri::command]
+pub fn vocab_scan(app: AppHandle) {
+    std::thread::spawn(move || crate::autovocab::scan_and_learn(&app));
+}
+
+/// Confirm a pending suggestion (spelling possibly edited) → learn it.
+#[tauri::command]
+pub fn vocab_confirm(app: AppHandle, key: String, spelling: String) {
+    crate::autovocab::confirm(&app, &key, &spelling);
+}
+
+/// Dismiss a candidate → never surface it again.
+#[tauri::command]
+pub fn vocab_ignore(app: AppHandle, key: String) {
+    crate::autovocab::ignore(&app, &key);
+}
+
+/// Undo an auto-learned term (removes its vocab entry, won't re-add).
+#[tauri::command]
+pub fn vocab_undo(app: AppHandle, key: String) {
+    crate::autovocab::undo(&app, &key);
 }
 
 /// Total number of stored history entries (Home stat card).

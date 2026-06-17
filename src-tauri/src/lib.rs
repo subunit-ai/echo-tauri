@@ -2,6 +2,7 @@
 
 mod auth;
 mod auto_mode;
+mod autovocab;
 mod cleanup;
 mod commands;
 mod config;
@@ -28,6 +29,7 @@ mod recorder;
 mod sound; // native record-start cue (instant even when the window is hidden)
 mod store; // SQLite history + meetings + orb profiles (echo.db)
 mod transcribe;
+mod vocab_suggest; // auto-vocab spelling guess via the Abo cleanup backend
 
 use commands::AppState;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -120,6 +122,11 @@ pub fn run() {
             commands::history_count,
             commands::delete_history_entry,
             commands::clear_history,
+            commands::vocab_candidates,
+            commands::vocab_scan,
+            commands::vocab_confirm,
+            commands::vocab_ignore,
+            commands::vocab_undo,
             commands::meetings_list,
             commands::set_orb_position,
             commands::orb_quick,
