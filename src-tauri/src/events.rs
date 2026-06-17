@@ -45,10 +45,10 @@ pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: EngineState, detail: Op
     // Dynamic tray tooltip reflecting the current state.
     if let Some(tray) = app.tray_by_id("tray") {
         let tip = match state {
-            EngineState::Recording => "Echo — Aufnahme…",
-            EngineState::Transcribing => "Echo — Transkribiere…",
-            EngineState::Error => "Echo — Fehler",
-            _ => "Echo",
+            EngineState::Recording => "Echo (Beta) — Aufnahme…",
+            EngineState::Transcribing => "Echo (Beta) — Transkribiere…",
+            EngineState::Error => "Echo (Beta) — Fehler",
+            _ => "Echo (Beta)",
         };
         let _ = tray.set_tooltip(Some(tip));
     }

@@ -91,6 +91,20 @@ button {
   font-weight: 500;
 }
 
+/* "Beta" presence badge next to the brand (components/Header.tsx). Amber pill
+   from the shared design tokens so it reads as a pre-release marker. */
+.header .beta-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--amber-line);
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
 .header .spacer {
   flex: 1;
 }
