@@ -23,6 +23,7 @@ export function Header() {
         <BrandMark size={22} />
         Echo
       </div>
+      <span className="beta-badge">Beta</span>
       {version && <span className="version">v{version}</span>}
       <div className="spacer" />
       <HeaderUpdate />
