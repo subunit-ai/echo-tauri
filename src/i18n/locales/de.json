@@ -496,12 +496,18 @@
       "insert": "In App dahinter einfügen",
       "saveToLibrary": "In Bibliothek speichern",
       "refine": "Mit KI verbessern (Refine)",
+      "clear": "Tab leeren",
       "coach": "Prompt-Coach öffnen",
       "library": "Bibliothek öffnen",
       "glass": "Glas-Stufe wechseln",
       "target": "Diktat-Ziel umschalten",
       "tabPrefix": "Tab:",
       "libPrefix": "Bibliothek:"
+    },
+    "clear": {
+      "hint": "Diesen Tab leeren (⌘L)",
+      "undo": "Tab geleert",
+      "undoAction": "Rückgängig"
     },
     "refine": {
       "button": "Mit KI verbessern",

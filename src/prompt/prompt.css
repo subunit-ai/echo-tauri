@@ -894,3 +894,47 @@ body {
 .is-windows .pc-refine {
   background: #0e1c30;
 }
+
+/* ---- "Leeren" undo toast (floats over the bottom of the editor) ---- */
+.pc-undo {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 9px 7px 14px;
+  background: rgb(10 22 42 / 0.92);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge2);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
+  animation: pc-rise 0.16s ease;
+}
+
+.pc-undo-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+
+.pc-undo-btn {
+  padding: 4px 12px;
+  background: rgba(34, 211, 238, 0.16);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  border-radius: 999px;
+  color: var(--cyan-ink);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pc-undo-btn:hover {
+  background: rgba(34, 211, 238, 0.26);
+  color: #d9f6fd;
+}

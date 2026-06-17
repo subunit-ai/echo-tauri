@@ -497,12 +497,18 @@
       "insert": "Insert into the app behind",
       "saveToLibrary": "Save to library",
       "refine": "Refine with AI",
+      "clear": "Clear tab",
       "coach": "Open Prompt Coach",
       "library": "Open library",
       "glass": "Cycle glass level",
       "target": "Toggle dictation target",
       "tabPrefix": "Tab:",
       "libPrefix": "Library:"
+    },
+    "clear": {
+      "hint": "Clear this tab (⌘L)",
+      "undo": "Tab cleared",
+      "undoAction": "Undo"
     },
     "refine": {
       "button": "Refine with AI",
