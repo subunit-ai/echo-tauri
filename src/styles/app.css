@@ -100,9 +100,9 @@ button {
   text-transform: uppercase;
   padding: 2px 7px;
   border-radius: 999px;
-  border: 1px solid var(--amber-line);
-  background: var(--amber-bg);
-  color: var(--amber);
+  border: 1px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+  background: color-mix(in srgb, var(--cyan) 18%, transparent);
+  color: var(--accent-bright);
 }
 
 .header .spacer {
