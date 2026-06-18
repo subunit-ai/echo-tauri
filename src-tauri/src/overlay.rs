@@ -131,11 +131,12 @@ pub fn ensure_hit_test(app: &AppHandle) {
         const GRACE: Duration = Duration::from_millis(150);
         loop {
             tick.tick().await;
-            let (orb_on, click_mode) = {
-                let st = app.state::<AppState>();
+            let st = app.state::<AppState>();
+            let (orb_on, click_mode, hide_when_idle) = {
                 let c = st.config.lock();
-                (c.use_orb_overlay, c.orb_trigger == "click")
+                (c.use_orb_overlay, c.orb_trigger == "click", c.orb_idle_mode == "hide")
             };
+            let recording = st.recorder.is_recording();
             let win = app.get_webview_window("overlay");
             if !orb_on || win.is_none() {
                 if let Some(w) = &win {
@@ -144,9 +145,15 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 break;
             }
             let win = win.unwrap();
-            // Hidden (idle-"hide" mode) → fully click-through, never engage, so
-            // hovering the orb's old spot opens nothing (#32).
-            if !win.is_visible().unwrap_or(true) {
+            // Inert (fully click-through, never engage) whenever the orb is meant
+            // to be GONE: the window is actually hidden, OR idle-"hide" mode while
+            // not recording. The canvas already renders nothing in hide+idle, but
+            // the window can still be visible+clickable before the first state
+            // transition hides it — so clicking the orb's blank spot would still
+            // pop the islands. Gate on the config+recording state directly so the
+            // orb only EXISTS once the hotkey starts a take (TJ: "darf nicht
+            // existent sein wenn man nicht die Tastenkombi drückt"). (#32)
+            if !win.is_visible().unwrap_or(true) || (hide_when_idle && !recording) {
                 if last_ignore != Some(true) {
                     let _ = win.set_ignore_cursor_events(true);
                     last_ignore = Some(true);
