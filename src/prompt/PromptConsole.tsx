@@ -70,6 +70,8 @@ const ICONS = {
   dup: ["M9 9h10v10H9z", "M5 15H4V5h10v1"],
   cmd: ["M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"],
   spark: ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z"],
+  eraser: ["M8 20H21", "M5.5 17.5L3 15a2 2 0 0 1 0-2.8l8.7-8.7a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11.5 17.5H7z"],
+  spell: ["M3 16l3-9 3 9", "M3.9 13h4.2", "M13 15l3 3 5-6"],
 };
 
 /** Glass intensity levels — cycled from the header droplet. The CSS multiplies
@@ -199,6 +201,21 @@ export function PromptConsole() {
   const [refineErr, setRefineErr] = useState<string | null>(null);
   const [refineView, setRefineView] = useState<"diff" | "result">("diff");
   const refineReq = useRef(0);
+  // "Leeren": wipe the active tab's text. Honors the iron "nothing is lost"
+  // rule via an undo snapshot — the cleared text is restorable for a few
+  // seconds (or until the next clear).
+  const [clearedText, setClearedText] = useState<string | null>(null);
+  const undoTimer = useRef<number | undefined>(undefined);
+  // Autocorrect: native OS spellcheck + autocorrection on the editor. Off by
+  // default (prompts often hold code/paths the OS would mangle); persisted in
+  // localStorage so it's a self-contained per-device editor preference.
+  const [autocorrect, setAutocorrect] = useState(() => {
+    try {
+      return localStorage.getItem("pc-autocorrect") === "1";
+    } catch {
+      return false;
+    }
+  });
   // Terminal-grade tab chrome: right-click context menu + command palette.
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -218,6 +235,7 @@ export function PromptConsole() {
     newTab: () => void;
     closeActive: () => void;
     duplicate: () => void;
+    clear: () => void;
     jumpTo: (i: number) => void;
     cycle: (dir: number) => void;
     togglePalette: () => void;
@@ -321,6 +339,9 @@ export function PromptConsole() {
       } else if (k === "d") {
         e.preventDefault();
         actions.current?.duplicate();
+      } else if (k === "l") {
+        e.preventDefault();
+        actions.current?.clear();
       } else if (e.key === "Tab") {
         e.preventDefault();
         actions.current?.cycle(e.shiftKey ? -1 : 1);
@@ -513,6 +534,18 @@ export function PromptConsole() {
       .catch(() => setAsTarget(!next));
   };
 
+  const toggleAutocorrect = () => {
+    setAutocorrect((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("pc-autocorrect", next ? "1" : "0");
+      } catch {
+        /* private mode / blocked storage — pref just won't persist */
+      }
+      return next;
+    });
+  };
+
   const openCoach = () => {
     setCoachOpen(true);
     setLibOpen(false);
@@ -564,6 +597,25 @@ export function PromptConsole() {
     editorRef.current?.focus();
   };
 
+  // ---- "Leeren": wipe the active tab, with an undo snapshot (never lost). ----
+  const clearActive = () => {
+    const base = active.text;
+    if (!base) return; // already empty
+    setText("");
+    setClearedText(base);
+    editorRef.current?.focus();
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setClearedText(null), 8000);
+  };
+
+  const undoClear = () => {
+    if (clearedText == null) return;
+    setText(clearedText);
+    setClearedText(null);
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    editorRef.current?.focus();
+  };
+
   const hide = () => {
     flushNow();
     invoke("prompt_console_toggle").catch(() => {});
@@ -579,6 +631,8 @@ export function PromptConsole() {
     { id: "insert", label: t("prompt.cmd.insert"), run: insert },
     { id: "save", label: t("prompt.cmd.saveToLibrary"), run: saveToLibrary },
     { id: "refine", label: t("prompt.cmd.refine"), run: runRefine },
+    { id: "clear", label: t("prompt.cmd.clear"), run: clearActive },
+    { id: "autocorrect", label: t("prompt.cmd.autocorrect"), run: toggleAutocorrect },
     { id: "coach", label: t("prompt.cmd.coach"), run: openCoach },
     { id: "lib", label: t("prompt.cmd.library"), run: openLibrary },
     { id: "glass", label: t("prompt.cmd.glass"), run: cycleGlass },
@@ -615,6 +669,7 @@ export function PromptConsole() {
     newTab: addTab,
     closeActive,
     duplicate: () => duplicateTab(data.activeId),
+    clear: clearActive,
     jumpTo,
     cycle,
     togglePalette: () => (paletteOpen ? setPaletteOpen(false) : openPalette()),
@@ -641,6 +696,13 @@ export function PromptConsole() {
         <div className="pc-head-actions">
           <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
             <Ico paths={ICONS.search} />
+          </button>
+          <button
+            className={`pc-icon ${autocorrect ? "on" : ""}`}
+            title={t("prompt.autocorrect", { state: t(autocorrect ? "common.on" : "common.off") })}
+            onClick={toggleAutocorrect}
+          >
+            <Ico paths={ICONS.spell} />
           </button>
           <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
             <Ico paths={ICONS.drop} />
@@ -746,7 +808,9 @@ export function PromptConsole() {
           className={`pc-editor ${flash ? "pc-flash" : ""}`}
           value={active.text}
           placeholder={t("prompt.placeholder")}
-          spellCheck={false}
+          spellCheck={autocorrect}
+          autoCorrect={autocorrect ? "on" : "off"}
+          autoCapitalize="off"
           onChange={(e) => setText(e.target.value)}
         />
         {coachOpen && (
@@ -905,6 +969,14 @@ export function PromptConsole() {
             )}
           </div>
         )}
+        {clearedText != null && (
+          <div className="pc-undo">
+            <span className="pc-undo-text">{t("prompt.clear.undo")}</span>
+            <button className="pc-undo-btn" onClick={undoClear}>
+              {t("prompt.clear.undoAction")}
+            </button>
+          </div>
+        )}
       </div>
 
       <footer className="pc-foot">
@@ -930,6 +1002,9 @@ export function PromptConsole() {
             onClick={() => (libOpen ? setLibOpen(false) : openLibrary())}
           >
             <Ico paths={ICONS.lib} size={12} />
+          </button>
+          <button className="pc-btn" onClick={clearActive} disabled={!active.text} title={t("prompt.clear.hint")}>
+            <Ico paths={ICONS.eraser} size={13} />
           </button>
           <button className="pc-btn" onClick={copy} disabled={!active.text} title={t("prompt.copyHint")}>
             {copied ? t("prompt.copied") : t("prompt.copy")}

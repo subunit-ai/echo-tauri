@@ -506,6 +506,8 @@
       "insert": "Insert into the app behind",
       "saveToLibrary": "Save to library",
       "refine": "Refine with AI",
+      "clear": "Clear tab",
+      "autocorrect": "Toggle autocorrect",
       "coach": "Open Prompt Coach",
       "library": "Open library",
       "glass": "Cycle glass level",
@@ -513,6 +515,12 @@
       "tabPrefix": "Tab:",
       "libPrefix": "Library:"
     },
+    "clear": {
+      "hint": "Clear this tab (⌘L)",
+      "undo": "Tab cleared",
+      "undoAction": "Undo"
+    },
+    "autocorrect": "Autocorrect: {{state}}",
     "refine": {
       "button": "Refine with AI",
       "hint": "Rewrite into a clean, well-structured prompt via AI",

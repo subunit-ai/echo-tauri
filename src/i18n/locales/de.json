@@ -505,6 +505,8 @@
       "insert": "In App dahinter einfügen",
       "saveToLibrary": "In Bibliothek speichern",
       "refine": "Mit KI verbessern (Refine)",
+      "clear": "Tab leeren",
+      "autocorrect": "Autokorrektur umschalten",
       "coach": "Prompt-Coach öffnen",
       "library": "Bibliothek öffnen",
       "glass": "Glas-Stufe wechseln",
@@ -512,6 +514,12 @@
       "tabPrefix": "Tab:",
       "libPrefix": "Bibliothek:"
     },
+    "clear": {
+      "hint": "Diesen Tab leeren (⌘L)",
+      "undo": "Tab geleert",
+      "undoAction": "Rückgängig"
+    },
+    "autocorrect": "Autokorrektur: {{state}}",
     "refine": {
       "button": "Mit KI verbessern",
       "hint": "Per KI in einen klar strukturierten Prompt umschreiben",
