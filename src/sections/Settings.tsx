@@ -738,7 +738,12 @@ export function Settings() {
               </div>
               <StreamingSwitch
                 value={c.streaming_mode}
-                onChange={(m) => set("streaming_mode", m)}
+                onChange={(m) => {
+                  set("streaming_mode", m);
+                  // Streaming-live already types live → clear the redundant
+                  // instant-live-typing so the two can't both be active.
+                  if (m === "live") set("instant_live_typing", false);
+                }}
                 disabled={uiModeOf(c) === "local"}
               />
               {c.streaming_mode === "live" && c.recording_mode === "hold" && (
@@ -747,8 +752,19 @@ export function Settings() {
                 </div>
               )}
             </div>
-            <Row name={t("settings.instantLiveTyping")} hint={t("settings.instantLiveTypingHint")}>
-              <Toggle checked={c.instant_live_typing} onChange={(v) => set("instant_live_typing", v)} />
+            <Row
+              name={t("settings.instantLiveTyping")}
+              hint={
+                c.streaming_mode === "live"
+                  ? t("settings.instantLiveTypingLiveNote")
+                  : t("settings.instantLiveTypingHint")
+              }
+            >
+              <Toggle
+                checked={c.streaming_mode === "live" ? false : c.instant_live_typing}
+                disabled={c.streaming_mode === "live"}
+                onChange={(v) => set("instant_live_typing", v)}
+              />
             </Row>
             <Row name={t("settings.dachFormat")} hint={t("settings.dachFormatHint")}>
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />

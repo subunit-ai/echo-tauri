@@ -562,6 +562,9 @@ pub fn get_config(state: State<'_, AppState>) -> Config {
 pub fn set_config(app: AppHandle, state: State<'_, AppState>, mut config: Config) -> Result<(), String> {
     config.vocab_regex_cache = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     config.build_vocab_regex_cache();
+    // Streaming-live already types live → force the redundant instant-live-typing
+    // off so the two can never both be active (foot-gun + overlap guard).
+    config.enforce_typing_exclusivity();
 
     // Preserve secret fields server-side: the frontend neither sees nor sets
     // them (get_config blanks them), so never let a round-trip clobber tokens.

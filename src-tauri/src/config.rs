@@ -461,7 +461,21 @@ impl Config {
     }
 
     /// Migration ladder (mirrors Config.load in config.py).
+    /// Streaming-live typing and `instant_live_typing` are both keystroke-typing
+    /// modes; enabling both is redundant and invites overlap. Streaming-live wins.
+    pub fn enforce_typing_exclusivity(&mut self) {
+        if self.streaming_mode == "live" {
+            self.instant_live_typing = false;
+        }
+    }
+
     fn migrate(&mut self) {
+        // Live streaming ALREADY types progressively as you speak, so the separate
+        // "instant live typing" (type the final at the end) is redundant with it —
+        // two live-typing settings at once are confusing ("doppelt gemoppelt") and a
+        // foot-gun. Enforce mutual exclusivity: streaming-live wins. (Belt for the
+        // actual interleave fix in stream.rs; also runs in set_config on every save.)
+        self.enforce_typing_exclusivity();
         if self.cleanup_style == "tidy" {
             self.cleanup_style = "prompt".to_string();
         }

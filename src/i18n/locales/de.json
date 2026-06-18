@@ -275,6 +275,7 @@
     "cloudQualityAuto": "Auto",
     "instantLiveTyping": "Instant: Live-Tippen",
     "instantLiveTypingHint": "Nur im Instant-Modus: das fertige Ergebnis progressiv reintippen statt auf einmal einfügen. Aus = Instant-Paste (Ctrl+V, atomar, zuverlässig — empfohlen auf Windows).",
+    "instantLiveTypingLiveNote": "Deaktiviert: Live-Streaming tippt bereits live mit — beide gleichzeitig wären doppelt.",
     "streaming": "Live-Streaming",
     "streamingHint": "Transkribiert schon während du sprichst (nur Cloud). Bei Verbindungsfehler automatisch klassischer Upload.",
     "streamingRecommended": "Empfohlen",
