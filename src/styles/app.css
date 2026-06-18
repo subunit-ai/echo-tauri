@@ -631,6 +631,10 @@ select:hover {
 .toggle.on {
   background: var(--accent);
 }
+.toggle.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .toggle .thumb {
   position: absolute;
   top: 3px;

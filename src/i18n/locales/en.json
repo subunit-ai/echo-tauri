@@ -276,6 +276,7 @@
     "cloudQualityAuto": "Auto",
     "instantLiveTyping": "Instant: live typing",
     "instantLiveTypingHint": "Instant mode only: type the finished result in progressively instead of pasting all at once. Off = instant paste (Ctrl+V, atomic, reliable — recommended on Windows).",
+    "instantLiveTypingLiveNote": "Disabled: live streaming already types as you speak — having both on would double up.",
     "streaming": "Live streaming",
     "streamingHint": "Transcribe while you speak (cloud only). Falls back to classic upload on any connection error.",
     "streamingRecommended": "Recommended",
