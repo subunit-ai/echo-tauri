@@ -23,7 +23,7 @@
 //!   S→C text   {"type":"final","text":…,"cleaned_text"?,…}  → close
 
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -73,6 +73,16 @@ struct Session {
 }
 
 static ACTIVE: Lazy<Mutex<Option<Session>>> = Lazy::new(|| Mutex::new(None));
+
+/// Live-injection generation. ONLY the newest session may type into the target.
+/// `start` and `cancel` bump it; a session whose captured gen no longer matches
+/// goes silent IMMEDIATELY (see `apply_target`). Without this, a just-cancelled
+/// session whose thread is still mid-`feed_delta` kept injecting while the new
+/// session also injected — on Windows the OS then interleaves the two `SendInput`
+/// streams character-by-character, producing the garbled "two transcripts woven
+/// together" output. Bumping the gen makes the stale session a no-op without the
+/// latency of joining its thread.
+static LIVE_GEN: AtomicU64 = AtomicU64::new(0);
 
 /// Chars the live path has typed into the target this session (reset in `start`).
 /// Lets `do_transcribe` skip a batch re-paste when a live take fails AFTER already
@@ -141,6 +151,9 @@ fn dbg_finish(final_text: &str) {
 struct Live {
     confirmed: String,
     prev_partial: String,
+    /// This session's injection generation; it may only type while it equals the
+    /// global `LIVE_GEN` (i.e. it's still the newest session).
+    gen: u64,
 }
 
 /// The agreed-stable prefix of two consecutive partials: their longest common
@@ -272,6 +285,12 @@ fn plan_target(confirmed: &str, target: &str, is_final: bool) -> (Vec<LiveOp>, S
 
 /// Apply `plan_target`'s decision through the real injector and update state.
 fn apply_target(l: &mut Live, target: &str, is_final: bool) {
+    // Stale-session guard: a cancelled/superseded session must NEVER type into the
+    // target (else two sessions' keystrokes interleave). Once a newer session has
+    // started (or this one was cancelled), `LIVE_GEN` moved past our gen → go silent.
+    if l.gen != LIVE_GEN.load(Ordering::SeqCst) {
+        return;
+    }
     let (ops, new_confirmed) = plan_target(&l.confirmed, target, is_final);
     for op in ops {
         match op {
@@ -304,8 +323,10 @@ pub fn start(app: &AppHandle, live: bool) {
     if state.config.lock().mode != "subunit" {
         return; // local engine has no streaming backend (yet)
     }
-    cancel(); // a stale session must never outlive its recording
+    cancel(); // a stale session must never outlive its recording (also bumps LIVE_GEN)
     LIVE_INJECTED.store(0, Ordering::Relaxed); // fresh per-session live-typing counter
+    // Claim the newest injection generation: only THIS session may now type.
+    let gen = LIVE_GEN.fetch_add(1, Ordering::SeqCst) + 1;
 
     let (ctl_tx, ctl_rx) = mpsc::channel();
     let (done_tx, done_rx) = mpsc::channel();
@@ -314,13 +335,17 @@ pub fn start(app: &AppHandle, live: bool) {
     let app = app.clone();
     std::thread::Builder::new()
         .name("echo-stream".into())
-        .spawn(move || session_thread(app, ctl_rx, done_tx, live))
+        .spawn(move || session_thread(app, ctl_rx, done_tx, live, gen))
         .ok();
 }
 
 /// Drop the running session (key never released properly, scene unmounted).
 /// The server keeps nothing; the local recording stays untouched.
 pub fn cancel() {
+    // Bump the generation FIRST so the outgoing session goes silent immediately,
+    // even though its thread may still be mid-tick — it stops injecting before it
+    // ever observes the Cancel control message (no thread-join latency needed).
+    LIVE_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(s) = ACTIVE.lock().take() {
         let _ = s.ctl_tx.send(Ctl::Cancel);
     }
@@ -349,6 +374,7 @@ fn session_thread(
     ctl_rx: mpsc::Receiver<Ctl>,
     done_tx: mpsc::Sender<Result<StreamFinal, StreamFailure>>,
     live: bool,
+    gen: u64,
 ) {
     // Unavailable ⇒ report once and leave; the caller's fallback owns the take.
     let mut ws = match connect(&app) {
@@ -364,7 +390,7 @@ fn session_thread(
 
     // LocalAgreement state for "live" mode — None unless live typing is on.
     let mut live_state = if live {
-        Some(Live { confirmed: String::new(), prev_partial: String::new() })
+        Some(Live { confirmed: String::new(), prev_partial: String::new(), gen })
     } else {
         None
     };
