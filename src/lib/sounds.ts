@@ -12,6 +12,7 @@
 // (the old `new Audio()` path) and no first-play AudioContext resume stall.
 
 import doneWav from "../assets/sounds/done.wav";
+import sonarPingMp3 from "../assets/sounds/sonar-ping.mp3";
 import startWav from "../assets/sounds/start.wav";
 
 export type SoundEvent = "start" | "paste";
@@ -19,12 +20,21 @@ export type SoundEvent = "start" | "paste";
 /** Selectable presets (id + i18n label key). Add new entries here to grow the list. */
 export const SOUND_PRESETS: { id: string; labelKey: string }[] = [
   { id: "standard", labelKey: "settings.soundStandard" },
+  { id: "sonar_ping", labelKey: "settings.soundSonarPing" },
   { id: "pop", labelKey: "settings.soundPop" },
   { id: "chime", labelKey: "settings.soundChime" },
   { id: "blip", labelKey: "settings.soundBlip" },
   { id: "click", labelKey: "settings.soundClick" },
   { id: "marimba", labelKey: "settings.soundMarimba" },
 ];
+
+/** File-based presets (real audio files, not synth). Decoded once like the
+ *  bundled cues; decodeAudioData handles mp3 in both WebView2 and WKWebView. */
+const FILE_SOUNDS: Record<string, string> = {
+  sonar_ping: sonarPingMp3,
+};
+/** Decoded file presets, keyed by id (`undefined` = not loaded, `null` = failed). */
+const fileBuffers: Record<string, AudioBuffer | null | undefined> = {};
 
 type Note = { f: number; t: number; d: number; type?: OscillatorType };
 
@@ -86,6 +96,12 @@ export function preloadSounds() {
     buffers.paste = null;
     void decode(doneWav).then((b) => (buffers.paste = b));
   }
+  for (const [id, url] of Object.entries(FILE_SOUNDS)) {
+    if (!(id in fileBuffers)) {
+      fileBuffers[id] = null;
+      void decode(url).then((b) => (fileBuffers[id] = b));
+    }
+  }
 }
 
 function playBuffer(buf: AudioBuffer, volume: number) {
@@ -137,6 +153,19 @@ export function playSound(id: string, event: SoundEvent, volume: number) {
       void a.play().catch(() => {});
     } catch {
       /* ignore */
+    }
+    return;
+  }
+  if (id in FILE_SOUNDS) {
+    const buf = fileBuffers[id];
+    if (buf) {
+      playBuffer(buf, volume);
+    } else if (buf === undefined) {
+      // Not requested yet → decode now and play once ready (rare; preload covers it).
+      void decode(FILE_SOUNDS[id]).then((b) => {
+        fileBuffers[id] = b;
+        if (b) playBuffer(b, volume);
+      });
     }
     return;
   }
