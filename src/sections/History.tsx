@@ -104,7 +104,13 @@ export function History() {
           const tier = e.quality_mode || "local";
           return (
             <div key={e.id} className="history-item">
-              <div className="text">{e.text}</div>
+              <div
+                className={`text${copied === e.id ? " copied" : ""}`}
+                onClick={() => onCopy(e.text, e.id)}
+                title={t("history.clickToCopy")}
+              >
+                {e.text}
+              </div>
               <div
                 className="meta"
                 style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
@@ -122,9 +128,6 @@ export function History() {
                   </span>
                 )}
                 <span style={{ flex: 1 }} />
-                <button className="sub-tab" onClick={() => onCopy(e.text, e.id)}>
-                  {copied === e.id ? t("common.copied") : t("common.copy")}
-                </button>
                 <button className="sub-tab" onClick={() => onDelete(e.id)}>
                   {t("common.delete")}
                 </button>
