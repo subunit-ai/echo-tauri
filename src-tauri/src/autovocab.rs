@@ -273,6 +273,24 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
 
     let now = now_secs();
     let mut changed = false;
+
+    // Prune stale PENDING candidates that no longer qualify under the multi-variant
+    // rule (e.g. ordinary single-spelling words surfaced before that rule existed —
+    // "können" & co.). One spelling = no mis-hear → retire it so it stops nagging.
+    for c in crate::store::list_vcand("pending") {
+        let single = c
+            .get("variants")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len() < 2)
+            .unwrap_or(true);
+        if single {
+            if let Some(key) = c.get("key").and_then(|v| v.as_str()) {
+                crate::store::set_vcand(key, None, None, "ignored", None, now);
+                changed = true;
+            }
+        }
+    }
+
     for cand in detect(&texts, &known) {
         let prior = crate::store::vcand_status(&cand.key);
         // Skip what the user/auto-flow already settled.
