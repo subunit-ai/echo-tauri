@@ -672,6 +672,18 @@ select:hover {
 .history-item .text {
   font-size: 13px;
   line-height: 1.45;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: background 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+/* Click anywhere on the transcript to copy it (no separate button needed). */
+.history-item .text:hover {
+  background: var(--fill-ghost-hover);
+  box-shadow: 0 0 0 6px var(--fill-ghost-hover);
+}
+.history-item .text.copied {
+  background: rgba(34, 211, 238, 0.18);
+  box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.18);
 }
 .history-item .meta {
   margin-top: 6px;

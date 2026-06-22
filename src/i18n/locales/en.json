@@ -166,6 +166,7 @@
     "subEnabled": "Your latest transcriptions.",
     "subDisabled": "History is disabled (Settings → Account).",
     "empty": "Nothing recorded yet.",
+    "clickToCopy": "Click to copy",
     "copyFailed": "Couldn't copy.",
     "deleteEntryFailed": "Couldn't delete entry.",
     "cleared": "History cleared.",

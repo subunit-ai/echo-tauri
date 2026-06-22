@@ -165,6 +165,7 @@
     "subEnabled": "Deine letzten Transkriptionen.",
     "subDisabled": "Verlauf ist deaktiviert (Einstellungen → Account).",
     "empty": "Noch nichts aufgenommen.",
+    "clickToCopy": "Klicken zum Kopieren",
     "copyFailed": "Konnte nicht kopieren.",
     "deleteEntryFailed": "Eintrag konnte nicht gelöscht werden.",
     "cleared": "Verlauf gelöscht.",

@@ -27,12 +27,8 @@ use crate::config::VocabEntry;
 
 /// Minimum length for a token to be considered (skip short function words).
 const MIN_LEN: usize = 4;
-/// A cluster needs at least this many total occurrences to surface.
+/// A (multi-variant) cluster needs at least this many total occurrences to surface.
 const MIN_TOTAL: usize = 3;
-/// A SINGLE-variant cluster (consistent spelling) needs a higher bar — it might
-/// just be a correctly-spelled name the user uses often. Multi-variant clusters
-/// (the real mis-hear signal) qualify at `MIN_TOTAL`.
-const MIN_TOTAL_SINGLE: usize = 5;
 /// Max edit distance (absolute) to treat two tokens as variants of one word.
 const MAX_LEV: usize = 2;
 /// Max normalized edit distance (lev / longer length) to cluster.
@@ -192,9 +188,12 @@ pub fn detect(transcripts: &[String], known: &HashSet<String>) -> Vec<Candidate>
     let mut out: Vec<Candidate> = Vec::new();
     for cl in clusters {
         let total: usize = cl.iter().map(|(_, n)| *n).sum();
-        let multi = cl.len() >= 2;
-        let qualifies = if multi { total >= MIN_TOTAL } else { total >= MIN_TOTAL_SINGLE };
-        if !qualifies {
+        // ONLY multi-variant clusters qualify: a term the ASR spelled ≥2 DIFFERENT
+        // ways is a genuine mis-hear (real "Verwechslungsgefahr"). A consistently-
+        // spelled recurring token — even a rare one — is NOT a mis-hear and is very
+        // often just an ordinary word ("können", "eigentlich", …); surfacing those
+        // is pure noise. So a single consistent spelling never qualifies. (TJ)
+        if cl.len() < 2 || total < MIN_TOTAL {
             continue;
         }
         // variants already sorted (tokens were sorted desc before clustering).
@@ -274,6 +273,24 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
 
     let now = now_secs();
     let mut changed = false;
+
+    // Prune stale PENDING candidates that no longer qualify under the multi-variant
+    // rule (e.g. ordinary single-spelling words surfaced before that rule existed —
+    // "können" & co.). One spelling = no mis-hear → retire it so it stops nagging.
+    for c in crate::store::list_vcand("pending") {
+        let single = c
+            .get("variants")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len() < 2)
+            .unwrap_or(true);
+        if single {
+            if let Some(key) = c.get("key").and_then(|v| v.as_str()) {
+                crate::store::set_vcand(key, None, None, "ignored", None, now);
+                changed = true;
+            }
+        }
+    }
+
     for cand in detect(&texts, &known) {
         let prior = crate::store::vcand_status(&cand.key);
         // Skip what the user/auto-flow already settled.
@@ -429,15 +446,12 @@ mod tests {
     }
 
     #[test]
-    fn single_rare_token_needs_higher_bar() {
-        // A consistently-spelled rare token 3× does NOT qualify (could be a
-        // correct name); 5× does.
-        let three = vec!["Kubernetes".to_string(); 3];
-        assert!(detect(&three, &known_empty()).is_empty());
-        let five = vec!["Kubernetes".to_string(); 5];
-        let c = detect(&five, &known_empty());
-        assert_eq!(c.len(), 1);
-        assert_eq!(c[0].key, "kubernetes");
+    fn consistent_single_spelling_never_qualifies() {
+        // A consistently-spelled token NEVER qualifies, no matter how often it
+        // recurs — one spelling = no mis-hear. This is the guard against ordinary
+        // words ("können", "eigentlich", a correctly-spelled name) being surfaced.
+        assert!(detect(&vec!["Kubernetes".to_string(); 5], &known_empty()).is_empty());
+        assert!(detect(&vec!["können".to_string(); 12], &known_empty()).is_empty());
     }
 
     #[test]
