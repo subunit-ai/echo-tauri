@@ -39,7 +39,13 @@ export function History() {
   if (!config) return null;
 
   const onCopy = async (text: string, id: number) => {
-    await copyText(text).catch(() => toast(t("history.copyFailed"), "error"));
+    try {
+      await copyText(text);
+    } catch {
+      toast(t("history.copyFailed"), "error");
+      return;
+    }
+    toast(t("common.copied"), "success"); // small confirmation toast
     setCopied(id);
     window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1200);
   };
@@ -128,6 +134,9 @@ export function History() {
                   </span>
                 )}
                 <span style={{ flex: 1 }} />
+                <button className="sub-tab" onClick={() => onCopy(e.text, e.id)}>
+                  {copied === e.id ? t("common.copied") : t("common.copy")}
+                </button>
                 <button className="sub-tab" onClick={() => onDelete(e.id)}>
                   {t("common.delete")}
                 </button>
