@@ -17,8 +17,8 @@
         "title": "Echo (Beta)",
         "width": 800,
         "height": 600,
-        "minWidth": 720,
-        "minHeight": 540,
+        "minWidth": 420,
+        "minHeight": 340,
         "center": true
       }
     ],
