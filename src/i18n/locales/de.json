@@ -260,6 +260,8 @@
     "theme": "Design",
     "themeDark": "Dunkel",
     "themeLight": "Hell",
+    "uiScale": "UI-Größe",
+    "uiScaleHint": "Skaliert die ganze Oberfläche — kleiner = kompaktes Modul. Fenster lässt sich entsprechend kleiner ziehen.",
     "language": "Sprache",
     "languageHint": "Sprache der Benutzeroberfläche",
     "mode": "Modus",

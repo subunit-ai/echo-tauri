@@ -261,6 +261,8 @@
     "theme": "Theme",
     "themeDark": "Dark",
     "themeLight": "Light",
+    "uiScale": "UI size",
+    "uiScaleHint": "Scales the whole interface — smaller = compact module. The window can be dragged down to match.",
     "language": "Language",
     "languageHint": "Interface language",
     "mode": "Mode",

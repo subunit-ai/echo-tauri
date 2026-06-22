@@ -220,6 +220,10 @@ pub struct Config {
     pub has_seen_onboarding: bool,
     pub ui_language: String,
     pub ui_theme: String,
+    /// Overall UI scale (CSS `zoom` on the document root) so the whole app can be
+    /// shrunk into a compact "module" — 1.0 = normal, down to ~0.6. Applied in
+    /// ConfigContext; the window min-size is small enough to follow it.
+    pub ui_scale: f32,
 
     pub plan: String,
     pub trial_started_at: i64,
@@ -354,6 +358,7 @@ impl Default for Config {
             has_seen_onboarding: false,
             ui_language: "de".to_string(),
             ui_theme: "dark".to_string(),
+            ui_scale: 1.0,
 
             plan: "free".to_string(),
             trial_started_at: 0,
@@ -470,6 +475,13 @@ impl Config {
     }
 
     fn migrate(&mut self) {
+        // Guard the UI scale against a corrupt/out-of-range value (never an
+        // invisible-or-giant UI); 1.0 = normal, floor at 0.6 (compact module).
+        self.ui_scale = if self.ui_scale.is_finite() && self.ui_scale > 0.0 {
+            self.ui_scale.clamp(0.6, 1.0)
+        } else {
+            1.0
+        };
         // Live streaming ALREADY types progressively as you speak, so the separate
         // "instant live typing" (type the final at the end) is redundant with it —
         // two live-typing settings at once are confusing ("doppelt gemoppelt") and a

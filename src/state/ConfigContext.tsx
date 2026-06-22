@@ -54,6 +54,14 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     }
   }, [config?.ui_theme]);
 
+  // Overall UI scale: CSS `zoom` on the root shrinks the WHOLE app uniformly
+  // (reflows, not just visual) so it works as a compact module. zoom is supported
+  // in both WebView2 (Chromium) and WKWebView (WebKit). 1.0 = normal.
+  useEffect(() => {
+    const scale = config?.ui_scale;
+    document.documentElement.style.zoom = scale && scale > 0 ? String(scale) : "1";
+  }, [config?.ui_scale]);
+
   const patch = useCallback(
     async (p: Partial<Config>) => {
       setLocal((prev) => {

@@ -643,6 +643,19 @@ export function Settings() {
                 ]}
               />
             </Row>
+            <Row name={t("settings.uiScale")} hint={t("settings.uiScaleHint")}>
+              <Sel
+                value={String(Math.round((c.ui_scale ?? 1) * 100))}
+                onChange={(v) => set("ui_scale", parseInt(v, 10) / 100)}
+                options={[
+                  ["100", "100 %"],
+                  ["90", "90 %"],
+                  ["80", "80 %"],
+                  ["70", "70 %"],
+                  ["60", "60 %"],
+                ]}
+              />
+            </Row>
             <Row name={t("settings.language")} hint={t("settings.languageHint")}>
               <Sel
                 value={c.ui_language}
