@@ -6,6 +6,7 @@ import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
 import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
+import { useSessionExpired } from "../components/SessionBanner";
 import {
   appVersion,
   checkForUpdates,
@@ -406,6 +407,7 @@ export function Settings() {
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loginErr, setLoginErr] = useState("");
+  const sessionExpired = useSessionExpired();
   const [updateMsg, setUpdateMsg] = useState("");
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -986,9 +988,17 @@ export function Settings() {
           <>
             <Row
               name={t("settings.account")}
-              hint={c.account_email || t("settings.accountHint")}
+              hint={
+                sessionExpired && c.account_email
+                  ? `${c.account_email} — ${t("session.expiredShort")}`
+                  : c.account_email || t("settings.accountHint")
+              }
             >
-              {c.account_email ? (
+              {sessionExpired && c.account_email ? (
+                <button className="sub-tab" onClick={doLogin} disabled={busy}>
+                  {busy ? t("settings.browserOpened") : t("session.signInAgain")}
+                </button>
+              ) : c.account_email ? (
                 <button className="sub-tab" onClick={doLogout}>
                   {t("settings.signOut")}
                 </button>
@@ -1005,7 +1015,7 @@ export function Settings() {
                 </div>
               )}
             </Row>
-            <Row name={t("settings.plan")} hint={c.account_email ? t("settings.planActive") : t("settings.planNotSignedIn")}>
+            <Row name={t("settings.plan")} hint={c.account_email && !sessionExpired ? t("settings.planActive") : t("settings.planNotSignedIn")}>
               <span
                 style={{
                   textTransform: "uppercase",

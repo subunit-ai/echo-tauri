@@ -148,6 +148,7 @@ pub fn run() {
             commands::stop_and_transcribe,
             commands::login,
             commands::logout,
+            commands::auth_session_expired,
             commands::set_autostart,
             commands::check_for_updates,
             commands::install_update,
@@ -336,6 +337,31 @@ pub fn run() {
                             }
                         }
                         tokio::time::sleep(std::time::Duration::from_secs(3 * 3600)).await;
+                    }
+                });
+            }
+
+            // Keep the cloud session alive PROACTIVELY while Echo runs — not just when
+            // the user happens to dictate. Without this the rotating refresh token only
+            // gets exercised on use; a long idle gap lets it age out server-side and the
+            // next action silently fails with "please sign in again" (exactly the
+            // customer-facing surprise this guards against). `ensure_fresh` is a cheap
+            // no-op until the access token is near expiry; each real refresh rotates the
+            // refresh token and resets its server-side lifetime, so as long as Echo is
+            // open the session never lapses from disuse. A rejected (dead) token flips
+            // the session-expired flag + banner instead of failing quietly. Poll well
+            // under any sane refresh-token TTL.
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_secs(15 * 60));
+                    let has_refresh = {
+                        let st = handle.state::<AppState>();
+                        let c = st.config.lock();
+                        !c.subunit_refresh_token.is_empty()
+                    };
+                    if has_refresh {
+                        crate::auth::ensure_fresh(&handle);
                     }
                 });
             }

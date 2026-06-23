@@ -333,6 +333,18 @@ export const onUpdateAvailable = (cb: (version: string) => void): Promise<Unlist
 export const onUpdateProgress = (cb: (pct: number) => void): Promise<UnlistenFn> =>
   listen<number>("echo://update-progress", (e) => cb(e.payload));
 
+// ---- Session / auth state ----
+/** True when the user was signed in but the cloud session is gone (a rejected
+ *  refresh dropped both tokens). Queried on mount to seed the re-login banner;
+ *  thereafter the session-expired/restored events keep it live. */
+export const authSessionExpired = () => invoke<boolean>("auth_session_expired");
+/** Fired when a background token refresh is rejected → the user must sign in again. */
+export const onSessionExpired = (cb: () => void): Promise<UnlistenFn> =>
+  listen("echo://session-expired", () => cb());
+/** Fired when the session is restored (successful refresh or a fresh sign-in). */
+export const onSessionRestored = (cb: () => void): Promise<UnlistenFn> =>
+  listen("echo://session-restored", () => cb());
+
 /** Allocate + open a meeting (meet.subunit.ai). */
 export const startMeeting = () => invoke("start_meeting");
 /** Start local dual-audio meeting recording (mic + system loopback). Windows-only. */

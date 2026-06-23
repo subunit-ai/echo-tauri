@@ -103,6 +103,11 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                     let _ = c.save();
                 }
 
+                // Fresh tokens in hand → the session is healthy; drop any re-login
+                // banner. (ensure_fresh won't do this for us: a brand-new token isn't
+                // "near expiry", so refresh_plan's ensure_fresh is a no-op here.)
+                set_session_expired(app, false);
+
                 // Pull the real workspace tier → config.plan so the UI doesn't keep
                 // showing "free" after a successful sign-in.
                 refresh_plan(app);
@@ -126,6 +131,27 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
             }
             Err(e) => return Err(e.into()),
         }
+    }
+}
+
+/// Flip the app-wide "session expired" flag and, on an actual change, emit
+/// `echo://session-expired` / `echo://session-restored` so the banner + Account tab
+/// react live (no need to wait for the next dictate to discover a dead session).
+/// Idempotent: a no-change call emits nothing.
+pub fn set_session_expired(app: &AppHandle, expired: bool) {
+    use std::sync::atomic::Ordering;
+    use tauri::Emitter;
+    let was = app
+        .state::<AppState>()
+        .session_expired
+        .swap(expired, Ordering::Relaxed);
+    if was != expired {
+        let evt = if expired {
+            "echo://session-expired"
+        } else {
+            "echo://session-restored"
+        };
+        let _ = app.emit(evt, ());
     }
 }
 
@@ -183,6 +209,9 @@ pub fn ensure_fresh(app: &AppHandle) {
             c.subunit_token_expires_in = exp;
             c.subunit_token_issued_at = now;
             let _ = c.save();
+            drop(c);
+            // The session is healthy again — clear any pending re-login banner.
+            set_session_expired(app, false);
         }
         Err(RefreshFail::TokenDead) => {
             log::warn!("refresh token rejected by server (4xx) — clearing it; re-login required");
@@ -199,6 +228,10 @@ pub fn ensure_fresh(app: &AppHandle) {
             c.subunit_token_issued_at = 0.0;
             c.subunit_token_expires_in = 0;
             let _ = c.save();
+            drop(c);
+            // Make the dead session VISIBLE: raise the re-login banner instead of
+            // letting the next dictate fail with a transient-looking 401 toast.
+            set_session_expired(app, true);
         }
         Err(RefreshFail::Transient(e)) => {
             log::warn!("token refresh failed (transient): {e}");
