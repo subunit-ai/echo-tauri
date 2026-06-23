@@ -134,6 +134,12 @@
     "updateNow": "Jetzt aktualisieren",
     "later": "Später"
   },
+  "session": {
+    "expired": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an, um die Cloud-Transkription weiter zu nutzen.",
+    "expiredShort": "Sitzung abgelaufen — neu anmelden",
+    "signInAgain": "Neu anmelden",
+    "opening": "Browser geöffnet…"
+  },
   "meeting": {
     "detected": "{{app}}-Meeting erkannt",
     "hint": "· aufnehmen?",

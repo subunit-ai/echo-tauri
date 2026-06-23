@@ -11,6 +11,7 @@ import { Intro } from "./intro/Intro";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
+import { SessionBanner } from "./components/SessionBanner";
 import { onState, onNeedsAccessibility } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
@@ -41,6 +42,7 @@ function Shell() {
     <div className="app">
       <SoundFx />
       <MeetingPrompt />
+      <SessionBanner />
       <Header />
       {/* Sidebar stays static even while the meeting view is open — selecting any section
           exits the meeting and navigates there. The native meet renders in the content pane

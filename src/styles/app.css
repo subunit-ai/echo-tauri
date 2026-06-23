@@ -179,6 +179,83 @@ button {
   font-weight: 800;
 }
 
+/* "Sitzung abgelaufen" alert bar (components/SessionBanner.tsx). Pinned just under
+   the 56px header, full width, amber so a dead cloud session is unmissable instead
+   of silently failing. position:fixed keeps it out of the .app grid flow, so it
+   never disturbs layout when absent. */
+.session-banner {
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  background: var(--amber-bg, rgba(245, 158, 11, 0.16));
+  border-bottom: 1px solid var(--amber-line, rgba(245, 158, 11, 0.5));
+  color: var(--amber, #fbbf24);
+  font-size: 13px;
+  font-weight: 600;
+  -webkit-backdrop-filter: var(--blur-glass);
+  backdrop-filter: var(--blur-glass);
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.5);
+  animation: session-banner-in 0.22s ease-out;
+}
+@keyframes session-banner-in {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.session-banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  flex: none;
+  animation: session-banner-pulse 1.8s ease-in-out infinite;
+}
+@keyframes session-banner-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.session-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.session-banner-btn {
+  flex: none;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.session-banner-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  transform: translateY(-1px);
+}
+.session-banner-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .plan-badge {
   font-size: 11px;
   font-weight: 700;

@@ -34,6 +34,13 @@ pub struct AppState {
     /// re-entry guard gates on THIS (not `recorder.is_recording()`) so a held hotkey
     /// (auto-repeat fires Pressed repeatedly) can't re-enter do_start mid-session.
     pub session_active: AtomicBool,
+    /// True when the user WAS signed in (we still hold their `account_email`) but
+    /// the cloud session is gone — both tokens were cleared by a rejected refresh,
+    /// or never restored since launch. Drives the global "Sitzung abgelaufen — bitte
+    /// neu anmelden" banner so a dead session is visible instead of silently failing
+    /// mid-dictation. Set/cleared in [`crate::auth`] (emits echo://session-expired /
+    /// echo://session-restored on each flip).
+    pub session_expired: AtomicBool,
     /// "Konsole als Ziel"-Transkripte, die auf die Prompt-Konsole warten — die
     /// Webview bootet beim ersten Mal noch; sie drained die Queue beim Mount
     /// und auf jedes `echo://prompt-transcript`-Signal (nichts geht verloren).
@@ -45,6 +52,12 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: Config) -> Self {
+        // Derive the initial expired state: we have a remembered account but no
+        // tokens left to act with → the session needs a fresh sign-in. Covers the
+        // relaunch-while-expired case (TokenDead cleared + saved empty tokens last run).
+        let session_expired = !config.account_email.is_empty()
+            && config.subunit_access_token.is_empty()
+            && config.subunit_refresh_token.is_empty();
         Self {
             config: Mutex::new(config),
             recorder: Recorder::new(),
@@ -53,6 +66,7 @@ impl AppState {
             overlay_hot_rects: Mutex::new(Vec::new()),
             meeting_capture: Mutex::new(None),
             session_active: AtomicBool::new(false),
+            session_expired: AtomicBool::new(session_expired),
             prompt_pending: Mutex::new(Vec::new()),
             #[cfg(feature = "local-meet")]
             meet_local: Mutex::new(None),
@@ -944,16 +958,32 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn logout(state: State<'_, AppState>) -> Result<(), String> {
-    let mut c = state.config.lock();
-    c.subunit_access_token.clear();
-    c.subunit_refresh_token.clear();
-    c.subunit_token_issued_at = 0.0;
-    c.subunit_token_expires_in = 0;
-    c.subunit_workspace_id.clear();
-    c.account_email.clear();
-    c.plan = "free".to_string(); // signed out → no entitlement
-    c.save().map_err(|e| e.to_string())
+pub fn logout(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    {
+        let mut c = state.config.lock();
+        c.subunit_access_token.clear();
+        c.subunit_refresh_token.clear();
+        c.subunit_token_issued_at = 0.0;
+        c.subunit_token_expires_in = 0;
+        c.subunit_workspace_id.clear();
+        c.account_email.clear();
+        c.plan = "free".to_string(); // signed out → no entitlement
+        c.save().map_err(|e| e.to_string())?;
+    }
+    // An explicit sign-out is NOT an expired session — clear the flag (and hide the
+    // banner) so the Account tab cleanly shows the normal "Sign in" affordance.
+    crate::auth::set_session_expired(&app, false);
+    Ok(())
+}
+
+/// True when the user was signed in but the cloud session is gone (a rejected
+/// refresh dropped both tokens, or it wasn't restored since launch). Drives the
+/// re-login banner; the frontend also live-updates from the session-expired /
+/// session-restored events.
+#[tauri::command]
+pub fn auth_session_expired(state: State<'_, AppState>) -> bool {
+    state.session_expired.load(Ordering::Relaxed)
 }
 
 #[tauri::command]

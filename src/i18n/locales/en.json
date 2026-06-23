@@ -135,6 +135,12 @@
     "updateNow": "Update now",
     "later": "Later"
   },
+  "session": {
+    "expired": "Your session has expired. Please sign in again to keep using cloud transcription.",
+    "expiredShort": "Session expired — sign in again",
+    "signInAgain": "Sign in again",
+    "opening": "Browser opened…"
+  },
   "meeting": {
     "detected": "{{app}} meeting detected",
     "hint": "· record it?",
