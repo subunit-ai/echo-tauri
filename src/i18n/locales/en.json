@@ -381,6 +381,8 @@
     "account": "Account",
     "accountHint": "Sign in with auth.subunit.ai for cloud transcription",
     "signOut": "Sign out",
+    "signOutConfirmTitle": "Sign out?",
+    "signOutConfirmMessage": "You'll be signed out of your Subunit account and will need to sign in again to use cloud transcription.",
     "signIn": "Sign in",
     "manageAccount": "Manage account",
     "manageAccountHint": "Opens your Subunit account page in the browser",
