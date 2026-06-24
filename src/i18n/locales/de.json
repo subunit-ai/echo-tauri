@@ -380,6 +380,8 @@
     "account": "Konto",
     "accountHint": "Mit auth.subunit.ai anmelden für Cloud-Transkription",
     "signOut": "Abmelden",
+    "signOutConfirmTitle": "Wirklich abmelden?",
+    "signOutConfirmMessage": "Du wirst von deinem Subunit-Konto abgemeldet und musst dich neu anmelden, um die Cloud-Transkription wieder zu nutzen.",
     "signIn": "Anmelden",
     "manageAccount": "Konto verwalten",
     "manageAccountHint": "Öffnet deine Subunit-Kontoseite im Browser",

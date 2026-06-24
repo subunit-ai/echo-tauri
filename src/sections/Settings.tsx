@@ -7,6 +7,7 @@ import { ModelManager } from "../components/ModelManager";
 import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
 import { useSessionExpired } from "../components/SessionBanner";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import {
   appVersion,
   checkForUpdates,
@@ -407,6 +408,7 @@ export function Settings() {
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loginErr, setLoginErr] = useState("");
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const sessionExpired = useSessionExpired();
   const [updateMsg, setUpdateMsg] = useState("");
   const [foundUpdate, setFoundUpdate] = useState<string | null>(null);
@@ -999,7 +1001,7 @@ export function Settings() {
                   {busy ? t("settings.browserOpened") : t("session.signInAgain")}
                 </button>
               ) : c.account_email ? (
-                <button className="sub-tab" onClick={doLogout}>
+                <button className="sub-tab" onClick={() => setConfirmLogout(true)}>
                   {t("settings.signOut")}
                 </button>
               ) : (
@@ -1081,6 +1083,19 @@ export function Settings() {
           {showSaved ? t("common.saved") : t("common.save")}
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmLogout}
+        title={t("settings.signOutConfirmTitle")}
+        message={t("settings.signOutConfirmMessage")}
+        confirmLabel={t("settings.signOut")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setConfirmLogout(false);
+          void doLogout();
+        }}
+        onCancel={() => setConfirmLogout(false)}
+      />
     </div>
   );
 }
