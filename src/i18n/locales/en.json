@@ -514,6 +514,8 @@
       "unpin": "Unpin tab",
       "copy": "Copy",
       "insert": "Insert into the app behind",
+      "mic": "Start dictation",
+      "micStop": "Stop dictation",
       "saveToLibrary": "Save to library",
       "refine": "Refine with AI",
       "correct": "Correct whole text",
@@ -538,6 +540,13 @@
       "done": "Corrected",
       "noChange": "Already clean — nothing to correct.",
       "failed": "Correction failed — check connection/login and retry."
+    },
+    "mic": {
+      "start": "Dictate — click to record (no hotkey to hold)",
+      "stop": "Stop recording",
+      "stopShort": "Stop",
+      "listening": "Listening …",
+      "failed": "Recording failed — needs cloud mode + login."
     },
     "autocorrect": "Autocorrect: {{state}}",
     "refine": {

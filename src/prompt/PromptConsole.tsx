@@ -222,6 +222,16 @@ export function PromptConsole() {
       return false;
     }
   });
+  // Click-to-dictate: a mic button records (toggle, no held hotkey) and streams
+  // the transcript into the editor. Runs the existing streaming path in FINAL
+  // mode (partials shown as a live preview, but NOT injected into any focused
+  // app — see startMic) and lands the finished text via the "Terminal als Ziel"
+  // queue. `micActive` ref gates the global stream-partial listener; `micPrev`
+  // remembers the config to restore after the session.
+  const [micRecording, setMicRecording] = useState(false);
+  const [livePartial, setLivePartial] = useState("");
+  const micActive = useRef(false);
+  const micPrev = useRef<{ asTarget: boolean; streaming: string } | null>(null);
   // Terminal-grade tab chrome: right-click context menu + command palette.
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -313,6 +323,12 @@ export function PromptConsole() {
     const unTranscript = listen("echo://prompt-transcript", drainPending);
     drainPending(); // anything queued while this webview was booting
 
+    // Live dictation preview: show streaming partials while the mic button is
+    // active (the finished text lands via the prompt-transcript queue above).
+    const unPartial = listen<string>("echo://stream-partial", (e) => {
+      if (micActive.current) setLivePartial(e.payload);
+    });
+
     // Global keyboard map (terminal muscle memory). The palette owns its own
     // keys while open; everything routes through the `actions` ref so it sees
     // fresh state.
@@ -362,6 +378,7 @@ export function PromptConsole() {
     document.addEventListener("visibilitychange", onBlurOrHide);
     return () => {
       unTranscript.then((f) => f());
+      unPartial.then((f) => f());
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlurOrHide);
       document.removeEventListener("visibilitychange", onBlurOrHide);
@@ -654,6 +671,77 @@ export function PromptConsole() {
     invoke("prompt_console_toggle").catch(() => {});
   };
 
+  // ---- Click-to-dictate (mic button) ----
+  // Restore the hotkey + the config we temporarily changed, and reset UI.
+  const endMicSession = async () => {
+    micActive.current = false;
+    setMicRecording(false);
+    setLivePartial("");
+    await invoke("hotkey_set_suspended", { suspended: false }).catch(() => {});
+    const prev = micPrev.current;
+    micPrev.current = null;
+    if (prev) {
+      try {
+        const cfg = await getConfig();
+        await setConfig({ ...cfg, prompt_console_as_target: prev.asTarget, streaming_mode: prev.streaming });
+      } catch {
+        /* best-effort restore */
+      }
+    }
+  };
+
+  const startMic = async () => {
+    if (micRecording) return;
+    let cfg;
+    try {
+      cfg = await getConfig();
+    } catch {
+      showToast(t("prompt.mic.failed"));
+      return;
+    }
+    // Remember + override: route the result into THIS window, and run streaming
+    // in FINAL mode so partials stream as a preview but are never typed into the
+    // app behind (only "live" mode injects). Restored in endMicSession.
+    micPrev.current = { asTarget: cfg.prompt_console_as_target, streaming: cfg.streaming_mode };
+    setMicRecording(true);
+    micActive.current = true;
+    setLivePartial("");
+    try {
+      await setConfig({ ...cfg, prompt_console_as_target: true, streaming_mode: "final" });
+      await invoke("hotkey_set_suspended", { suspended: true });
+      await invoke("start_recording");
+    } catch {
+      showToast(t("prompt.mic.failed"));
+      await endMicSession();
+    }
+  };
+
+  /** Stop + transcribe: the finished text routes via the queue → drainPending. */
+  const stopMic = async () => {
+    if (!micRecording) return;
+    micActive.current = false; // stop showing partials immediately
+    setLivePartial("");
+    try {
+      await invoke("stop_and_transcribe");
+    } catch {
+      showToast(t("prompt.mic.failed"));
+    }
+    await endMicSession();
+  };
+
+  /** Abort without transcribing (Esc). */
+  const cancelMic = async () => {
+    if (!micRecording) return;
+    micActive.current = false;
+    await invoke("cancel_recording").catch(() => {});
+    await endMicSession();
+  };
+
+  const toggleMic = () => {
+    if (micRecording) void stopMic();
+    else void startMic();
+  };
+
   // ---- Command palette (⌘P) ----
   const palItems: PalCmd[] = [
     { id: "new", label: t("prompt.cmd.newTab"), run: addTab },
@@ -662,6 +750,7 @@ export function PromptConsole() {
     { id: "pin", label: t(active.pinned ? "prompt.cmd.unpin" : "prompt.cmd.pin"), run: () => togglePinTab(data.activeId) },
     { id: "copy", label: t("prompt.cmd.copy"), run: copy },
     { id: "insert", label: t("prompt.cmd.insert"), run: insert },
+    { id: "mic", label: t(micRecording ? "prompt.cmd.micStop" : "prompt.cmd.mic"), run: toggleMic },
     { id: "save", label: t("prompt.cmd.saveToLibrary"), run: saveToLibrary },
     { id: "refine", label: t("prompt.cmd.refine"), run: runRefine },
     { id: "correct", label: t("prompt.cmd.correct"), run: runCorrect },
@@ -709,6 +798,7 @@ export function PromptConsole() {
     togglePalette: () => (paletteOpen ? setPaletteOpen(false) : openPalette()),
     escape: () => {
       if (paletteOpen) return setPaletteOpen(false);
+      if (micRecording) return void cancelMic();
       if (refining || refineResult) return cancelRefine();
       if (menu) return setMenu(null);
       if (renaming) return setRenaming(null);
@@ -1024,6 +1114,15 @@ export function PromptConsole() {
             )}
           </div>
         )}
+        {micRecording && (
+          <div className="pc-dictate">
+            <span className="pc-dictate-dot" />
+            <span className="pc-dictate-text">{livePartial || t("prompt.mic.listening")}</span>
+            <button className="pc-dictate-stop" onClick={() => void stopMic()}>
+              <Ico paths={ICONS.stop} size={11} /> {t("prompt.mic.stopShort")}
+            </button>
+          </div>
+        )}
       </div>
 
       <footer className="pc-foot">
@@ -1031,6 +1130,13 @@ export function PromptConsole() {
           {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
         </span>
         <div className="pc-foot-actions">
+          <button
+            className={`pc-btn mic ${micRecording ? "rec" : ""}`}
+            title={t(micRecording ? "prompt.mic.stop" : "prompt.mic.start")}
+            onClick={toggleMic}
+          >
+            <Ico paths={micRecording ? ICONS.stop : ICONS.micOn} filled={micRecording} size={13} />
+          </button>
           <button
             className={`pc-btn ${coachOpen ? "on" : ""}`}
             title={t("prompt.coach.title")}
