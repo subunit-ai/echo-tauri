@@ -516,6 +516,7 @@
       "insert": "Insert into the app behind",
       "saveToLibrary": "Save to library",
       "refine": "Refine with AI",
+      "correct": "Correct whole text",
       "clear": "Clear tab",
       "autocorrect": "Toggle autocorrect",
       "coach": "Open Prompt Coach",
@@ -529,6 +530,14 @@
       "hint": "Clear this tab (⌘L)",
       "undo": "Tab cleared",
       "undoAction": "Undo"
+    },
+    "correct": {
+      "button": "Correct",
+      "hint": "Correct the whole text once (typos, punctuation) — wording kept",
+      "loading": "Correcting …",
+      "done": "Corrected",
+      "noChange": "Already clean — nothing to correct.",
+      "failed": "Correction failed — check connection/login and retry."
     },
     "autocorrect": "Autocorrect: {{state}}",
     "refine": {

@@ -72,6 +72,9 @@ const ICONS = {
   spark: ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z"],
   eraser: ["M8 20H21", "M5.5 17.5L3 15a2 2 0 0 1 0-2.8l8.7-8.7a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11.5 17.5H7z"],
   spell: ["M3 16l3-9 3 9", "M3.9 13h4.2", "M13 15l3 3 5-6"],
+  check: ["M4 12.5l5 5L20 6.5"],
+  micOn: ["M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z", "M19 11a7 7 0 0 1-14 0", "M12 18v3"],
+  stop: ["M7 7h10v10H7z"],
 };
 
 /** Glass intensity levels — cycled from the header droplet. The CSS multiplies
@@ -201,10 +204,13 @@ export function PromptConsole() {
   const [refineErr, setRefineErr] = useState<string | null>(null);
   const [refineView, setRefineView] = useState<"diff" | "result">("diff");
   const refineReq = useRef(0);
-  // "Leeren": wipe the active tab's text. Honors the iron "nothing is lost"
-  // rule via an undo snapshot — the cleared text is restorable for a few
-  // seconds (or until the next clear).
-  const [clearedText, setClearedText] = useState<string | null>(null);
+  // "Korrigieren": one-click tidy pass over the whole text (typos/punctuation),
+  // applied directly with an undo (see `toast`). Loading flag drives the button.
+  const [correcting, setCorrecting] = useState(false);
+  // Bottom toast: undo for clear/correct (and brief status messages). Honors
+  // the iron "nothing is lost" rule — destructive-ish actions snapshot the old
+  // text into `toast.undo` so one click restores it.
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const undoTimer = useRef<number | undefined>(undefined);
   // Autocorrect: native OS spellcheck + autocorrection on the editor. Off by
   // default (prompts often hold code/paths the OS would mangle); persisted in
@@ -555,6 +561,13 @@ export function PromptConsole() {
     setCoachOpen(false);
   };
 
+  // ---- Bottom toast (undo for clear/correct + brief status) ----
+  const showToast = (text: string, undo?: () => void) => {
+    setToast({ text, undo });
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setToast(null), 8000);
+  };
+
   // ---- AI-Coach: Refine via /v1/cleanup style "prompt" ----
   const runRefine = () => {
     const base = active.text;
@@ -565,7 +578,7 @@ export function PromptConsole() {
     setRefineResult(null);
     setRefineView("diff");
     setRefining(true);
-    invoke<string>("prompt_refine", { text: base })
+    invoke<string>("prompt_cleanup", { text: base, style: "prompt" })
       .then((res) => {
         if (id !== refineReq.current) return; // cancelled / superseded
         setRefining(false);
@@ -602,18 +615,38 @@ export function PromptConsole() {
     const base = active.text;
     if (!base) return; // already empty
     setText("");
-    setClearedText(base);
     editorRef.current?.focus();
-    if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    undoTimer.current = window.setTimeout(() => setClearedText(null), 8000);
+    showToast(t("prompt.clear.undo"), () => {
+      setText(base);
+      setToast(null);
+      editorRef.current?.focus();
+    });
   };
 
-  const undoClear = () => {
-    if (clearedText == null) return;
-    setText(clearedText);
-    setClearedText(null);
-    if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    editorRef.current?.focus();
+  // ---- "Korrigieren": one-click tidy pass over the whole text, with undo. ----
+  const runCorrect = () => {
+    const base = active.text;
+    if (!base.trim() || correcting) return;
+    flushNow();
+    setCorrecting(true);
+    invoke<string>("prompt_cleanup", { text: base, style: "tidy" })
+      .then((res) => {
+        setCorrecting(false);
+        if (!res || !res.trim() || res.trim() === base.trim()) {
+          showToast(t("prompt.correct.noChange"));
+          return;
+        }
+        setText(res);
+        showToast(t("prompt.correct.done"), () => {
+          setText(base);
+          setToast(null);
+          editorRef.current?.focus();
+        });
+      })
+      .catch(() => {
+        setCorrecting(false);
+        showToast(t("prompt.correct.failed"));
+      });
   };
 
   const hide = () => {
@@ -631,6 +664,7 @@ export function PromptConsole() {
     { id: "insert", label: t("prompt.cmd.insert"), run: insert },
     { id: "save", label: t("prompt.cmd.saveToLibrary"), run: saveToLibrary },
     { id: "refine", label: t("prompt.cmd.refine"), run: runRefine },
+    { id: "correct", label: t("prompt.cmd.correct"), run: runCorrect },
     { id: "clear", label: t("prompt.cmd.clear"), run: clearActive },
     { id: "autocorrect", label: t("prompt.cmd.autocorrect"), run: toggleAutocorrect },
     { id: "coach", label: t("prompt.cmd.coach"), run: openCoach },
@@ -825,15 +859,26 @@ export function PromptConsole() {
               <span className="pc-score-num">{score}%</span>
             </div>
             <div className="pc-refine-bar">
-              <button
-                className="pc-btn primary refine"
-                onClick={runRefine}
-                disabled={refining || !active.text.trim()}
-                title={t("prompt.refine.hint")}
-              >
-                <Ico paths={ICONS.spark} filled size={12} />
-                {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
-              </button>
+              <div className="pc-refine-row">
+                <button
+                  className="pc-btn refine"
+                  onClick={runCorrect}
+                  disabled={correcting || refining || !active.text.trim()}
+                  title={t("prompt.correct.hint")}
+                >
+                  <Ico paths={ICONS.check} size={13} />
+                  {correcting ? t("prompt.correct.loading") : t("prompt.correct.button")}
+                </button>
+                <button
+                  className="pc-btn primary refine"
+                  onClick={runRefine}
+                  disabled={refining || correcting || !active.text.trim()}
+                  title={t("prompt.refine.hint")}
+                >
+                  <Ico paths={ICONS.spark} filled size={12} />
+                  {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
+                </button>
+              </div>
               {refineErr && <span className="pc-refine-err">{refineErr}</span>}
             </div>
             <div className="pc-coach-list">
@@ -969,12 +1014,14 @@ export function PromptConsole() {
             )}
           </div>
         )}
-        {clearedText != null && (
+        {toast && (
           <div className="pc-undo">
-            <span className="pc-undo-text">{t("prompt.clear.undo")}</span>
-            <button className="pc-undo-btn" onClick={undoClear}>
-              {t("prompt.clear.undoAction")}
-            </button>
+            <span className="pc-undo-text">{toast.text}</span>
+            {toast.undo && (
+              <button className="pc-undo-btn" onClick={toast.undo}>
+                {t("prompt.clear.undoAction")}
+              </button>
+            )}
           </div>
         )}
       </div>
