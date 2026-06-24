@@ -72,6 +72,9 @@ const ICONS = {
   spark: ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3z"],
   eraser: ["M8 20H21", "M5.5 17.5L3 15a2 2 0 0 1 0-2.8l8.7-8.7a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11.5 17.5H7z"],
   spell: ["M3 16l3-9 3 9", "M3.9 13h4.2", "M13 15l3 3 5-6"],
+  check: ["M4 12.5l5 5L20 6.5"],
+  micOn: ["M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z", "M19 11a7 7 0 0 1-14 0", "M12 18v3"],
+  stop: ["M7 7h10v10H7z"],
 };
 
 /** Glass intensity levels — cycled from the header droplet. The CSS multiplies
@@ -201,10 +204,13 @@ export function PromptConsole() {
   const [refineErr, setRefineErr] = useState<string | null>(null);
   const [refineView, setRefineView] = useState<"diff" | "result">("diff");
   const refineReq = useRef(0);
-  // "Leeren": wipe the active tab's text. Honors the iron "nothing is lost"
-  // rule via an undo snapshot — the cleared text is restorable for a few
-  // seconds (or until the next clear).
-  const [clearedText, setClearedText] = useState<string | null>(null);
+  // "Korrigieren": one-click tidy pass over the whole text (typos/punctuation),
+  // applied directly with an undo (see `toast`). Loading flag drives the button.
+  const [correcting, setCorrecting] = useState(false);
+  // Bottom toast: undo for clear/correct (and brief status messages). Honors
+  // the iron "nothing is lost" rule — destructive-ish actions snapshot the old
+  // text into `toast.undo` so one click restores it.
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const undoTimer = useRef<number | undefined>(undefined);
   // Autocorrect: native OS spellcheck + autocorrection on the editor. Off by
   // default (prompts often hold code/paths the OS would mangle); persisted in
@@ -216,6 +222,16 @@ export function PromptConsole() {
       return false;
     }
   });
+  // Click-to-dictate: a mic button records (toggle, no held hotkey) and streams
+  // the transcript into the editor. Runs the existing streaming path in FINAL
+  // mode (partials shown as a live preview, but NOT injected into any focused
+  // app — see startMic) and lands the finished text via the "Terminal als Ziel"
+  // queue. `micActive` ref gates the global stream-partial listener; `micPrev`
+  // remembers the config to restore after the session.
+  const [micRecording, setMicRecording] = useState(false);
+  const [livePartial, setLivePartial] = useState("");
+  const micActive = useRef(false);
+  const micPrev = useRef<{ asTarget: boolean; streaming: string } | null>(null);
   // Terminal-grade tab chrome: right-click context menu + command palette.
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -307,6 +323,12 @@ export function PromptConsole() {
     const unTranscript = listen("echo://prompt-transcript", drainPending);
     drainPending(); // anything queued while this webview was booting
 
+    // Live dictation preview: show streaming partials while the mic button is
+    // active (the finished text lands via the prompt-transcript queue above).
+    const unPartial = listen<string>("echo://stream-partial", (e) => {
+      if (micActive.current) setLivePartial(e.payload);
+    });
+
     // Global keyboard map (terminal muscle memory). The palette owns its own
     // keys while open; everything routes through the `actions` ref so it sees
     // fresh state.
@@ -356,6 +378,7 @@ export function PromptConsole() {
     document.addEventListener("visibilitychange", onBlurOrHide);
     return () => {
       unTranscript.then((f) => f());
+      unPartial.then((f) => f());
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlurOrHide);
       document.removeEventListener("visibilitychange", onBlurOrHide);
@@ -555,6 +578,13 @@ export function PromptConsole() {
     setCoachOpen(false);
   };
 
+  // ---- Bottom toast (undo for clear/correct + brief status) ----
+  const showToast = (text: string, undo?: () => void) => {
+    setToast({ text, undo });
+    if (undoTimer.current) window.clearTimeout(undoTimer.current);
+    undoTimer.current = window.setTimeout(() => setToast(null), 8000);
+  };
+
   // ---- AI-Coach: Refine via /v1/cleanup style "prompt" ----
   const runRefine = () => {
     const base = active.text;
@@ -565,7 +595,7 @@ export function PromptConsole() {
     setRefineResult(null);
     setRefineView("diff");
     setRefining(true);
-    invoke<string>("prompt_refine", { text: base })
+    invoke<string>("prompt_cleanup", { text: base, style: "prompt" })
       .then((res) => {
         if (id !== refineReq.current) return; // cancelled / superseded
         setRefining(false);
@@ -602,23 +632,114 @@ export function PromptConsole() {
     const base = active.text;
     if (!base) return; // already empty
     setText("");
-    setClearedText(base);
     editorRef.current?.focus();
-    if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    undoTimer.current = window.setTimeout(() => setClearedText(null), 8000);
+    showToast(t("prompt.clear.undo"), () => {
+      setText(base);
+      setToast(null);
+      editorRef.current?.focus();
+    });
   };
 
-  const undoClear = () => {
-    if (clearedText == null) return;
-    setText(clearedText);
-    setClearedText(null);
-    if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    editorRef.current?.focus();
+  // ---- "Korrigieren": one-click tidy pass over the whole text, with undo. ----
+  const runCorrect = () => {
+    const base = active.text;
+    if (!base.trim() || correcting) return;
+    flushNow();
+    setCorrecting(true);
+    invoke<string>("prompt_cleanup", { text: base, style: "tidy" })
+      .then((res) => {
+        setCorrecting(false);
+        if (!res || !res.trim() || res.trim() === base.trim()) {
+          showToast(t("prompt.correct.noChange"));
+          return;
+        }
+        setText(res);
+        showToast(t("prompt.correct.done"), () => {
+          setText(base);
+          setToast(null);
+          editorRef.current?.focus();
+        });
+      })
+      .catch(() => {
+        setCorrecting(false);
+        showToast(t("prompt.correct.failed"));
+      });
   };
 
   const hide = () => {
     flushNow();
     invoke("prompt_console_toggle").catch(() => {});
+  };
+
+  // ---- Click-to-dictate (mic button) ----
+  // Restore the hotkey + the config we temporarily changed, and reset UI.
+  const endMicSession = async () => {
+    micActive.current = false;
+    setMicRecording(false);
+    setLivePartial("");
+    await invoke("hotkey_set_suspended", { suspended: false }).catch(() => {});
+    const prev = micPrev.current;
+    micPrev.current = null;
+    if (prev) {
+      try {
+        const cfg = await getConfig();
+        await setConfig({ ...cfg, prompt_console_as_target: prev.asTarget, streaming_mode: prev.streaming });
+      } catch {
+        /* best-effort restore */
+      }
+    }
+  };
+
+  const startMic = async () => {
+    if (micRecording) return;
+    let cfg;
+    try {
+      cfg = await getConfig();
+    } catch {
+      showToast(t("prompt.mic.failed"));
+      return;
+    }
+    // Remember + override: route the result into THIS window, and run streaming
+    // in FINAL mode so partials stream as a preview but are never typed into the
+    // app behind (only "live" mode injects). Restored in endMicSession.
+    micPrev.current = { asTarget: cfg.prompt_console_as_target, streaming: cfg.streaming_mode };
+    setMicRecording(true);
+    micActive.current = true;
+    setLivePartial("");
+    try {
+      await setConfig({ ...cfg, prompt_console_as_target: true, streaming_mode: "final" });
+      await invoke("hotkey_set_suspended", { suspended: true });
+      await invoke("start_recording");
+    } catch {
+      showToast(t("prompt.mic.failed"));
+      await endMicSession();
+    }
+  };
+
+  /** Stop + transcribe: the finished text routes via the queue → drainPending. */
+  const stopMic = async () => {
+    if (!micRecording) return;
+    micActive.current = false; // stop showing partials immediately
+    setLivePartial("");
+    try {
+      await invoke("stop_and_transcribe");
+    } catch {
+      showToast(t("prompt.mic.failed"));
+    }
+    await endMicSession();
+  };
+
+  /** Abort without transcribing (Esc). */
+  const cancelMic = async () => {
+    if (!micRecording) return;
+    micActive.current = false;
+    await invoke("cancel_recording").catch(() => {});
+    await endMicSession();
+  };
+
+  const toggleMic = () => {
+    if (micRecording) void stopMic();
+    else void startMic();
   };
 
   // ---- Command palette (⌘P) ----
@@ -629,8 +750,10 @@ export function PromptConsole() {
     { id: "pin", label: t(active.pinned ? "prompt.cmd.unpin" : "prompt.cmd.pin"), run: () => togglePinTab(data.activeId) },
     { id: "copy", label: t("prompt.cmd.copy"), run: copy },
     { id: "insert", label: t("prompt.cmd.insert"), run: insert },
+    { id: "mic", label: t(micRecording ? "prompt.cmd.micStop" : "prompt.cmd.mic"), run: toggleMic },
     { id: "save", label: t("prompt.cmd.saveToLibrary"), run: saveToLibrary },
     { id: "refine", label: t("prompt.cmd.refine"), run: runRefine },
+    { id: "correct", label: t("prompt.cmd.correct"), run: runCorrect },
     { id: "clear", label: t("prompt.cmd.clear"), run: clearActive },
     { id: "autocorrect", label: t("prompt.cmd.autocorrect"), run: toggleAutocorrect },
     { id: "coach", label: t("prompt.cmd.coach"), run: openCoach },
@@ -675,6 +798,7 @@ export function PromptConsole() {
     togglePalette: () => (paletteOpen ? setPaletteOpen(false) : openPalette()),
     escape: () => {
       if (paletteOpen) return setPaletteOpen(false);
+      if (micRecording) return void cancelMic();
       if (refining || refineResult) return cancelRefine();
       if (menu) return setMenu(null);
       if (renaming) return setRenaming(null);
@@ -825,15 +949,26 @@ export function PromptConsole() {
               <span className="pc-score-num">{score}%</span>
             </div>
             <div className="pc-refine-bar">
-              <button
-                className="pc-btn primary refine"
-                onClick={runRefine}
-                disabled={refining || !active.text.trim()}
-                title={t("prompt.refine.hint")}
-              >
-                <Ico paths={ICONS.spark} filled size={12} />
-                {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
-              </button>
+              <div className="pc-refine-row">
+                <button
+                  className="pc-btn refine"
+                  onClick={runCorrect}
+                  disabled={correcting || refining || !active.text.trim()}
+                  title={t("prompt.correct.hint")}
+                >
+                  <Ico paths={ICONS.check} size={13} />
+                  {correcting ? t("prompt.correct.loading") : t("prompt.correct.button")}
+                </button>
+                <button
+                  className="pc-btn primary refine"
+                  onClick={runRefine}
+                  disabled={refining || correcting || !active.text.trim()}
+                  title={t("prompt.refine.hint")}
+                >
+                  <Ico paths={ICONS.spark} filled size={12} />
+                  {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
+                </button>
+              </div>
               {refineErr && <span className="pc-refine-err">{refineErr}</span>}
             </div>
             <div className="pc-coach-list">
@@ -969,11 +1104,22 @@ export function PromptConsole() {
             )}
           </div>
         )}
-        {clearedText != null && (
+        {toast && (
           <div className="pc-undo">
-            <span className="pc-undo-text">{t("prompt.clear.undo")}</span>
-            <button className="pc-undo-btn" onClick={undoClear}>
-              {t("prompt.clear.undoAction")}
+            <span className="pc-undo-text">{toast.text}</span>
+            {toast.undo && (
+              <button className="pc-undo-btn" onClick={toast.undo}>
+                {t("prompt.clear.undoAction")}
+              </button>
+            )}
+          </div>
+        )}
+        {micRecording && (
+          <div className="pc-dictate">
+            <span className="pc-dictate-dot" />
+            <span className="pc-dictate-text">{livePartial || t("prompt.mic.listening")}</span>
+            <button className="pc-dictate-stop" onClick={() => void stopMic()}>
+              <Ico paths={ICONS.stop} size={11} /> {t("prompt.mic.stopShort")}
             </button>
           </div>
         )}
@@ -984,6 +1130,13 @@ export function PromptConsole() {
           {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
         </span>
         <div className="pc-foot-actions">
+          <button
+            className={`pc-btn mic ${micRecording ? "rec" : ""}`}
+            title={t(micRecording ? "prompt.mic.stop" : "prompt.mic.start")}
+            onClick={toggleMic}
+          >
+            <Ico paths={micRecording ? ICONS.stop : ICONS.micOn} filled={micRecording} size={13} />
+          </button>
           <button
             className={`pc-btn ${coachOpen ? "on" : ""}`}
             title={t("prompt.coach.title")}

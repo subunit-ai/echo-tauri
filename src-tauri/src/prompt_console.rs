@@ -208,24 +208,33 @@ pub fn prompt_insert(app: AppHandle, text: String) -> Result<(), String> {
     Ok(())
 }
 
-/// AI-Coach "Refine": rewrite the draft into a clean, well-structured prompt via
-/// the server's `/v1/cleanup` `style: "prompt"` (the same subscription-Claude
-/// path the dictation cleanup uses — NOT a metered API call). Ignores
-/// `cleanup_enabled` (Refine is an explicit user action). ASYNC + spawn_blocking:
-/// the round trip can take tens of seconds, and sync commands run on the main
-/// thread — blocking it would freeze the whole UI (same reasoning as `login`).
+/// AI-Coach text passes via the server's `/v1/cleanup` (the same
+/// subscription-Claude path the dictation cleanup uses — NOT a metered API
+/// call). Two styles are exposed to the prompt webview:
+///   - "prompt" → Refine: rewrite the draft into a structured prompt.
+///   - "tidy"   → Correct: lightest-touch fix (typos, punctuation, casing),
+///                wording kept.
+/// Ignores `cleanup_enabled` (these are explicit user actions). ASYNC +
+/// spawn_blocking: the round trip can take tens of seconds, and sync commands
+/// run on the main thread — blocking it would freeze the whole UI (same
+/// reasoning as `login`).
 #[tauri::command]
-pub async fn prompt_refine(app: AppHandle, text: String) -> Result<String, String> {
+pub async fn prompt_cleanup(app: AppHandle, text: String, style: String) -> Result<String, String> {
     if text.trim().is_empty() {
         return Err("leerer Prompt".into());
     }
+    // Whitelist: only the two prompt-terminal styles may be requested from here.
+    let style = match style.as_str() {
+        "prompt" | "tidy" => style,
+        _ => return Err(format!("unsupported style: {style}")),
+    };
     tauri::async_runtime::spawn_blocking(move || {
         // Meetings can sit a while; a draft can too — refresh the cloud token
         // first, exactly like `process_meeting`.
         crate::auth::ensure_fresh(&app);
         let cfg = app.state::<AppState>().config.lock().clone();
-        crate::cleanup::run_style(&cfg, &text, "prompt").map_err(|e| e.to_string())
+        crate::cleanup::run_style(&cfg, &text, &style).map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| format!("refine task: {e}"))?
+    .map_err(|e| format!("cleanup task: {e}"))?
 }

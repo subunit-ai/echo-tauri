@@ -138,7 +138,7 @@ pub fn run() {
             prompt_console::prompts_save,
             prompt_console::prompt_take_pending,
             prompt_console::prompt_insert,
-            prompt_console::prompt_refine,
+            prompt_console::prompt_cleanup,
             commands::list_audio_devices,
             commands::hardware_info,
             commands::process_meeting,

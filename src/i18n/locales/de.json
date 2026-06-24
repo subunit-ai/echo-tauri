@@ -513,8 +513,11 @@
       "unpin": "Tab lösen",
       "copy": "Kopieren",
       "insert": "In App dahinter einfügen",
+      "mic": "Diktat starten",
+      "micStop": "Diktat stoppen",
       "saveToLibrary": "In Bibliothek speichern",
       "refine": "Mit KI verbessern (Refine)",
+      "correct": "Ganzen Text korrigieren",
       "clear": "Tab leeren",
       "autocorrect": "Autokorrektur umschalten",
       "coach": "Prompt-Coach öffnen",
@@ -528,6 +531,21 @@
       "hint": "Diesen Tab leeren (⌘L)",
       "undo": "Tab geleert",
       "undoAction": "Rückgängig"
+    },
+    "correct": {
+      "button": "Korrigieren",
+      "hint": "Den ganzen Text einmal korrigieren (Tippfehler, Satzzeichen) — Wortlaut bleibt",
+      "loading": "Korrigiere …",
+      "done": "Korrigiert",
+      "noChange": "Schon sauber — nichts zu korrigieren.",
+      "failed": "Korrigieren fehlgeschlagen — Verbindung/Login prüfen und nochmal."
+    },
+    "mic": {
+      "start": "Diktat — klicken zum Aufnehmen (kein Hotkey halten)",
+      "stop": "Aufnahme stoppen",
+      "stopShort": "Stopp",
+      "listening": "Höre zu …",
+      "failed": "Aufnahme fehlgeschlagen — Cloud-Modus + Login nötig."
     },
     "autocorrect": "Autokorrektur: {{state}}",
     "refine": {
