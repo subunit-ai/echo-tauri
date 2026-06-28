@@ -814,40 +814,8 @@ export function PromptConsole() {
 
   return (
     <div className="pc-shell" data-glass={glass} style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}>
-      <header className="pc-head" data-tauri-drag-region>
-        <span className="pc-glyph" data-tauri-drag-region>✦</span>
-        <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
-        <div className="pc-head-actions">
-          <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
-            <Ico paths={ICONS.search} />
-          </button>
-          <button
-            className={`pc-icon ${autocorrect ? "on" : ""}`}
-            title={t("prompt.autocorrect", { state: t(autocorrect ? "common.on" : "common.off") })}
-            onClick={toggleAutocorrect}
-          >
-            <Ico paths={ICONS.spell} />
-          </button>
-          <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
-            <Ico paths={ICONS.drop} />
-          </button>
-          <button
-            className={`pc-icon ${asTarget ? "on" : ""}`}
-            title={t("prompt.targetHint")}
-            onClick={toggleTarget}
-          >
-            <Ico paths={ICONS.mic} />
-          </button>
-          <button className={`pc-icon ${onTop ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
-            <Ico paths={ICONS.pin} />
-          </button>
-          <button className="pc-icon" title={t("prompt.close")} onClick={hide}>
-            <Ico paths={ICONS.x} size={12} />
-          </button>
-        </div>
-      </header>
-
-      <div className="pc-tabs">
+      {/* Chrome-style: the tab strip IS the top line of the window. */}
+      <div className="pc-tabs" data-tauri-drag-region>
         {data.drafts.map((dr) => (
           <div
             key={dr.id}
@@ -925,6 +893,40 @@ export function PromptConsole() {
           +
         </button>
       </div>
+
+      {/* Toolbar (below the tabs, like Chrome's): the active tab merges into it. */}
+      <header className="pc-head" data-tauri-drag-region>
+        <span className="pc-glyph" data-tauri-drag-region>✦</span>
+        <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
+        <div className="pc-head-actions">
+          <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
+            <Ico paths={ICONS.search} />
+          </button>
+          <button
+            className={`pc-icon ${autocorrect ? "on" : ""}`}
+            title={t("prompt.autocorrect", { state: t(autocorrect ? "common.on" : "common.off") })}
+            onClick={toggleAutocorrect}
+          >
+            <Ico paths={ICONS.spell} />
+          </button>
+          <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
+            <Ico paths={ICONS.drop} />
+          </button>
+          <button
+            className={`pc-icon ${asTarget ? "on" : ""}`}
+            title={t("prompt.targetHint")}
+            onClick={toggleTarget}
+          >
+            <Ico paths={ICONS.mic} />
+          </button>
+          <button className={`pc-icon ${onTop ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
+            <Ico paths={ICONS.pin} />
+          </button>
+          <button className="pc-icon" title={t("prompt.close")} onClick={hide}>
+            <Ico paths={ICONS.x} size={12} />
+          </button>
+        </div>
+      </header>
 
       <div className="pc-body">
         <textarea

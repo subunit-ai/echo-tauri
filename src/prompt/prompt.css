@@ -39,6 +39,9 @@ body {
      droplet cycles clear → regular → rich), so "clear" is genuinely
      see-through instead of merely darker. */
   --pc-glass: 0.25;
+  /* Shared surface for the active tab + the toolbar below it, so the open tab
+     merges seamlessly into the toolbar (Chrome-style). Scales with the glass. */
+  --pc-toolbar: rgb(40 62 100 / calc(0.9 * var(--pc-glass)));
   background: linear-gradient(
     160deg,
     rgb(36 58 92 / calc(0.3 * var(--pc-glass))) 0%,
@@ -68,6 +71,11 @@ body {
 .is-windows .pc-lib-search {
   background: rgba(28, 48, 78, 0.45);
 }
+/* Solid toolbar + active-tab surface on Windows (no vibrancy to merge into). */
+.is-windows .pc-head,
+.is-windows .pc-tab.active {
+  background: #1b2f49;
+}
 
 /* Soft specular highlight across the top — the "liquid" catch-light. */
 .pc-shell::before {
@@ -92,12 +100,16 @@ body {
     linear-gradient(0deg, rgba(160, 200, 245, 0.045), transparent);
 }
 
-/* ---- Header (drag region) ---- */
+/* ---- Toolbar (below the tab strip, like Chrome's) ----
+   Shares the ACTIVE tab's surface (--pc-toolbar) so the open tab merges
+   seamlessly into it; a bottom hairline separates the toolbar from the page. */
 .pc-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px 8px 14px;
+  padding: 8px 12px 8px 14px;
+  background: var(--pc-toolbar);
   border-bottom: 1px solid var(--line);
   flex: none;
   cursor: default;
@@ -105,14 +117,14 @@ body {
 
 .pc-glyph {
   color: var(--cyan);
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   text-shadow: 0 0 16px rgba(34, 211, 238, 0.75), 0 0 36px rgba(34, 211, 238, 0.35);
 }
 
 .pc-title {
   flex: 1;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--ink);
@@ -156,14 +168,16 @@ body {
    ACTIVE one is brighter + drops its bottom edge onto the strip baseline so it
    reads as physically connected to the page below — like a browser tab. */
 .pc-tabs {
+  position: relative;
+  z-index: 2; /* the active tab overlaps the toolbar below */
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  padding: 8px 8px 0 8px;
+  gap: 4px;
+  /* The top line of the window — flush to the top edge (drag region). */
+  padding: 7px 10px 0 10px;
   overflow-x: auto;
   flex: none;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--line);
 }
 
 .pc-tabs::-webkit-scrollbar {
@@ -175,20 +189,21 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  /* Share the strip width like browser/iTerm tabs: grow to fill when few,
-     shrink to the min + scroll when many. */
-  flex: 1 1 0;
-  min-width: 92px;
+  /* Chrome-style: content-sized tabs (not full-width) so there's draggable
+     space after them on the top line; shrink + scroll when many. */
+  flex: 0 1 auto;
+  min-width: 112px;
   max-width: 240px;
-  height: 33px;
+  height: 32px;
   padding: 0 10px 0 13px;
   /* Inactive tabs sit recessed (fainter glass). */
   background: rgb(20 38 64 / calc(0.34 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid transparent;
   border-radius: 12px 12px 0 0;
-  /* Overlap the strip baseline so the corners tuck into it. */
-  margin-bottom: -1px;
+  /* Bottom sits flush on the toolbar; active shares its colour → seamless merge,
+     inactive is darker → reads as tucked behind. (No negative margin: the strip
+     has overflow-x:auto, which would clip vertical overflow.) */
   color: var(--ink3);
   font-size: 12.5px;
   font-weight: 600;
@@ -206,9 +221,9 @@ body {
    edge merges into the body (no baseline under it). */
 .pc-tab.active {
   color: var(--ink);
-  background: rgb(38 60 96 / calc(0.85 * var(--pc-glass)));
+  background: var(--pc-toolbar); /* same surface as the toolbar below */
   border-color: var(--glass-edge2);
-  border-bottom-color: transparent; /* breaks the strip baseline → merges into the page */
+  border-bottom-color: transparent; /* open bottom → merges into the toolbar */
   box-shadow: inset 0 2px 0 -1px var(--cyan), inset 0 1px 0 var(--rim-soft);
   z-index: 1;
 }
