@@ -180,6 +180,9 @@ export const duplicateOrbProfile = (id: string, name: string) =>
   invoke<string>("duplicate_orb_profile", { id, name });
 
 export const appVersion = () => invoke<string>("app_version");
+/** "Echo fragen" — grounded help assistant. Resolves to the answer, throws on failure. */
+export const helpAsk = (question: string, knowledge: string, language: string) =>
+  invoke<string>("help_ask", { question, knowledge, language });
 export const listAudioDevices = () => invoke<string[]>("list_audio_devices");
 /** Copy text to the clipboard (History action). */
 export const copyText = (text: string) => invoke<void>("copy_text", { text });

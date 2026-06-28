@@ -71,6 +71,37 @@
     "comingSoon": "Kommt in einer der nächsten Phasen.",
     "help": "Hilfe"
   },
+  "help": {
+    "subtitle": "Antworten, ein Assistent und Diagnose — alles direkt in Echo.",
+    "askTitle": "Echo fragen",
+    "askSub": "Stell eine Frage in eigenen Worten. Der Assistent antwortet auf Basis der Echo-Hilfe.",
+    "askPlaceholder": "Wie funktioniert das Diktieren?",
+    "askButton": "Fragen",
+    "asking": "Denkt nach…",
+    "askError": "Der Assistent ist gerade nicht erreichbar. Schau in die häufigen Fragen unten oder schreib uns an {{email}}.",
+    "suggest": {
+      "paste": "Mein Text wird nicht eingefügt — was tun?",
+      "hotkey": "Wie ändere ich das Tastenkürzel?",
+      "meeting": "Wie nehme ich ein Meeting auf?"
+    },
+    "faqTitle": "Häufige Fragen",
+    "noResults": "Keine passenden Einträge.",
+    "cat": {
+      "gettingStarted": "Erste Schritte",
+      "dictation": "Diktieren",
+      "meetings": "Meetings",
+      "vocabulary": "Vokabular",
+      "troubleshooting": "Problembehebung",
+      "privacy": "Datenschutz"
+    },
+    "diagTitle": "Diagnose & Support",
+    "diagSub": "Bei Problemen hilft uns die Diagnose, schnell die Ursache zu finden.",
+    "copyDiag": "Diagnose kopieren",
+    "diagCopied": "Diagnose kopiert",
+    "openLogs": "Log-Ordner öffnen",
+    "replayIntro": "Tour nochmal ansehen",
+    "contact": "Support kontaktieren"
+  },
   "nav": {
     "home": "Home",
     "history": "Verlauf",
