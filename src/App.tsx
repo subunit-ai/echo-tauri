@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
 import { SoundFx } from "./components/SoundFx";
+import { Help } from "./sections/Help";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Meetings } from "./sections/Meetings";
@@ -15,16 +16,6 @@ import { SessionBanner } from "./components/SessionBanner";
 import { onState, onNeedsAccessibility } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
-
-function Placeholder({ title }: { title: string }) {
-  const { t } = useTranslation();
-  return (
-    <div>
-      <h1 className="section-title">{title}</h1>
-      <div className="empty">{t("app.comingSoon")}</div>
-    </div>
-  );
-}
 
 function Shell() {
   const { t } = useTranslation();
@@ -72,7 +63,7 @@ function Shell() {
             {section === "settings" && <Settings />}
             {section === "meetings" && <Meetings />}
             {section === "vocabulary" && <Vocabulary />}
-            {section === "help" && <Placeholder title={t("app.help")} />}
+            {section === "help" && <Help />}
           </div>
         </main>
       )}

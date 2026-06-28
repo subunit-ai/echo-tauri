@@ -10,6 +10,7 @@ mod dach;
 mod diarize;
 mod events;
 mod hardware;
+mod help; // "Echo fragen" — grounded help assistant over the Abo backend
 mod hotkey;
 mod http; // shared pooled HTTP client + prewarm for the cloud path
 mod inject;
@@ -139,6 +140,7 @@ pub fn run() {
             prompt_console::prompt_take_pending,
             prompt_console::prompt_insert,
             prompt_console::prompt_cleanup,
+            help::help_ask,
             commands::list_audio_devices,
             commands::hardware_info,
             commands::process_meeting,

@@ -72,6 +72,37 @@
     "comingSoon": "Coming in one of the next phases.",
     "help": "Help"
   },
+  "help": {
+    "subtitle": "Answers, an assistant and diagnostics — all right inside Echo.",
+    "askTitle": "Ask Echo",
+    "askSub": "Ask in your own words. The assistant answers based on Echo's help.",
+    "askPlaceholder": "How does dictation work?",
+    "askButton": "Ask",
+    "asking": "Thinking…",
+    "askError": "The assistant isn't reachable right now. Check the FAQ below or email us at {{email}}.",
+    "suggest": {
+      "paste": "My text isn't being pasted — what do I do?",
+      "hotkey": "How do I change the hotkey?",
+      "meeting": "How do I record a meeting?"
+    },
+    "faqTitle": "Frequently asked",
+    "noResults": "No matching entries.",
+    "cat": {
+      "gettingStarted": "Getting started",
+      "dictation": "Dictation",
+      "meetings": "Meetings",
+      "vocabulary": "Vocabulary",
+      "troubleshooting": "Troubleshooting",
+      "privacy": "Privacy"
+    },
+    "diagTitle": "Diagnostics & support",
+    "diagSub": "When something breaks, diagnostics help us find the cause fast.",
+    "copyDiag": "Copy diagnostics",
+    "diagCopied": "Diagnostics copied",
+    "openLogs": "Open log folder",
+    "replayIntro": "Replay the tour",
+    "contact": "Contact support"
+  },
   "nav": {
     "home": "Home",
     "history": "History",
