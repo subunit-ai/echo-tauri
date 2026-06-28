@@ -1,16 +1,25 @@
-//! Auto-vocabulary DETECTION.
+//! Auto-vocabulary DETECTION (local candidate-finder, NOT the decider).
 //!
 //! Mines the local dictation history for terms that recur AND are written
 //! inconsistently — the signature of a word the ASR keeps mis-hearing (a name,
 //! brand, or piece of jargon). Those are exactly what the vocabulary fixes, yet
-//! nobody adds them by hand — so we surface them automatically (see the hybrid
-//! flow in `vocab_suggest.rs`: high-confidence → silent add, else → ask).
+//! nobody adds them by hand — so we surface them automatically.
 //!
-//! The KILLER signal is a CLUSTER of near-identical rare variants
-//! ("Jedlischka" / "Jedletschka" / "Jedlitschka"). Consistently-spelled common
-//! words never form such a cluster, so the multi-variant requirement is largely
-//! self-filtering — the small `COMMON` stop-set only guards the single-variant
-//! high-frequency path. Everything here is pure + local (no network, no I/O), so
+//! THE DIVISION OF LABOUR (this is the whole design):
+//!   * This file is a cheap, local PRE-FILTER. It clusters near-identical rare
+//!     variants ("Jedlischka" / "Jedletschka" / "Jedlitschka") and throws out
+//!     the obvious non-mis-hears (common words, and — crucially in an inflected
+//!     language like German — normal grammatical inflection: "Projekt /
+//!     Projekte / Projekten", "Kunde / Kunden". Those differ only by an ENDING,
+//!     not internally, so they are NOT mis-hears, see `is_inflection`).
+//!   * The actual DECISION ("is this a real vocab-worthy term — a name / brand /
+//!     tech word the STT plausibly garbles — or just an ordinary word?") is made
+//!     by the AI gatekeeper in `vocab_suggest.rs::curate`, WITH sentence context.
+//!     Frequency/edit-distance only NOMINATES; the model JUDGES. This is what
+//!     stops ordinary words from ever being suggested (TJ: not by frequency —
+//!     the AI must itself notice "this could be mis-spelled").
+//!
+//! Everything in the detection half is pure + local (no network, no I/O), so
 //! it's cheap to run in the background and unit-testable.
 //!
 //! v1 scope: SINGLE-token variants. Multi-word mis-hears ("Jed Litschka") are a
@@ -43,7 +52,16 @@ pub struct Candidate {
     pub variants: Vec<(String, usize)>,
     /// Total occurrences across all variants.
     pub total: usize,
+    /// A few example sentences (verbatim from history) that contain a variant —
+    /// the CONTEXT the AI gatekeeper needs to tell a real term from an ordinary
+    /// word / inflection. Empty if none could be gathered.
+    pub context: Vec<String>,
 }
+
+/// How many example sentences to capture per candidate for the AI to judge.
+const MAX_CONTEXT: usize = 3;
+/// Max chars of a context sentence we keep (keep the prompt small).
+const MAX_CONTEXT_CHARS: usize = 200;
 
 /// Most frequent DE + EN words — the only stop-set we need (the multi-variant
 /// rule filters the rest). Kept compact on purpose.
@@ -144,6 +162,121 @@ fn similar(a: &str, b: &str) -> bool {
     lev <= MAX_LEV && (lev as f32 / longer as f32) <= MAX_LEV_NORM
 }
 
+/// Typical DE/EN inflectional endings (≤3 chars) — the tail an ordinary word
+/// grows when it's declined/conjugated/pluralized. NOT exhaustive grammar; just
+/// enough to recognize "one word in several forms".
+fn inflection_endings() -> &'static HashSet<&'static str> {
+    use std::sync::OnceLock;
+    static ENDS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    ENDS.get_or_init(|| {
+        [
+            // German declension/conjugation
+            "e", "en", "er", "es", "em", "et", "n", "ns", "s", "st", "t", "te", "ten", "nen",
+            // English
+            "d", "ed", "ing", "est", "ly", "ies",
+        ]
+        .into_iter()
+        .collect()
+    })
+}
+
+/// Are these variants just grammatical INFLECTIONS of one ordinary word rather
+/// than mis-hearings of a term? The distinction is WHERE they differ:
+///   * mis-hears differ INTERNALLY — "jedli·schka" vs "jedli·tschka"
+///   * inflections differ only at the END — "projekt" → "projekt·e" → "projekt·en"
+/// So if the variants share a real common stem (≥3 chars) and every divergent
+/// tail is empty or a known short inflection ending, it's normal inflection — a
+/// declined/conjugated everyday word, NOT something the ASR mis-heard. This is
+/// the cheap local guard that keeps the bulk of German "Standardbegriffe" (the
+/// old false positives) from ever surfacing, with zero round-trips.
+fn is_inflection(variants: &[String]) -> bool {
+    // Distinct, lowercased forms as char vectors.
+    let mut seen = HashSet::new();
+    let forms: Vec<Vec<char>> = variants
+        .iter()
+        .map(|v| v.trim().to_lowercase())
+        .filter(|v| !v.is_empty() && seen.insert(v.clone()))
+        .map(|v| v.chars().collect())
+        .collect();
+    if forms.len() < 2 {
+        return false;
+    }
+    // Longest common prefix (in chars) across all forms.
+    let min_len = forms.iter().map(|f| f.len()).min().unwrap_or(0);
+    let mut lcp = 0usize;
+    'p: for i in 0..min_len {
+        let c = forms[0][i];
+        for f in &forms[1..] {
+            if f[i] != c {
+                break 'p;
+            }
+        }
+        lcp = i + 1;
+    }
+    if lcp < 3 {
+        return false; // no real shared stem → divergence is internal → a mis-hear
+    }
+    let ends = inflection_endings();
+    forms.iter().all(|f| {
+        let tail: String = f[lcp..].iter().collect();
+        tail.is_empty() || (tail.chars().count() <= 3 && ends.contains(tail.as_str()))
+    })
+}
+
+/// Up to `MAX_CONTEXT` example sentences from `transcripts` that contain a
+/// variant — the in-situ context the AI gatekeeper needs to tell a real term
+/// from an ordinary word. Each trimmed to `MAX_CONTEXT_CHARS` (windowed around
+/// the match if long) so the batch prompt stays small.
+fn gather_context(transcripts: &[String], variants: &[String]) -> Vec<String> {
+    let needles: Vec<String> = variants.iter().map(|v| v.to_lowercase()).collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for t in transcripts {
+        let lower = t.to_lowercase();
+        if !needles.iter().any(|n| lower.contains(n.as_str())) {
+            continue;
+        }
+        let snippet = snippet_around(t, &needles);
+        if snippet.is_empty() || !seen.insert(snippet.to_lowercase()) {
+            continue;
+        }
+        out.push(snippet);
+        if out.len() >= MAX_CONTEXT {
+            break;
+        }
+    }
+    out
+}
+
+/// The transcript trimmed to `MAX_CONTEXT_CHARS`, windowed around the first
+/// needle hit (with ellipses) when it's longer.
+fn snippet_around(text: &str, needles: &[String]) -> String {
+    let trimmed = text.trim();
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() <= MAX_CONTEXT_CHARS {
+        return trimmed.to_string();
+    }
+    let lower: String = trimmed.to_lowercase();
+    let mut at = 0usize;
+    for n in needles {
+        if let Some(byte_idx) = lower.find(n.as_str()) {
+            at = lower[..byte_idx].chars().count();
+            break;
+        }
+    }
+    let half = MAX_CONTEXT_CHARS / 2;
+    let end = (at + half).min(chars.len()).max(MAX_CONTEXT_CHARS.min(chars.len()));
+    let start = end.saturating_sub(MAX_CONTEXT_CHARS);
+    let mut s: String = chars[start..end].iter().collect();
+    if start > 0 {
+        s = format!("…{s}");
+    }
+    if end < chars.len() {
+        s = format!("{s}…");
+    }
+    s
+}
+
 /// Detect auto-vocab candidates from transcript history.
 ///
 /// `transcripts`: recent transcript texts (any order).
@@ -197,8 +330,17 @@ pub fn detect(transcripts: &[String], known: &HashSet<String>) -> Vec<Candidate>
             continue;
         }
         // variants already sorted (tokens were sorted desc before clustering).
+        let variant_strs: Vec<String> = cl.iter().map(|(v, _)| v.clone()).collect();
+        // Drop normal grammatical inflection (German declension/conjugation,
+        // plurals): these differ only by an ending, are NOT mis-hears, and were
+        // the bulk of the old false positives. The AI gatekeeper never even sees
+        // them — they're filtered locally, for free.
+        if is_inflection(&variant_strs) {
+            continue;
+        }
         let key = cl[0].0.clone();
-        out.push(Candidate { key, variants: cl, total });
+        let context = gather_context(transcripts, &variant_strs);
+        out.push(Candidate { key, variants: cl, total, context });
     }
     out.sort_by(|a, b| b.total.cmp(&a.total).then(a.key.cmp(&b.key)));
     out
@@ -274,16 +416,15 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
     let now = now_secs();
     let mut changed = false;
 
-    // Prune stale PENDING candidates that no longer qualify under the multi-variant
-    // rule (e.g. ordinary single-spelling words surfaced before that rule existed —
-    // "können" & co.). One spelling = no mis-hear → retire it so it stops nagging.
+    // Prune stale PENDING candidates that no longer qualify: a single spelling
+    // (one variant = no mis-hear, e.g. "können" surfaced before that rule) OR
+    // normal inflection (variants differ only by an ending — "Projekt/Projekte",
+    // the old "Standardbegriffe" noise). Retire them so they stop nagging and the
+    // old garbage clears itself out on the next scan.
     for c in crate::store::list_vcand("pending") {
-        let single = c
-            .get("variants")
-            .and_then(|v| v.as_array())
-            .map(|a| a.len() < 2)
-            .unwrap_or(true);
-        if single {
+        let words = vcand_variant_words(&c);
+        let stale = words.len() < 2 || is_inflection(&words);
+        if stale {
             if let Some(key) = c.get("key").and_then(|v| v.as_str()) {
                 crate::store::set_vcand(key, None, None, "ignored", None, now);
                 changed = true;
@@ -291,34 +432,56 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
+    // Upsert every detected candidate as pending (refreshing counts) and collect
+    // the brand-NEW ones (no prior status) to hand to the AI gatekeeper in ONE
+    // batch. Already-pending candidates keep their prior decision — we don't
+    // re-bill the model for them.
+    let mut fresh: Vec<Candidate> = Vec::new();
     for cand in detect(&texts, &known) {
         let prior = crate::store::vcand_status(&cand.key);
-        // Skip what the user/auto-flow already settled.
         if matches!(prior.as_deref(), Some("ignored") | Some("added")) {
-            continue;
+            continue; // already settled by the user / a prior auto-add
         }
-        let words: Vec<String> = cand.variants.iter().map(|(v, _)| v.clone()).collect();
         let variants_json = serde_json::to_string(&cand.variants).unwrap_or_else(|_| "[]".into());
         crate::store::upsert_vcand_pending(&cand.key, &variants_json, cand.total as i64, now);
         changed = true;
-        // Already pending from a previous scan → don't re-call the backend; just
-        // the refreshed counts above. Only brand-new candidates get a suggestion.
-        if prior.is_some() {
-            continue;
+        if prior.is_none() {
+            fresh.push(cand);
         }
+    }
 
-        match crate::vocab_suggest::suggest(&cfg, &words) {
-            Some(s) if s.confidence >= HIGH_CONFIDENCE => {
-                let (sounds_like, aliases) = split_variants(&words, &s.spelling);
-                add_vocab_entry(app, sounds_like, aliases, &s.spelling);
-                crate::store::set_vcand(&cand.key, Some(&s.spelling), Some(s.confidence), "added", Some(&s.spelling), now);
-                let _ = app.emit("echo://vocab-learned", serde_json::json!({ "term": s.spelling }));
-            }
-            Some(s) => {
-                crate::store::set_vcand(&cand.key, Some(&s.spelling), Some(s.confidence), "pending", None, now);
-            }
-            None => {
-                crate::store::set_vcand(&cand.key, None, None, "pending", None, now);
+    // The AI gatekeeper judges the whole batch at once: per candidate, is it a
+    // REAL vocab-worthy term (name/brand/tech the STT garbles) or just an
+    // ordinary word? Only its verdict — not frequency — decides. Anything it
+    // rejects is retired for good so ordinary words never get suggested.
+    // Best-effort: if the call fails (offline / old server), the candidates stay
+    // pending so the user still sees them — we never auto-add on a guess.
+    if !fresh.is_empty() {
+        let decisions = crate::vocab_suggest::curate(&cfg, &fresh);
+        for cand in &fresh {
+            let words: Vec<String> = cand.variants.iter().map(|(v, _)| v.clone()).collect();
+            match decisions.iter().find(|d| d.key == cand.key) {
+                // Ordinary word / not a real term → drop it, permanently.
+                Some(d) if !d.is_term => {
+                    crate::store::set_vcand(&cand.key, None, None, "ignored", None, now);
+                }
+                // Real term + sure of the spelling → silently learn it (revertable).
+                Some(d) if d.confidence >= HIGH_CONFIDENCE && !d.spelling.is_empty() => {
+                    let (sounds_like, aliases) = split_variants(&words, &d.spelling);
+                    add_vocab_entry(app, sounds_like, aliases, &d.spelling);
+                    crate::store::set_vcand(&cand.key, Some(&d.spelling), Some(d.confidence), "added", Some(&d.spelling), now);
+                    let _ = app.emit("echo://vocab-learned", serde_json::json!({ "term": d.spelling }));
+                }
+                // Real term but unsure of the spelling (e.g. an unknown personal
+                // name) → ask the user, pre-filling the best guess.
+                Some(d) => {
+                    let sug = (!d.spelling.is_empty()).then_some(d.spelling.as_str());
+                    crate::store::set_vcand(&cand.key, sug, Some(d.confidence), "pending", None, now);
+                }
+                // No verdict came back → leave pending for the user.
+                None => {
+                    crate::store::set_vcand(&cand.key, None, None, "pending", None, now);
+                }
             }
         }
     }
@@ -359,9 +522,9 @@ fn add_vocab_entry<R: Runtime>(app: &AppHandle<R>, sounds_like: String, aliases:
     let _ = app.emit("echo://config-changed", ());
 }
 
-/// Variant words stored for a candidate key (for confirm/undo).
-fn candidate_words(key: &str) -> Vec<String> {
-    let Some(row) = crate::store::get_vcand(key) else { return Vec::new() };
+/// Pull the variant words out of a stored candidate row (`variants` is a JSON
+/// array of `[word, count]` pairs).
+fn vcand_variant_words(row: &serde_json::Value) -> Vec<String> {
     row.get("variants")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -371,6 +534,14 @@ fn candidate_words(key: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Variant words stored for a candidate key (for confirm/undo).
+fn candidate_words(key: &str) -> Vec<String> {
+    match crate::store::get_vcand(key) {
+        Some(row) => vcand_variant_words(&row),
+        None => Vec::new(),
+    }
 }
 
 /// User confirmed a pending suggestion (possibly edited the spelling) → learn it.
@@ -452,6 +623,56 @@ mod tests {
         // words ("können", "eigentlich", a correctly-spelled name) being surfaced.
         assert!(detect(&vec!["Kubernetes".to_string(); 5], &known_empty()).is_empty());
         assert!(detect(&vec!["können".to_string(); 12], &known_empty()).is_empty());
+    }
+
+    #[test]
+    fn inflection_is_dropped_not_surfaced() {
+        // Normal German declension: same ordinary word, three endings. The old
+        // edit-distance rule wrongly clustered these as "mis-heard variants"; the
+        // inflection guard drops them so they never reach the AI. (TJ: the bug.)
+        let h = vec![
+            "wir starten ein neues Projekt".to_string(),
+            "an dem Projekt arbeiten drei Leute".to_string(),
+            "die anderen Projekte laufen auch".to_string(),
+            "in allen Projekten gibt es Termine".to_string(),
+            "der Termin steht, mehrere Termine offen".to_string(),
+            "mit dem Kunden und weiteren Kunden gesprochen".to_string(),
+        ];
+        let cands = detect(&h, &known_empty());
+        for c in &cands {
+            assert!(
+                !["projekt", "termin", "kunde", "kunden", "projekte", "termine"].contains(&c.key.as_str()),
+                "ordinary inflected word leaked through: {} ({:?})",
+                c.key,
+                c.variants
+            );
+        }
+    }
+
+    #[test]
+    fn is_inflection_distinguishes_ending_from_internal() {
+        // Differ only at the ending → inflection.
+        assert!(is_inflection(&["projekt".into(), "projekte".into(), "projekten".into()]));
+        assert!(is_inflection(&["kunde".into(), "kunden".into()]));
+        assert!(is_inflection(&["termin".into(), "termine".into(), "terminen".into()]));
+        assert!(is_inflection(&["arbeite".into(), "arbeitet".into(), "arbeiten".into()]));
+        // Differ INTERNALLY → a real mis-hear, NOT inflection.
+        assert!(!is_inflection(&["jedlischka".into(), "jedletschka".into(), "jedlitschka".into()]));
+        assert!(!is_inflection(&["vollack".into(), "vollak".into(), "volak".into()]));
+        // Short / no shared stem → not inflection.
+        assert!(!is_inflection(&["claude".into(), "cloud".into()]));
+    }
+
+    #[test]
+    fn candidate_carries_context() {
+        let h = vec![
+            "ich habe mit Jedlischka gesprochen".to_string(),
+            "das war Jedletschka der das sagte".to_string(),
+            "Jedlitschka hat zugestimmt".to_string(),
+        ];
+        let c = detect(&h, &known_empty());
+        assert_eq!(c.len(), 1);
+        assert!(!c[0].context.is_empty(), "the AI needs example sentences as context");
     }
 
     #[test]
