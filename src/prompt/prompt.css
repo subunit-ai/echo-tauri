@@ -162,26 +162,48 @@ body {
   box-shadow: 0 0 10px -2px rgba(34, 211, 238, 0.35), inset 0 1px 0 var(--rim-soft);
 }
 
-/* ---- Browser-/terminal-style tabs ----
-   A real tab strip: full-width row the tabs sit ON (align-items: flex-end), with
-   a baseline the active tab breaks through. Tabs are tall, top-rounded, and the
-   ACTIVE one is brighter + drops its bottom edge onto the strip baseline so it
-   reads as physically connected to the page below — like a browser tab. */
+/* ---- The top bar IS the tab bar (Chrome-style) ----
+   One bar at the very top of the window: scrollable tabs on the left, a
+   draggable gap, then the window controls on the right. No separate title row —
+   the page (editor) starts directly below, divided only by the bar's hairline. */
 .pc-tabs {
-  position: relative;
-  z-index: 2; /* the active tab overlaps the toolbar below */
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 6px 8px 0 8px;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The tabs scroll; the controls on the right stay put. */
+.pc-tabstrip {
   display: flex;
   align-items: flex-end;
   gap: 4px;
-  /* The top line of the window — flush to the top edge (drag region). */
-  padding: 7px 10px 0 10px;
+  min-width: 0;
   overflow-x: auto;
-  flex: none;
   scrollbar-width: none;
 }
 
-.pc-tabs::-webkit-scrollbar {
+.pc-tabstrip::-webkit-scrollbar {
   display: none;
+}
+
+/* Flexible draggable gap between tabs and controls (grab here to move the window). */
+.pc-topbar-drag {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 14px;
+}
+
+/* Window controls (palette, autocorrect, glass, dictation-target, pin, close),
+   aligned against the tab baseline. */
+.pc-topbar-actions {
+  display: flex;
+  gap: 5px;
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: 4px;
 }
 
 .pc-tab {
@@ -189,21 +211,17 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  /* Chrome-style: content-sized tabs (not full-width) so there's draggable
-     space after them on the top line; shrink + scroll when many. */
+  /* Content-sized tabs that shrink + scroll when many. */
   flex: 0 1 auto;
-  min-width: 112px;
-  max-width: 240px;
-  height: 32px;
+  min-width: 104px;
+  max-width: 220px;
+  height: 33px;
   padding: 0 10px 0 13px;
   /* Inactive tabs sit recessed (fainter glass). */
   background: rgb(20 38 64 / calc(0.34 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
   border-bottom: 1px solid transparent;
   border-radius: 12px 12px 0 0;
-  /* Bottom sits flush on the toolbar; active shares its colour → seamless merge,
-     inactive is darker → reads as tucked behind. (No negative margin: the strip
-     has overflow-x:auto, which would clip vertical overflow.) */
   color: var(--ink3);
   font-size: 12.5px;
   font-weight: 600;
@@ -217,15 +235,12 @@ body {
   background: rgb(28 48 78 / calc(0.5 * var(--pc-glass)));
 }
 
-/* Active = the open page: brighter surface, cyan top hairline, and its bottom
-   edge merges into the body (no baseline under it). */
+/* Active tab = the open page: brighter surface + a cyan top hairline. */
 .pc-tab.active {
   color: var(--ink);
-  background: var(--pc-toolbar); /* same surface as the toolbar below */
+  background: var(--pc-toolbar);
   border-color: var(--glass-edge2);
-  border-bottom-color: transparent; /* open bottom → merges into the toolbar */
   box-shadow: inset 0 2px 0 -1px var(--cyan), inset 0 1px 0 var(--rim-soft);
-  z-index: 1;
 }
 
 .pc-tab-label {

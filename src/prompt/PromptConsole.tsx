@@ -814,8 +814,10 @@ export function PromptConsole() {
 
   return (
     <div className="pc-shell" data-glass={glass} style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}>
-      {/* Chrome-style: the tab strip IS the top line of the window. */}
+      {/* Chrome-style: the top bar IS the tab bar — tabs left, window controls
+          right, nothing else. The page (editor) starts directly below it. */}
       <div className="pc-tabs" data-tauri-drag-region>
+        <div className="pc-tabstrip">
         {data.drafts.map((dr) => (
           <div
             key={dr.id}
@@ -892,13 +894,11 @@ export function PromptConsole() {
         <button className="pc-tab-add" title={t("prompt.newTab")} onClick={addTab}>
           +
         </button>
-      </div>
-
-      {/* Toolbar (below the tabs, like Chrome's): the active tab merges into it. */}
-      <header className="pc-head" data-tauri-drag-region>
-        <span className="pc-glyph" data-tauri-drag-region>✦</span>
-        <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
-        <div className="pc-head-actions">
+        </div>
+        {/* Flexible drag area, then the window controls — all live ON the tab bar
+            (Chrome-style): the top bar IS the tab bar, no separate title row. */}
+        <div className="pc-topbar-drag" data-tauri-drag-region />
+        <div className="pc-topbar-actions">
           <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
             <Ico paths={ICONS.search} />
           </button>
@@ -926,7 +926,7 @@ export function PromptConsole() {
             <Ico paths={ICONS.x} size={12} />
           </button>
         </div>
-      </header>
+      </div>
 
       <div className="pc-body">
         <textarea
