@@ -1332,14 +1332,127 @@ select:hover {
   font-size: 15px;
   margin-bottom: 2px;
 }
-.help-ask-row {
+/* iOS-style search/ask field: a single rounded pill — leading icon, borderless
+   input, optional trailing control (clear × or send arrow). Used by the FAQ
+   search and the "Echo fragen" field. */
+.ios-search {
   display: flex;
-  gap: 10px;
   align-items: center;
-  margin-top: 4px;
+  gap: 9px;
+  height: 44px;
+  padding: 0 6px 0 15px;
+  border-radius: 999px;
+  background: var(--fill-strong);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s var(--ease-out), box-shadow 0.22s var(--ease-out),
+    background 0.18s var(--ease-out);
 }
-.help-ask-row input {
+.ios-search:focus-within {
+  border-color: var(--cyan);
+  background-color: var(--fill-focus);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--cyan) 14%, transparent),
+    var(--shadow-sm);
+}
+.ios-search-icon {
+  flex: none;
+  display: flex;
+  color: var(--muted);
+  opacity: 0.85;
+  transition: color 0.18s var(--ease-out), opacity 0.18s var(--ease-out);
+}
+.ios-search:focus-within .ios-search-icon {
+  color: var(--cyan);
+  opacity: 1;
+}
+/* The input inside the pill is fully transparent — the pill IS the chrome. */
+.ios-search input,
+.ios-search input[type="text"] {
   flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none !important;
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+.ios-search input:focus {
+  outline: none;
+}
+.ios-search-clear {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.75;
+  transition: opacity 0.15s, background 0.15s, transform 0.12s var(--ease-glass);
+}
+.ios-search-clear:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+}
+.ios-search-clear:active {
+  transform: scale(0.9);
+}
+/* Send button = filled cyan circle with an up-arrow (iMessage-style). */
+.ios-ask-send {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 999px;
+  background: var(--cyan);
+  color: #04233f;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--cyan) 70%, transparent);
+  transition: transform 0.13s var(--ease-glass), box-shadow 0.18s, opacity 0.18s,
+    filter 0.18s;
+}
+.ios-ask-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.ios-ask-send:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.ios-ask-send:disabled {
+  cursor: default;
+  background: color-mix(in srgb, var(--muted) 26%, transparent);
+  color: var(--muted);
+  box-shadow: none;
+}
+.ios-ask-send.busy {
+  animation: ios-ask-pulse 1.1s var(--ease-glass) infinite;
+}
+@keyframes ios-ask-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.help-thinking {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
 }
 .help-chips {
   display: flex;
@@ -1373,7 +1486,7 @@ select:hover {
 }
 .help-search {
   width: 100%;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .help-cat {
   margin-top: 14px;
