@@ -19,6 +19,23 @@ import { useToast } from "../state/ToastContext";
 
 const SUPPORT_EMAIL = "support@subunit.ai";
 
+const IconSearch = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20.5 20.5-4-4" />
+  </svg>
+);
+const IconSpark = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" />
+  </svg>
+);
+const IconArrow = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </svg>
+);
+
 /* "Echo fragen" — the grounded help assistant. Answers strictly from the FAQ
    knowledge base over the Abo backend; on any failure it points to the FAQ +
    support so the user is never stuck. */
@@ -55,7 +72,8 @@ function AskEcho() {
     <div className="card help-ask">
       <div className="name help-ask-title">{t("help.askTitle")}</div>
       <p className="section-sub" style={{ marginTop: 0 }}>{t("help.askSub")}</p>
-      <div className="help-ask-row">
+      <div className="ios-search ios-ask">
+        <span className="ios-search-icon"><IconSpark /></span>
         <input
           value={q}
           placeholder={t("help.askPlaceholder")}
@@ -65,14 +83,16 @@ function AskEcho() {
           }}
         />
         <button
-          className="sub-tab"
-          style={{ borderColor: "var(--accent)", color: "var(--accent-bright)" }}
+          className={`ios-ask-send ${busy ? "busy" : ""}`}
           onClick={() => ask(q)}
           disabled={busy || !q.trim()}
+          title={t("help.askButton")}
+          aria-label={t("help.askButton")}
         >
-          {busy ? t("help.asking") : t("help.askButton")}
+          <IconArrow />
         </button>
       </div>
+      {busy && <div className="help-thinking">{t("help.asking")}</div>}
       {!answer && !busy && (
         <div className="help-chips">
           {suggestions.map((s) => (
@@ -105,12 +125,23 @@ function Faq() {
   return (
     <div className="card">
       <div className="name" style={{ opacity: 0.7, marginBottom: 8 }}>{t("help.faqTitle")}</div>
-      <input
-        className="help-search"
-        value={query}
-        placeholder={t("common.search")}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <div className="ios-search help-search">
+        <span className="ios-search-icon"><IconSearch /></span>
+        <input
+          value={query}
+          placeholder={t("common.search")}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {query && (
+          <button
+            className="ios-search-clear"
+            onClick={() => setQuery("")}
+            aria-label={t("common.close")}
+          >
+            ×
+          </button>
+        )}
+      </div>
       {FAQ_CATEGORIES.map((cat: FaqCategory) => {
         const items = filtered.filter((e) => e.category === cat);
         if (items.length === 0) return null;
