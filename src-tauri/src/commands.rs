@@ -190,10 +190,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let streaming = cfg.mode == "subunit" && cfg.streaming_mode != "off";
 
     // Target window context (captured at record-start) — Auto-Mode style + Synapse.
-    let (app_name, title) = {
+    // `url` is the active browser-tab URL (macOS browsers only; empty otherwise).
+    let (app_name, url, title) = {
         let t = state.target.lock();
         (
             t.as_ref().map(|t| t.app.clone()).unwrap_or_default(),
+            t.as_ref().map(|t| t.url.clone()).unwrap_or_default(),
             t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
         )
     };
@@ -272,6 +274,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             let resolved = if cfg.cleanup_auto_mode {
                 crate::auto_mode::pick_style(
                     &app_name,
+                    &url,
                     &title,
                     &cfg.auto_mode_overrides,
                     &cfg.cleanup_style,
@@ -339,11 +342,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         } else if cfg.cleanup_auto_mode {
             let (style, source) = crate::auto_mode::pick_style(
                 &app_name,
+                &url,
                 &title,
                 &cfg.auto_mode_overrides,
                 &cfg.cleanup_style,
             );
-            // App name only at info (titles can carry document names → debug).
+            // App name + decision source only at info (titles/URLs can carry
+            // document names + query params → debug-level via capture log).
             log::info!("auto-mode: style={style} source={source} app=\"{app_name}\"");
             style
         } else {
@@ -788,13 +793,15 @@ pub fn orb_cycle(
                     .unwrap_or(0);
                 c.language = order[next].to_string();
             }
-            // off → prompt → email → slack → formal → off
+            // off → prompt → email → slack → formal → tidy → notes → letter → social → off
             "cleanup" => {
                 if !c.cleanup_enabled {
                     c.cleanup_enabled = true;
                     c.cleanup_style = "prompt".to_string();
                 } else {
-                    let order = ["prompt", "email", "slack", "formal"];
+                    let order = [
+                        "prompt", "email", "slack", "formal", "tidy", "notes", "letter", "social",
+                    ];
                     let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
                     if idx + 1 >= order.len() {
                         c.cleanup_enabled = false;
@@ -852,7 +859,8 @@ pub fn orb_set(
                 c.cleanup_auto_mode = true;
             }
             ("cleanup", "prompt") | ("cleanup", "email") | ("cleanup", "slack")
-            | ("cleanup", "formal") => {
+            | ("cleanup", "formal") | ("cleanup", "tidy") | ("cleanup", "notes")
+            | ("cleanup", "letter") | ("cleanup", "social") => {
                 c.cleanup_enabled = true;
                 c.cleanup_auto_mode = false; // a concrete pick overrides Auto
                 c.cleanup_style = value.clone();
@@ -1090,8 +1098,9 @@ pub async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String>
     }
 }
 
-/// One-click update: re-check, download + install (silent on Windows via the
-/// `installMode: passive` config), reporting progress on `echo://update-progress`,
+/// One-click update: re-check, download + install (fully silent on Windows via the
+/// `installMode: quiet` config → NSIS `/S /R`, no visible installer window),
+/// reporting progress on `echo://update-progress`,
 /// then relaunch into the new version. No installer wizard, no manual steps.
 /// Diverges via `app.restart()` on success, so it only *returns* `Ok(false)` when
 /// there was nothing to install, or `Err` if download/install failed.

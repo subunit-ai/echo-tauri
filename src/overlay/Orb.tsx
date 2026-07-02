@@ -6,10 +6,14 @@ import { useTranslation } from "react-i18next";
 import {
   BAN_PATHS,
   BRIEFCASE_PATHS,
+  BROOM_PATHS,
   CLOUD_PATHS,
   GLOBE_PATHS,
   HASH_PATHS,
+  LETTER_PATHS,
+  LIST_PATHS,
   MAIL_PATHS,
+  MEGAPHONE_PATHS,
   SHIELD_CHECK_PATHS,
   SPARKLES_PATHS,
   STAR4_PATHS,
@@ -98,10 +102,11 @@ function computeLayout(): {
       h: panelH(2),
     },
     cleanup: {
+      // 10 rows: off · auto · prompt · email · slack · formal · tidy · notes · letter · social
       x: chips.cleanup.x + CHIP + PANEL_GAP,
-      y: clampTop(midY - panelH(6) / 2, panelH(6)),
+      y: clampTop(midY - panelH(10) / 2, panelH(10)),
       w: PANEL_W,
-      h: panelH(6),
+      h: panelH(10),
     },
     language: {
       x: cx - PANEL_W / 2,
@@ -598,13 +603,17 @@ export function Orb() {
               onClick={pick("language", "auto")}
             />
           </div>
-          {/* Cleanup — beyond the cleanup chip (further right) */}
+          {/* Cleanup — beyond the cleanup chip (further right). 10 rows can
+              exceed a small orb window, so cap to the viewport and scroll
+              rather than clip (clampTop already keeps the top edge on-window). */}
           <div
             style={{
               ...panelBase,
               ...panelVis("cleanup", "left center"),
               left: layout.panels.cleanup.x,
               top: layout.panels.cleanup.y,
+              maxHeight: "calc(100vh - 12px)",
+              overflowY: "auto",
             }}
           >
             <Row
@@ -643,6 +652,30 @@ export function Orb() {
               label={t("settings.cleanupStyleFormal")}
               active={quick.cleanup === "formal"}
               onClick={pick("cleanup", "formal")}
+            />
+            <Row
+              icon={BROOM_PATHS}
+              label={t("settings.cleanupStyleTidy")}
+              active={quick.cleanup === "tidy"}
+              onClick={pick("cleanup", "tidy")}
+            />
+            <Row
+              icon={LIST_PATHS}
+              label={t("settings.cleanupStyleNotes")}
+              active={quick.cleanup === "notes"}
+              onClick={pick("cleanup", "notes")}
+            />
+            <Row
+              icon={LETTER_PATHS}
+              label={t("settings.cleanupStyleLetter")}
+              active={quick.cleanup === "letter"}
+              onClick={pick("cleanup", "letter")}
+            />
+            <Row
+              icon={MEGAPHONE_PATHS}
+              label={t("settings.cleanupStyleSocial")}
+              active={quick.cleanup === "social"}
+              onClick={pick("cleanup", "social")}
             />
           </div>
         </>

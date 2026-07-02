@@ -194,6 +194,13 @@ pub struct Target {
     /// the title — on macOS the title needs the Screen-Recording permission,
     /// the app name doesn't.
     pub app: String,
+    /// Active browser tab URL (for Auto-Mode domain matching). Only populated
+    /// on macOS when the focused app is a scriptable browser (Safari /
+    /// Chromium family) — there the window title is unreadable without the
+    /// Screen-Recording permission, so the URL is the precise signal that lets
+    /// Auto-Mode tell Gmail from ChatGPT from Google Docs inside a browser.
+    /// Empty elsewhere (Win/Linux already get the tab name in the title).
+    pub url: String,
 }
 
 /// Privacy-safe one-liner about the text we're about to inject — COUNTS ONLY,
@@ -283,7 +290,8 @@ pub fn capture_active_window() -> Target {
                         "capture: linux target id={id} app=\"{app}\" title=\"{}\"",
                         short_title(&title)
                     );
-                    return Target { id, title, app };
+                    // Linux/X11 surfaces the tab name in the window title already.
+                    return Target { id, title, app, url: String::new() };
                 }
             }
         }
@@ -316,7 +324,8 @@ pub fn capture_active_window() -> Target {
                     short_title(&title)
                 );
                 // Encode the HWND pointer as a decimal string so Target stays Send.
-                return Target { id, title, app };
+                // Windows surfaces the tab name in the window title already.
+                return Target { id, title, app, url: String::new() };
             }
         }
         log::debug!("capture: no foreground window (win)");
@@ -331,11 +340,21 @@ pub fn capture_active_window() -> Target {
         // re-focus on paste.
         let (app, title) = macos_front_window();
         if !app.is_empty() || !title.is_empty() {
+            // Browsers report their own app name ("Safari" / "Google Chrome" /
+            // "Arc" …) which matches no curated app rule, and the title is
+            // unreadable without Screen-Recording — so without the URL every
+            // in-browser dictation (Gmail, ChatGPT, Docs, Slack-web) fell to
+            // the default style. Probe the active tab URL via AppleScript so
+            // Auto-Mode can match on the domain. Off the hot paste path (runs
+            // at record-start) and hard-bounded to 1 s so a wedged browser
+            // can't stall recording.
+            let url = macos_browser_url(&app);
             log::debug!(
-                "capture: macos target app=\"{app}\" title=\"{}\"",
-                short_title(&title)
+                "capture: macos target app=\"{app}\" title=\"{}\" url=\"{}\"",
+                short_title(&title),
+                short_title(&url)
             );
-            return Target { id: String::new(), title, app };
+            return Target { id: String::new(), title, app, url };
         }
         log::debug!("capture: no front window (macos)");
     }
@@ -388,6 +407,60 @@ fn macos_front_window() -> (String, String) {
         return (app, str_of("kCGWindowName"));
     }
     (String::new(), String::new())
+}
+
+/// macOS: the active tab URL of a scriptable browser via AppleScript — or ""
+/// if `app` is not a known browser, is not scriptable, or the probe times out.
+/// Chromium-family browsers share the "active tab of front window" dictionary;
+/// Safari uses "front document". The script is wrapped in `with timeout of 1
+/// second` so a busy/unresponsive browser can't stall the (synchronous)
+/// record-start path, and ANY error (no window open, not scriptable, Automation
+/// permission denied) just yields "". First use triggers the one-time TCC
+/// Automation prompt for that browser; until granted this returns "" and
+/// Auto-Mode falls back to the app/title rules — never blocks.
+#[cfg(target_os = "macos")]
+fn macos_browser_url(app: &str) -> String {
+    let a = app.to_lowercase();
+    // `app` is used verbatim as the `tell application` target so per-channel
+    // names ("Google Chrome Canary", "Brave Browser", "Microsoft Edge") work.
+    let getter = if a.contains("safari") {
+        "get URL of front document"
+    } else if a.contains("chrome")
+        || a.contains("chromium")
+        || a.contains("arc")
+        || a.contains("edge")
+        || a.contains("brave")
+        || a.contains("vivaldi")
+        || a.contains("opera")
+        || a.contains("dia")
+    {
+        "get URL of active tab of front window"
+    } else {
+        return String::new(); // Firefox & co. expose no URL AppleEvent
+    };
+    // Harden against AppleScript injection: `app` is the frontmost window's
+    // owner name (kCGWindowOwnerName), which a locally-running app fully
+    // controls and may contain arbitrary bytes. It is interpolated verbatim as
+    // the `tell application "…"` target below, so a name carrying a quote or
+    // newline could break out of the string literal and inject statements
+    // (e.g. `do shell script`). Real browser owner names are plain text
+    // ("Google Chrome Canary", "Brave Browser", …), so we bail on any
+    // AppleScript-significant char rather than trying to escape it.
+    if app.chars().any(|c| c == '"' || c == '\\' || c.is_control()) {
+        return String::new();
+    }
+    // `with timeout` bounds the AppleEvent itself — a busy app errors out
+    // instead of blocking. The browser is already frontmost (running), so the
+    // `tell` never launches anything. We read stdout only on a clean exit.
+    let script =
+        format!("with timeout of 1 second\ntell application \"{app}\" to {getter}\nend timeout");
+    match std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        _ => String::new(),
+    }
 }
 
 fn focus(target: &Target) {

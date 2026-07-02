@@ -493,14 +493,15 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
     // only happens on the batch path — long recordings aren't the streaming case.
     let style = if cfg.cleanup_enabled {
         let resolved = if cfg.cleanup_auto_mode {
-            let (app_name, title) = {
+            let (app_name, url, title) = {
                 let t = state.target.lock();
                 (
                     t.as_ref().map(|t| t.app.clone()).unwrap_or_default(),
+                    t.as_ref().map(|t| t.url.clone()).unwrap_or_default(),
                     t.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
                 )
             };
-            crate::auto_mode::pick_style(&app_name, &title, &cfg.auto_mode_overrides, &cfg.cleanup_style).0
+            crate::auto_mode::pick_style(&app_name, &url, &title, &cfg.auto_mode_overrides, &cfg.cleanup_style).0
         } else {
             cfg.cleanup_style.clone()
         };

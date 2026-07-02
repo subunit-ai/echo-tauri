@@ -99,6 +99,38 @@ export const WAND_PATHS = [
   "M11 3H9",
 ];
 
+/** Tidy-Stil (leichte Säuberung): Besen. */
+export const BROOM_PATHS = [
+  "M16 4l4 4",
+  "M18 6 8.5 15.5",
+  "M8.5 15.5 4 20l4.5 0L13 15.5z",
+  "M11 13l3 3",
+];
+
+/** Notes-Stil: Stichpunkt-Liste. */
+export const LIST_PATHS = [
+  "M9 6h11",
+  "M9 12h11",
+  "M9 18h11",
+  "M4.5 6h.01",
+  "M4.5 12h.01",
+  "M4.5 18h.01",
+];
+
+/** Letter-Stil (Brief): Dokument mit Eselsohr + Textzeilen. */
+export const LETTER_PATHS = [
+  "M6 3h8l5 5v13H6z",
+  "M14 3v5h5",
+  "M9 13h6",
+  "M9 17h6",
+];
+
+/** Social-Stil (Post): Megafon. */
+export const MEGAPHONE_PATHS = [
+  "M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1z",
+  "M16 8a5 5 0 0 1 0 8",
+];
+
 /** Prompt Terminal: Vierzack-Stern (ersetzt das ✦-Textzeichen). */
 export const STAR4_PATHS = ["M12 3l2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z"];
 

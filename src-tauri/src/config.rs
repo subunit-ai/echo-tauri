@@ -488,9 +488,10 @@ impl Config {
         // foot-gun. Enforce mutual exclusivity: streaming-live wins. (Belt for the
         // actual interleave fix in stream.rs; also runs in set_config on every save.)
         self.enforce_typing_exclusivity();
-        if self.cleanup_style == "tidy" {
-            self.cleanup_style = "prompt".to_string();
-        }
+        // NOTE: "tidy" used to be force-migrated to "prompt" here (it was an old
+        // deprecated default). As of 2026-06-28 "tidy" is a first-class,
+        // user-selectable style again (lightest-touch cleanup) — so we must NOT
+        // rewrite it, or a deliberate Tidy pick would silently revert on save.
         if self.cloud_quality_mode.is_empty()
             || matches!(self.cloud_quality_mode.as_str(), "auto" | "fast" | "instant")
         {

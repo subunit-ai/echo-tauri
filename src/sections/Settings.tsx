@@ -145,6 +145,21 @@ const ORB_STYLES: [string, string][] = [
   ["spectrum", "Spectrum"],
 ];
 
+/** The cleanup styles in canonical order — the SINGLE source for both the
+ *  Settings picker and the per-window Auto-Mode override picker (keep them in
+ *  sync, and in sync with the orb satellite + the cycle order in commands.rs).
+ *  Values must match the server-side cleanup style keys (cleanup.py PROMPTS). */
+const CLEANUP_STYLE_OPTIONS = (t: (k: string) => string): [string, string][] => [
+  ["prompt", t("settings.cleanupStylePrompt")],
+  ["email", t("settings.cleanupStyleEmail")],
+  ["slack", t("settings.cleanupStyleSlack")],
+  ["formal", t("settings.cleanupStyleFormal")],
+  ["tidy", t("settings.cleanupStyleTidy")],
+  ["notes", t("settings.cleanupStyleNotes")],
+  ["letter", t("settings.cleanupStyleLetter")],
+  ["social", t("settings.cleanupStyleSocial")],
+];
+
 /** Phase-1 manager for saved Orb profiles (the FULL look — colours, style,
  *  speed, reactivity — per account, cloud-synced). The richer live "orb
  *  configurator" (big preview, effect/voice pickers) builds on these same
@@ -793,12 +808,7 @@ export function Settings() {
               <Sel
                 value={c.cleanup_style}
                 onChange={(v) => set("cleanup_style", v)}
-                options={[
-                  ["prompt", t("settings.cleanupStylePrompt")],
-                  ["email", t("settings.cleanupStyleEmail")],
-                  ["slack", t("settings.cleanupStyleSlack")],
-                  ["formal", t("settings.cleanupStyleFormal")],
-                ]}
+                options={CLEANUP_STYLE_OPTIONS(t)}
               />
             </Row>
             <Row
@@ -837,12 +847,7 @@ export function Settings() {
                         next[i] = [key, v];
                         writeOvr(next);
                       }}
-                      options={[
-                        ["prompt", t("settings.cleanupStylePrompt")],
-                        ["email", t("settings.cleanupStyleEmail")],
-                        ["slack", t("settings.cleanupStyleSlack")],
-                        ["formal", t("settings.cleanupStyleFormal")],
-                      ]}
+                      options={CLEANUP_STYLE_OPTIONS(t)}
                     />
                     <button
                       className="sub-tab"
