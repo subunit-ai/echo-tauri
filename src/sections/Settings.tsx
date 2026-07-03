@@ -118,8 +118,15 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
 
 /** Every orb style in display order — the SINGLE source for both the picker
  *  dropdown and the configurator's ‹ › arrow-cycle (keep them in sync). The
- *  "ping" label is localised at the call site; the rest are proper names. */
+ *  "ping" label is localised at the call site; the rest are proper names.
+ *  The ★ block up front are the premium styles: complex, layered looks driven
+ *  by the REAL voice spectrum (mic_features), not just the scalar level. */
 const ORB_STYLES: [string, string][] = [
+  ["nebula", "★ Nebula"],
+  ["ferro", "★ Ferrofluid"],
+  ["scope", "★ Oscilloscope"],
+  ["prism", "★ Prisma"],
+  ["spectra", "★ Spectra"],
   ["ping", "Ping"],
   ["ping2", "Ping V2"],
   ["sphere", "Sphere"],

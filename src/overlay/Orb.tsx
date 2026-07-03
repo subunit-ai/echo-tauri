@@ -212,6 +212,7 @@ export function Orb() {
   const boxRef = useRef<HTMLDivElement>(null);
   const state = useRef<EngineState>("idle");
   const level = useRef(0);
+  const bandsData = useRef<number[]>([]);
   const style = useRef("ping");
   const colorIdle = useRef(DEFAULT_IDLE);
   const colorWorking = useRef(DEFAULT_WORKING);
@@ -306,21 +307,26 @@ export function Orb() {
     resize();
     window.addEventListener("resize", resize);
 
-    // Mic level: poll while recording, decay otherwise. VU-style smoothing — jump UP
-    // instantly on a louder sample (so bars pop the moment you speak) but ease DOWN
-    // gently, so the orb tracks the voice instead of just shimmering on its own.
+    // Mic features: poll while recording, decay otherwise. One IPC call carries
+    // the scalar level AND the real 16-band spectrum. VU-style smoothing on the
+    // level — jump UP instantly on a louder sample (so bars pop the moment you
+    // speak) but ease DOWN gently; the bands get their own attack/release
+    // envelope inside drawOrb. 33 ms ≈ 30 Hz keeps the orb glued to the voice
+    // (the old 50 ms poll was the visible lag in fast speech).
     const poll = window.setInterval(async () => {
       if (state.current === "recording") {
         try {
-          const raw = await invoke<number>("mic_level");
-          level.current = raw > level.current ? raw : level.current * 0.82 + raw * 0.18;
+          const f = await invoke<{ level: number; bands: number[] }>("mic_features");
+          level.current =
+            f.level > level.current ? f.level : level.current * 0.82 + f.level * 0.18;
+          bandsData.current = f.bands;
         } catch {
           /* ignore */
         }
       } else {
         level.current *= 0.85;
       }
-    }, 50);
+    }, 33);
 
     let raf = 0;
     const anim = newOrbAnim();
@@ -345,6 +351,7 @@ export function Orb() {
         state.current,
         level.current,
         anim,
+        bandsData.current,
       );
       raf = requestAnimationFrame(loop);
     };
