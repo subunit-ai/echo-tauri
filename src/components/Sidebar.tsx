@@ -5,7 +5,6 @@ export type Section =
   | "home"
   | "history"
   | "meetings"
-  | "meetlive"
   | "vocabulary"
   | "settings"
   | "help";
@@ -34,10 +33,8 @@ function Icon({ d, extra }: { d: string; extra?: ReactNode }) {
 const ICONS: Record<Section, ReactNode> = {
   home: <Icon d="M3 11.2 12 3l9 8.2M5.3 9.8V21h13.4V9.8" />,
   history: <Icon d="M12 7v5l3 2" extra={<circle cx="12" cy="12" r="9" />} />,
-  // Meetings = Archiv/Aufnahmen: Listen-Zeilen
-  meetings: <Icon d="M4 6h16M4 12h16M4 18h9" />,
-  // Live-Meeting = Broadcast-Wellen um einen Punkt
-  meetlive: (
+  // Meeting = Offline- + Live-Meeting unter einem Tab (Broadcast-Wellen um einen Punkt)
+  meetings: (
     <Icon
       d="M8.4 8.4a5.1 5.1 0 0 0 0 7.2M15.6 8.4a5.1 5.1 0 0 1 0 7.2M5.5 5.5a9.2 9.2 0 0 0 0 13M18.5 5.5a9.2 9.2 0 0 1 0 13"
       extra={<circle cx="12" cy="12" r="2.1" fill="currentColor" stroke="none" />}
@@ -57,7 +54,6 @@ const ITEMS: { key: Section; labelKey: string; pro?: boolean }[] = [
   { key: "home", labelKey: "nav.home" },
   { key: "history", labelKey: "nav.history" },
   { key: "meetings", labelKey: "nav.meetings" },
-  { key: "meetlive", labelKey: "nav.meetingsLive", pro: true },
   { key: "vocabulary", labelKey: "nav.vocabulary" },
   { key: "settings", labelKey: "nav.settings" },
   { key: "help", labelKey: "nav.help" },

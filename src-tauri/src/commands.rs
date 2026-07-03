@@ -255,17 +255,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let result: TranscriptResult;
     let already_injected: bool;
     let duration_s: f64;
-    let is_long: bool;
-    let want_segments: bool;
     let style: String;
-    let segments: Vec<transcribe::Segment>;
 
     if let Some(fin) = streamed {
         // ── Streamed final ──────────────────────────────────────────────────
         already_injected = fin.already_injected;
         duration_s = fin.duration_s;
-        is_long = cfg.long_form_threshold_seconds > 0
-            && duration_s >= cfg.long_form_threshold_seconds as f64;
         // Streaming resolved the cleanup style at connect-time the SAME way the
         // batch path does (incl. Auto-Mode from the captured window) — mirror that
         // here so history is labelled with what actually ran. (Long-form
@@ -312,8 +307,6 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 server_ms: 0,
             },
         };
-        want_segments = false; // streamed normal dictation never diarizes
-        segments = Vec::new();
     } else {
         // ── Classic batch path ──────────────────────────────────────────────
         already_injected = false;
@@ -329,10 +322,8 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
         // Duration → long-form detection (Python parity: switch style + store separately).
         duration_s = cap.samples.len() as f64 / cap.sample_rate.max(1) as f64;
-        is_long = cfg.long_form_threshold_seconds > 0
+        let is_long = cfg.long_form_threshold_seconds > 0
             && duration_s >= cfg.long_form_threshold_seconds as f64;
-        // Request timed segments only when we'll diarize this long-form recording.
-        want_segments = is_long && cfg.diarization_enabled;
 
         // The cleanup style (long-form > auto-mode > config) is known BEFORE we call
         // out — the target window was captured at record-start — so it can ride along
@@ -360,15 +351,17 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         let inline_cleanup = !is_long && cfg.cleanup_enabled && style != "raw";
 
         log::info!(
-            "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} want_segments={want_segments} inline_cleanup={inline_cleanup}",
+            "transcribe: mode={} duration={duration_s:.1}s long_form={is_long} inline_cleanup={inline_cleanup}",
             cfg.mode
         );
         let t_tx = std::time::Instant::now();
-        let mut r = match transcribe::run_opts(
+        // Diarization retired: long recordings now land in the normal history like any
+        // dictation, so we no longer request timed segments (never diarize).
+        let r = match transcribe::run_opts(
             &cfg,
             &cap.samples,
             cap.sample_rate,
-            want_segments,
+            false,
             inline_cleanup.then_some(style.as_str()),
         ) {
             Ok(r) => r,
@@ -385,8 +378,6 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             r.cleaned_text.is_some(),
             t_tx.elapsed()
         );
-        // Keep the timed segments for diarization (the lean result below drops them).
-        segments = std::mem::take(&mut r.segments);
         result = r;
     }
 
@@ -536,36 +527,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         use tauri::Emitter;
         let _ = app.emit("echo://history-changed", ());
     }
-    if is_long && !result.text.trim().is_empty() {
-        crate::store::add_meeting(&serde_json::json!({
-            "ts": now,
-            "text": result.text,
-            "quality_mode": result.quality_mode,
-            "duration_s": duration_s as i64,
-        }));
-    }
-
-    // Long-form diarization: detached (can take up to ~120s) so it never delays
-    // "Done". On completion it tags the stored meeting (found by ts) with a
-    // speaker-labelled transcript + signals the UI to refresh.
-    if want_segments && !segments.is_empty() {
-        use tauri::Emitter;
-        // Diarization needs the raw samples — only the batch path keeps a local
-        // capture (streamed normal dictation never sets want_segments).
-        if let Some(cap) = cap_opt.as_ref() {
-            if let Ok(wav) = transcribe::samples_to_wav(&cap.samples, cap.sample_rate) {
-                let (app2, cfg2) = (app.clone(), cfg.clone());
-                std::thread::spawn(move || {
-                    if let Some(speaker_text) =
-                        crate::diarize::speaker_transcript(&cfg2, wav, &segments)
-                    {
-                        crate::store::update_meeting_by_ts(now as i64, "speaker_text", &speaker_text);
-                        let _ = app2.emit("echo://meetings-updated", ());
-                    }
-                });
-            }
-        }
-    }
+    // Long recordings are NOT stored separately anymore — they land in the normal
+    // history above like any dictation (TJ 2026-07-03). The former meeting store +
+    // long-form diarization are retired.
 
     emit_transcript(app, result.text.clone(), result.quality_mode.clone());
     // Done (and Error) settle back to Idle centrally in emit_state — so the overlay
@@ -1097,15 +1061,20 @@ pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    if !result.text.trim().is_empty() {
-        crate::store::add_meeting(&serde_json::json!({
-            "ts": now,
-            "text": result.text,
-            "quality_mode": result.quality_mode,
-            "duration_s": duration_s as i64,
-        }));
+    // A recorded meeting is just a long recording — it goes into the normal history
+    // (Verlauf), NOT a separate store (TJ 2026-07-03).
+    if cfg.history_enabled && !result.text.trim().is_empty() {
+        crate::store::add_history(
+            &serde_json::json!({
+                "ts": now,
+                "text": result.text,
+                "quality_mode": result.quality_mode,
+                "duration_s": duration_s,
+            }),
+            cfg.history_size.max(0) as usize,
+        );
+        let _ = app.emit("echo://history-changed", ());
     }
-    let _ = app.emit("echo://meetings-updated", ());
     log::info!("meeting recording stopped + transcribed ({duration_s:.0}s)");
     Ok(result.text)
 }
