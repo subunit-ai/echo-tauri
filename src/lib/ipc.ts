@@ -14,6 +14,7 @@ export interface Config {
   mode: string; // local | subunit
   local_model: string;
   local_device: string;
+  local_fallback_autofetch: boolean;
   language: string;
 
   subunit_endpoint: string;

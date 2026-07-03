@@ -75,6 +75,17 @@ pub fn is_downloaded(model: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Best model ALREADY on disk for the cloud→local fallback, dictation-first
+/// preference: fast-but-accurate before the slow giants (a fallback take must
+/// not crawl through large-v3 on CPU). None → nothing downloaded yet.
+#[cfg_attr(not(feature = "local-whisper"), allow(dead_code))]
+pub fn best_downloaded() -> Option<String> {
+    ["large-v3-turbo", "small", "base", "tiny", "medium", "large-v3"]
+        .iter()
+        .find(|m| is_downloaded(m))
+        .map(|m| m.to_string())
+}
+
 pub fn delete(model: &str) -> anyhow::Result<()> {
     let p = model_path(model);
     if p.exists() {

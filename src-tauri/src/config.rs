@@ -106,6 +106,10 @@ pub struct Config {
     pub mode: String,
     pub local_model: String,
     pub local_device: String,
+    /// Quietly download a small local model once (background, on start) so the
+    /// automatic cloud→local fallback is armed even for users who never touch
+    /// the model manager. Container `#[serde(default)]` seeds old configs true.
+    pub local_fallback_autofetch: bool,
     pub language: String,
 
     pub subunit_endpoint: String,
@@ -296,6 +300,7 @@ impl Default for Config {
             hotkey: "<ctrl>+<space>".to_string(),
             mode: "local".to_string(),
             local_model: "base".to_string(),
+            local_fallback_autofetch: true,
             local_device: "auto".to_string(),
             language: "de".to_string(),
 

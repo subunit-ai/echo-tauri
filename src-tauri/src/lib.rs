@@ -369,6 +369,42 @@ pub fn run() {
                 });
             }
 
+            // Arm the cloud→local dictation fallback: the fallback in
+            // transcribe::run_opts only fires when a local model is ALREADY on
+            // disk (it must never download mid-dictation) — but nobody downloads
+            // a model by hand, so in practice it was silently dead. Quietly fetch
+            // the small "base" model (~150 MB) once in the background when the
+            // build has the local engine and no model exists yet. Delayed so app
+            // start (auth refresh, overlay) wins the bandwidth first; a failed
+            // fetch just retries on the next start.
+            #[cfg(feature = "local-whisper")]
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(45)).await;
+                    let (enabled, mode, model) = {
+                        let st = handle.state::<AppState>();
+                        let c = st.config.lock();
+                        (c.local_fallback_autofetch, c.mode.clone(), c.local_model.clone())
+                    };
+                    // Local mode manages its models itself (ensure_blocking on use).
+                    if !enabled || mode == "local" {
+                        return;
+                    }
+                    if crate::models::is_downloaded(&model)
+                        || crate::models::best_downloaded().is_some()
+                    {
+                        return; // already armed
+                    }
+                    log::info!(
+                        "fallback autofetch: no local model on disk — fetching `base` in the background"
+                    );
+                    if let Err(e) = crate::models::download(&handle, "base").await {
+                        log::warn!("fallback autofetch failed (retries next start): {e}");
+                    }
+                });
+            }
+
             // Refresh the displayed plan from the active workspace tier on startup —
             // config.plan was never fetched in older builds, so it kept showing the
             // local default ("free") regardless of the account's real tier.
