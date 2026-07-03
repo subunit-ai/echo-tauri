@@ -442,6 +442,19 @@ button {
   -webkit-backdrop-filter: var(--blur-chip);
 }
 
+/* Live-Meeting sub-tab: the native meet embed fills the pane below the sub-tab bar.
+   A viewport-based height keeps it large regardless of the flex/height chain, and
+   MeetLive's flex:1 host stretches to fill it. */
+.meet-live-host {
+  display: flex;
+  width: 100%;
+  height: calc(100vh - 210px);
+  min-height: 420px;
+  margin-top: 6px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
 .page-animate {
   animation: fade-in-up 0.25s var(--ease-out) forwards;
 }
@@ -746,7 +759,9 @@ button {
 }
 
 select,
+input:not([type]),
 input[type="text"],
+input[type="search"],
 input[type="password"] {
   background: var(--fill-strong);
   backdrop-filter: var(--blur-chip);
@@ -1146,15 +1161,20 @@ select:hover {
   flex-direction: column;
   gap: 8px;
 }
+/* Each saved profile is a rounded Liquid-Glass bar — a frosted, raised row with a
+   soft specular rim, matching the tiles/blocks elsewhere in the app. */
 .op-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  padding: 8px 10px 8px 15px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  background: var(--fill-weak);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  box-shadow: inset 0 1px 0 var(--rim-soft);
 }
 .op-name {
   font-weight: 550;
@@ -1169,13 +1189,36 @@ select:hover {
   gap: 6px;
   flex-shrink: 0;
 }
-.op-actions button {
-  padding: 5px 10px;
+/* Every control in the profile manager is a rounded Liquid-Glass pill (like
+   .sub-tab). Bare <button>s would otherwise fall back to the native WebKit
+   chrome — the dark, "off"-looking boxes this replaces. */
+.orb-profiles button {
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  color: var(--muted);
+  padding: 6px 13px;
+  border-radius: 999px;
   font-size: 0.82rem;
+  font-weight: 600;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out), transform 0.15s var(--ease-out);
 }
-.op-actions button:first-child {
+.orb-profiles button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-edge));
+  transform: translateY(-1px);
+}
+.orb-profiles button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* Primary (Apply / Save) reads as the accent pill. */
+.op-actions button:first-child,
+.op-edit button:first-child {
   color: var(--accent-bright);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--glass2));
 }
 .op-edit {
   display: flex;
@@ -1186,9 +1229,9 @@ select:hover {
 .op-input {
   flex: 1;
   min-width: 0;
-  padding: 8px 11px;
+  padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--glass);
   color: inherit;
   font-size: 0.9rem;
@@ -1200,9 +1243,11 @@ select:hover {
 .op-item .op-input {
   margin-right: 8px;
 }
-.op-actions .op-danger:first-child {
+.op-actions .op-danger:first-child,
+.op-danger {
   color: #ff8c8c;
   border-color: color-mix(in srgb, #ff5c5c 45%, transparent);
+  background: color-mix(in srgb, #ff5c5c 10%, var(--glass2));
 }
 
 /* ---- Orb configurator (live preview) ---- */

@@ -108,8 +108,7 @@
     "meetings": "Meetings",
     "vocabulary": "Vocabulary",
     "settings": "Einstellungen",
-    "help": "Hilfe",
-    "meetingsLive": "Live-Meeting"
+    "help": "Hilfe"
   },
   "header": {
     "planBadgeTitle": "Dein aktueller Plan",
@@ -227,8 +226,8 @@
     "actionMinutes": "Protokoll",
     "actionRecapEmail": "Recap-E-Mail",
     "processError": "Fehler: {{error}}",
-    "tabLocal": "Lokales Meeting",
-    "tabRecordings": "Aufnahmen"
+    "tabOffline": "Offline-Meeting",
+    "tabLive": "Live-Meeting"
   },
   "vocab": {
     "title": "Vocabulary",

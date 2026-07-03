@@ -200,9 +200,12 @@ pub fn clear_history() {
 }
 
 // ---- Meetings ----
+// The meeting store is retired (2026-07-03): long recordings now go into the normal
+// history. These writers are kept (unused) in case meetings return later.
 
 /// Insert a meeting entry (JSON object with at least `ts`); capped at 100 like
 /// the old config array.
+#[allow(dead_code)]
 pub fn add_meeting(data: &Value) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
@@ -266,6 +269,7 @@ pub fn meeting_text(id: i64) -> Option<String> {
 
 /// Merge a key into a meeting found by its timestamp (the detached diarization
 /// thread only knows the `ts` it stored the meeting under).
+#[allow(dead_code)]
 pub fn update_meeting_by_ts(ts: i64, key: &str, value: &str) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };

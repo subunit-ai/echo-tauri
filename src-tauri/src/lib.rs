@@ -7,6 +7,9 @@ mod cleanup;
 mod commands;
 mod config;
 mod dach;
+// Speaker diarization fed the old meeting store, retired 2026-07-03 (long recordings
+// now land in the normal history). Kept for a possible future meeting revival.
+#[allow(dead_code)]
 mod diarize;
 mod events;
 mod hardware;

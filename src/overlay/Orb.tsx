@@ -8,7 +8,6 @@ import {
   BRIEFCASE_PATHS,
   BROOM_PATHS,
   CLOUD_PATHS,
-  GLOBE_PATHS,
   HASH_PATHS,
   LETTER_PATHS,
   LIST_PATHS,
@@ -72,8 +71,8 @@ function computeLayout(): {
   h: number;
   dim: number;
   orb: Rect;
-  chips: Record<"mode" | "language" | "cleanup" | "console", Rect>;
-  panels: Record<"mode" | "language" | "cleanup", Rect>;
+  chips: Record<"mode" | "cleanup" | "console", Rect>;
+  panels: Record<"mode" | "cleanup", Rect>;
 } {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -86,13 +85,9 @@ function computeLayout(): {
   const chips = {
     mode: { x: GUTTER_X - GAP - CHIP, y: midY - CHIP / 2, w: CHIP, h: CHIP },
     cleanup: { x: GUTTER_X + dim + GAP, y: midY - CHIP / 2, w: CHIP, h: CHIP },
-    language: { x: cx - CHIP / 2, y: GUTTER_TOP - GAP - CHIP, w: CHIP, h: CHIP },
-    console: {
-      x: cx - CHIP / 2,
-      y: GUTTER_TOP + dim + (GUTTER_BOTTOM - CHIP) / 2,
-      w: CHIP,
-      h: CHIP,
-    },
+    // Prompt-Terminal moved from the bottom to the TOP-centre — the old language
+    // island is retired (TJ 2026-07-03). It's an action chip (no panel).
+    console: { x: cx - CHIP / 2, y: GUTTER_TOP - GAP - CHIP, w: CHIP, h: CHIP },
   };
   const panels = {
     mode: {
@@ -107,12 +102,6 @@ function computeLayout(): {
       y: clampTop(midY - panelH(10) / 2, panelH(10)),
       w: PANEL_W,
       h: panelH(10),
-    },
-    language: {
-      x: cx - PANEL_W / 2,
-      y: chips.language.y - PANEL_GAP - panelH(3),
-      w: PANEL_W,
-      h: panelH(3),
     },
   };
   return {
@@ -199,8 +188,8 @@ function Row({
  * the Rust hit-test loop reports engagement via `echo://orb-hover` (the webview
  * gets no mouse events while click-through, so it can't track hover itself).
  *
- * Engaged → three icon-only glass chips appear around the orb (mode left,
- * language above, cleanup right) plus the ✦ console chip below. Each chip
+ * Engaged → two icon-only glass chips appear beside the orb (mode left,
+ * cleanup right) plus the ✦ Prompt-Terminal chip above. Each option chip
  * springs on hover and blooms ONLY its own option panel — every value visible,
  * one click to set (`orb_set`). The other chips stay put so you can switch.
  * Returning to the orb collapses the panel back to a chip; leaving the window
@@ -225,7 +214,7 @@ export function Orb() {
   const [hover, setHover] = useState(false);
   // Which single satellite is expanded (null = just the icon chips). Hovering a
   // chip opens ONLY its own panel — not all three at once (TJ).
-  const [openPanel, setOpenPanel] = useState<"mode" | "language" | "cleanup" | null>(null);
+  const [openPanel, setOpenPanel] = useState<"mode" | "cleanup" | null>(null);
   // Chip/panel geometry as numbers — recomputed when the window (orb size) changes.
   const [layout, setLayout] = useState(computeLayout);
 
@@ -276,7 +265,7 @@ export function Orb() {
     // which panel is open. Rust derives `over` from the global cursor poll, so the
     // islands react even when the overlay window isn't focused — a non-key macOS
     // window gets no DOM mouseMoved, so hover-to-open used to need a click first.
-    const unHover = listen<{ hover: boolean; over?: "mode" | "language" | "cleanup" | null }>(
+    const unHover = listen<{ hover: boolean; over?: "mode" | "cleanup" | null }>(
       "echo://orb-hover",
       (e) => {
         setHover(e.payload.hover);
@@ -424,7 +413,7 @@ export function Orb() {
     if (hover) {
       rects.push(layout.chips.console);
       if (quick) {
-        (["mode", "language", "cleanup"] as const).forEach((key) => {
+        (["mode", "cleanup"] as const).forEach((key) => {
           // While a panel is open, report ONE merged chip+panel zone (labelled) so
           // the 10px gap between them still counts as "over" that panel (no
           // open/close flicker as the cursor crosses it) and the whole zone catches
@@ -437,7 +426,7 @@ export function Orb() {
     overlaySetHotRects(rects).catch(() => {});
   }, [layout, hover, openPanel, quick]);
 
-  const pick = (which: "mode" | "language" | "cleanup", value: string) => () => {
+  const pick = (which: "mode" | "cleanup", value: string) => () => {
     orbSet(which, value).then(setQuick).catch(() => {});
   };
 
@@ -478,7 +467,7 @@ export function Orb() {
   };
   // Only the open panel is visible — keep it mounted so it stays put while the
   // pointer travels from its chip onto it (leaving sets openPanel back to null).
-  const panelVis = (key: "mode" | "language" | "cleanup", origin: string): CSSProperties => {
+  const panelVis = (key: "mode" | "cleanup", origin: string): CSSProperties => {
     const on = openPanel === key;
     return {
       opacity: on ? 1 : 0,
@@ -531,19 +520,6 @@ export function Orb() {
               strokeWidth={1.9}
             />
           </button>
-          {/* N — language (above the orb) */}
-          <button
-            className="orb-chip"
-            title={t("overlay.tooltipLanguage", { value: quick.language })}
-            style={{
-              ...chipBase,
-              ...chipVis(hover),
-              left: layout.chips.language.x,
-              top: layout.chips.language.y,
-            }}
-          >
-            <StrokeIcon paths={GLOBE_PATHS} size={17} strokeWidth={1.9} />
-          </button>
           {/* E — cleanup style (right of the orb) */}
           <button
             className="orb-chip"
@@ -580,34 +556,6 @@ export function Orb() {
               label={t("mode.cloudTitle")}
               active={quick.mode === "cloud"}
               onClick={pick("mode", "cloud")}
-            />
-          </div>
-          {/* Language — beyond the language chip (further up) */}
-          <div
-            style={{
-              ...panelBase,
-              ...panelVis("language", "center bottom"),
-              left: layout.panels.language.x,
-              top: layout.panels.language.y,
-            }}
-          >
-            <Row
-              icon={GLOBE_PATHS}
-              label="Deutsch"
-              active={quick.language === "de"}
-              onClick={pick("language", "de")}
-            />
-            <Row
-              icon={GLOBE_PATHS}
-              label="English"
-              active={quick.language === "en"}
-              onClick={pick("language", "en")}
-            />
-            <Row
-              icon={GLOBE_PATHS}
-              label={t("overlay.langAuto")}
-              active={quick.language === "auto"}
-              onClick={pick("language", "auto")}
             />
           </div>
           {/* Cleanup — beyond the cleanup chip (further right). 10 rows can
@@ -688,7 +636,8 @@ export function Orb() {
         </>
       )}
 
-      {/* S — Prompt Console (action chip, below the orb; no panel) */}
+      {/* Prompt Terminal (action chip, above the orb; no panel). Moved up from the
+          bottom now that the language island is retired. */}
       <button
         className="orb-chip"
         title={t("overlay.tooltipPrompt")}

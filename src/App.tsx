@@ -7,7 +7,6 @@ import { Help } from "./sections/Help";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Meetings } from "./sections/Meetings";
-import { MeetLive } from "./sections/MeetLive";
 import { Intro } from "./intro/Intro";
 import { Settings } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
@@ -21,7 +20,13 @@ function Shell() {
   const { t } = useTranslation();
   const { config } = useConfig();
   const [section, setSection] = useState<Section>("home");
-  const [meetLive, setMeetLive] = useState(false);
+  // Meeting is now ONE tab with two modes: "offline" (local Pro flow) and "live"
+  // (native cloud meet). The former separate Live-Meeting sidebar entry folds in here.
+  const [meetingTab, setMeetingTab] = useState<"offline" | "live">("offline");
+  const openMeeting = (tab: "offline" | "live") => {
+    setMeetingTab(tab);
+    setSection("meetings");
+  };
 
   if (!config) {
     return <div className="empty" style={{ paddingTop: 90 }}>{t("common.loading")}</div>;
@@ -35,38 +40,19 @@ function Shell() {
       <MeetingPrompt />
       <SessionBanner />
       <Header />
-      {/* Sidebar stays static even while the meeting view is open — selecting any section
-          exits the meeting and navigates there. The native meet renders in the content pane
-          (an isolated iframe), so the left nav never moves.
-          "Live-Meeting" ist ein eigener Sidebar-Eintrag (TJ 2026-06-12) und startet die
-          native Meet-View DIREKT — kein Zwischenschritt über eine Launcher-Karte. */}
-      <Sidebar
-        active={meetLive ? "meetlive" : section}
-        onSelect={(s) => {
-          if (s === "meetlive") {
-            setMeetLive(true);
-            return;
-          }
-          setMeetLive(false);
-          setSection(s);
-        }}
-      />
-      {meetLive ? (
-        <main className="content content-meet" key="meet">
-          <MeetLive />
-        </main>
-      ) : (
-        <main className="content" key={section}>
-          <div className="page-animate">
-            {section === "home" && <Home onStartMeeting={() => setMeetLive(true)} />}
-            {section === "history" && <History />}
-            {section === "settings" && <Settings />}
-            {section === "meetings" && <Meetings />}
-            {section === "vocabulary" && <Vocabulary />}
-            {section === "help" && <Help />}
-          </div>
-        </main>
-      )}
+      {/* Offline- and Live-Meeting now live under the single "Meeting" section (its own
+          sub-tab switcher); the sidebar just navigates to it. */}
+      <Sidebar active={section} onSelect={setSection} />
+      <main className="content" key={section}>
+        <div className="page-animate">
+          {section === "home" && <Home onStartMeeting={() => openMeeting("live")} />}
+          {section === "history" && <History />}
+          {section === "settings" && <Settings />}
+          {section === "meetings" && <Meetings tab={meetingTab} onTab={setMeetingTab} />}
+          {section === "vocabulary" && <Vocabulary />}
+          {section === "help" && <Help />}
+        </div>
+      </main>
     </div>
   );
 }
