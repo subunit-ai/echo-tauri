@@ -124,6 +124,21 @@ pub fn ensure_hit_test(app: &AppHandle) {
         // non-key window gets no mouseMoved, so the islands were unreachable until
         // you clicked the orb to focus the window). None = over the orb / a gap.
         let mut last_over: Option<String> = None;
+        // Click-trigger island state (TJ, two fixes in one):
+        //  • `active` — islands are only shown after a REAL click on the orb, and
+        //    a further plain click toggles them away again. Focus alone is not
+        //    enough: when the hotkey starts a take while Echo is the active app,
+        //    macOS hands the freshly shown overlay key status and the old
+        //    focus-driven engage popped the islands uninvited.
+        //  • `press` holds the GLOBAL cursor at mouse-down on the orb (drag
+        //    detection must be global — dragging moves the window WITH the
+        //    cursor); `focused_at` separates the activation click from toggle
+        //    clicks; `last_orb_press` marks focus changes that came from the orb.
+        let mut btn_prev = false;
+        let mut press: Option<(f64, f64)> = None;
+        let mut active = false;
+        let mut focused_at: Option<Instant> = None;
+        let mut last_orb_press: Option<Instant> = None;
         // Engage slack around every interactive rect, so crossing the air between
         // the orb and a chip keeps the menu up.
         const PAD: f64 = 36.0;
@@ -165,7 +180,7 @@ pub fn ensure_hit_test(app: &AppHandle) {
                 }
                 continue;
             }
-            let (capture, inside_engage, over) = match (
+            let (capture, inside_engage, over, cursor) = match (
                 app.cursor_position(),
                 win.outer_position(),
                 win.outer_size(),
@@ -188,8 +203,8 @@ pub fn ensure_hit_test(app: &AppHandle) {
                         panel: None,
                     };
                     let rects = app.state::<AppState>().overlay_hot_rects.lock().clone();
-                    let cap =
-                        orb.contains(lx, ly) || rects.iter().any(|r| r.contains(lx, ly));
+                    let in_orb = orb.contains(lx, ly);
+                    let cap = in_orb || rects.iter().any(|r| r.contains(lx, ly));
                     let eng = orb.inflated(PAD).contains(lx, ly)
                         || rects.iter().any(|r| r.inflated(PAD).contains(lx, ly));
                     // Which satellite zone (chip or its merged panel rect) the cursor
@@ -198,21 +213,68 @@ pub fn ensure_hit_test(app: &AppHandle) {
                         .iter()
                         .find(|r| r.panel.is_some() && r.contains(lx, ly))
                         .and_then(|r| r.panel.clone());
-                    (cap, eng, over)
+                    // Cursor for the click-toggle: in-orb flag + GLOBAL position
+                    // (drag detection must be global — a window drag moves the
+                    // window WITH the cursor, so local coords barely change).
+                    (cap, eng, over, Some((in_orb, cur.x, cur.y)))
                 }
-                _ => (false, false, None),
+                _ => (false, false, None, None),
             };
             // Engage source depends on the trigger mode:
-            //  • click: the islands show only while the overlay WINDOW is focused —
-            //    a click on the orb activates it; merely hovering never reveals
-            //    them (TJ: hover-reveal "stört und nervt"). Focus also means the
-            //    window is key, so its mouse events flow normally.
+            //  • click: the islands show while the overlay window is focused AND
+            //    `active` — set by a real click on the orb (focus gained any other
+            //    way, e.g. the hotkey showing the window while Echo is the active
+            //    app, does NOT count), toggled off/on by further plain clicks,
+            //    cleared when focus is lost.
             //  • hover: sticky cursor-in-cluster with a short grace.
             // `capture` is always immediate so the orb stays clickable and gaps
             // stay click-through in both modes.
             let want = if click_mode {
                 left_at = None;
-                win.is_focused().unwrap_or(false)
+                let focused = win.is_focused().unwrap_or(false);
+                let btn = left_button_down();
+                let pressed_edge = btn && !btn_prev;
+                let released_edge = !btn && btn_prev;
+                btn_prev = btn;
+                if pressed_edge {
+                    if let Some((true, gx, gy)) = cursor {
+                        last_orb_press = Some(Instant::now());
+                        // Arm a toggle click only when focus is already old — the
+                        // ACTIVATION click (focus arrives with this very press) is
+                        // handled by the focus edge below, not as a toggle.
+                        press = match focused_at {
+                            Some(t) if t.elapsed() > Duration::from_millis(250) => {
+                                Some((gx, gy))
+                            }
+                            _ => None,
+                        };
+                    } else {
+                        press = None;
+                    }
+                }
+                if focused {
+                    if focused_at.is_none() {
+                        focused_at = Some(Instant::now());
+                        // Focus edge: islands open only when this focus came from
+                        // a fresh click on the orb itself.
+                        active = matches!(last_orb_press, Some(t) if t.elapsed() < Duration::from_millis(400));
+                    }
+                } else {
+                    focused_at = None;
+                    active = false;
+                    press = None;
+                }
+                if released_edge {
+                    if let (Some((px, py)), Some((true, gx, gy))) = (press, cursor) {
+                        // A plain CLICK (released near the press, still on the
+                        // orb) — not a window drag — toggles the islands.
+                        if (gx - px).abs() < 6.0 && (gy - py).abs() < 6.0 {
+                            active = !active;
+                        }
+                    }
+                    press = None;
+                }
+                focused && active
             } else if inside_engage {
                 left_at = None;
                 true
@@ -274,6 +336,29 @@ fn pin_topmost(win: &WebviewWindow) {
 }
 #[cfg(not(target_os = "macos"))]
 fn pin_topmost(_win: &WebviewWindow) {}
+
+/// Whether the LEFT mouse button is currently held — polled by the hit-test
+/// loop to catch a plain click on the orb in click-trigger mode. The webview
+/// can't see that click reliably (the orb canvas is a drag region and a
+/// non-key window gets no mouse events at all), so the loop watches the
+/// global button state instead. macOS: NSEvent's pressed-buttons bitmask
+/// (class method, safe off the main thread). Windows: async key state.
+/// Elsewhere: unavailable → the dismiss-toggle is simply inert.
+#[cfg(target_os = "macos")]
+fn left_button_down() -> bool {
+    use objc::{class, msg_send, sel, sel_impl};
+    let btns: usize = unsafe { msg_send![class!(NSEvent), pressedMouseButtons] };
+    btns & 1 != 0
+}
+#[cfg(target_os = "windows")]
+fn left_button_down() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    ((unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) }) as u16 & 0x8000) != 0
+}
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn left_button_down() -> bool {
+    false
+}
 
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     if app.get_webview_window("overlay").is_some() {

@@ -405,7 +405,7 @@
     "idleMode": "When idle",
     "idleModeHint": "How the orb behaves when nothing's happening.",
     "orbTrigger": "Show islands",
-    "orbTriggerHint": "Whether the orb functions appear on hover, or only when you click the orb.",
+    "orbTriggerHint": "Whether the orb functions appear on hover, or only when you click the orb. In click mode, clicking the orb again hides them.",
     "orbTriggerClick": "On click",
     "orbTriggerHover": "On hover",
     "idleNormal": "Normal",

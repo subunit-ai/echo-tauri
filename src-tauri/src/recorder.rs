@@ -133,7 +133,10 @@ impl Analyzer {
             let amp = power.sqrt() / (win as f32 * 0.25);
             let db = 20.0 * (amp + 1e-6).log10();
             let tilt = 14.0 * (bi as f32 / (BAND_COUNT - 1) as f32);
-            out[bi] = (((db + tilt) + 54.0) / 42.0).clamp(0.0, 1.0).powf(0.8);
+            // −50 dB floor / −10 dB ceiling (was −54/−12): a few dB less
+            // sensitive at the quiet end so room tone / breath doesn't light
+            // the spectrum, and a touch more headroom before a band pins.
+            out[bi] = (((db + tilt) + 50.0) / 40.0).clamp(0.0, 1.0).powf(0.8);
         }
         out
     }
@@ -421,11 +424,11 @@ fn build_stream(
 // Voice-reactivity of the VU mapping, live-tunable from config without coupling
 // the recorder to Config (the hot audio path stays self-contained). Stored as
 // f32 bits; `set_reactivity` is called at startup and on every config change.
-// Defaults mirror the previous hardcoded constants (noise_floor 0.01 / gain 7.5
-// / gamma 0.55) so behaviour is identical until the user tweaks a profile.
-static REACT_NOISE_FLOOR: AtomicU32 = AtomicU32::new(0x3c23d70a); // 0.01
-static REACT_GAIN: AtomicU32 = AtomicU32::new(0x40f00000); // 7.5
-static REACT_GAMMA: AtomicU32 = AtomicU32::new(0x3f0ccccd); // 0.55
+// Defaults mirror the config defaults (noise_floor 0.02 / gain 5.0 / gamma
+// 0.75 — the 2026-07-03 "precise, not twitchy" retune, see config.rs).
+static REACT_NOISE_FLOOR: AtomicU32 = AtomicU32::new(0x3ca3d70a); // 0.02
+static REACT_GAIN: AtomicU32 = AtomicU32::new(0x40a00000); // 5.0
+static REACT_GAMMA: AtomicU32 = AtomicU32::new(0x3f400000); // 0.75
 
 /// Update the orb's voice-reactivity params (from config). Sane clamps so a bad
 /// profile can't break the meters: floor 0..0.2, gain 0.5..40, gamma 0.1..2.

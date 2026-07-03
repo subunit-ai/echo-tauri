@@ -321,9 +321,14 @@ impl Default for Config {
             orb_idle_migrated: false,
             orb_trigger: "click".to_string(),
             orb_speed: 0.6,
-            orb_noise_floor: 0.01,
-            orb_gain: 7.5,
-            orb_gamma: 0.55,
+            // Retuned 2026-07-03 (TJ: "präzise, aber nicht so sensibel"): higher
+            // gate kills breath/room noise, lower gain + higher gamma stop the
+            // old everything-saturates-to-1.0 — soft vs normal vs loud speech now
+            // deflect visibly differently. Old (0.01/7.5/0.55): rms 0.05→0.52,
+            // 0.15→1.0, 0.3→1.0 (flat). New: 0.05→0.24, 0.15→0.72, 0.3→1.0.
+            orb_noise_floor: 0.02,
+            orb_gain: 5.0,
+            orb_gamma: 0.75,
             orb_color_idle: "#22d3ee".to_string(),
             orb_color_working: "#ff5c5c".to_string(),
             orb_color_done: "#50dc82".to_string(),
@@ -492,6 +497,15 @@ impl Config {
         // deprecated default). As of 2026-06-28 "tidy" is a first-class,
         // user-selectable style again (lightest-touch cleanup) — so we must NOT
         // rewrite it, or a deliberate Tidy pick would silently revert on save.
+        // Orb reactivity retune (2026-07-03): saved configs carry the OLD default
+        // triple (0.01/7.5/0.55) verbatim, so just changing the defaults would
+        // never reach existing users. Fold exactly-the-old-defaults onto the new
+        // curve; anyone who hand-tuned reactivity (any deviation) keeps theirs.
+        if self.orb_noise_floor == 0.01 && self.orb_gain == 7.5 && self.orb_gamma == 0.55 {
+            self.orb_noise_floor = 0.02;
+            self.orb_gain = 5.0;
+            self.orb_gamma = 0.75;
+        }
         if self.cloud_quality_mode.is_empty()
             || matches!(self.cloud_quality_mode.as_str(), "auto" | "fast" | "instant")
         {

@@ -355,13 +355,20 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
       done: c.orb_color_done,
       error: c.orb_color_error,
     },
-    idlePulse: c.orb_idle_pulse,
-    idleMode: c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide" ? c.orb_idle_mode : "normal",
+    // The preview ALWAYS shows a living orb: idle-"hide" would render nothing
+    // and idle-still would freeze to a dot — correct for the real overlay, but
+    // in the configurator it read as "broken / shows nothing" (TJ). Hide/dim/
+    // still remain overlay-only behaviours; here we preview the LOOK.
+    idlePulse: true,
+    idleMode: "normal",
     speed: c.orb_speed ?? 0.6,
   };
   // The size slider visibly scales the preview too (clamped to the stage).
   const sizeFactor = c.orb_overlay_size ?? 1;
   const px = Math.round(Math.max(120, Math.min(300, 170 * sizeFactor)));
+  // Fixed stage floor so cycling styles / nudging the size slider doesn't
+  // reflow the whole settings page under the cursor (it read as "wobbling").
+  const stageMin = Math.max(240, px + 32);
 
   // ‹ › cycle through every style live in the preview (applies immediately).
   const styleIdx = Math.max(0, ORB_STYLES.findIndex(([k]) => k === c.orb_overlay_style));
@@ -389,7 +396,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
         <div className="oc-title">{t("settings.orbConfigurator")}</div>
         <div className="oc-sub">{t("settings.orbConfiguratorHint")}</div>
       </div>
-      <div className="oc-stage" style={{ minHeight: px + 32 }}>
+      <div className="oc-stage" style={{ minHeight: stageMin }}>
         <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label="prev" title={styleLabel}>
           ‹
         </button>

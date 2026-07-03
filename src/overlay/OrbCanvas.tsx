@@ -61,9 +61,20 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
     let phase: EngineState = "idle";
     let lastPhase: EngineState | null = null;
 
+    // Synthetic syllable-like voice envelope: bursts of energy with brief
+    // gaps; jump up fast, ease down — mirrors the overlay's VU smoothing.
+    const speak = () => {
+      const f = tick * 0.13;
+      const syllable = Math.max(0, Math.sin(f) * 0.5 + 0.5);
+      const flutter = 0.5 + 0.5 * Math.sin(f * 3.7);
+      const gap = Math.sin(tick * 0.045) > -0.3 ? 1 : 0.15; // occasional pauses
+      const target = Math.min(1, syllable * flutter * gap * 1.1);
+      levelRef.current = target > levelRef.current ? target : levelRef.current * 0.8 + target * 0.2;
+    };
+
     const loop = () => {
+      tick += 1;
       if (demoRef.current) {
-        tick += 1;
         // Cycle through EVERY state so each legend entry lights up in turn,
         // incl. a brief error flash: idle → recording → transcribing → done →
         // error → idle.
@@ -79,18 +90,12 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
           lastPhase = phase;
           onPhaseRef.current?.(phase);
         }
-        if (phase === "recording") {
-          // syllable-like envelope: bursts of energy with brief gaps
-          const f = tick * 0.13;
-          const syllable = Math.max(0, Math.sin(f) * 0.5 + 0.5);
-          const flutter = 0.5 + 0.5 * Math.sin(f * 3.7);
-          const gap = Math.sin(tick * 0.045) > -0.3 ? 1 : 0.15; // occasional pauses
-          const target = Math.min(1, syllable * flutter * gap * 1.1);
-          // jump up fast, ease down — mirrors the overlay's VU smoothing
-          levelRef.current = target > levelRef.current ? target : levelRef.current * 0.8 + target * 0.2;
-        } else {
-          levelRef.current *= 0.85;
-        }
+        if (phase === "recording") speak();
+        else levelRef.current *= 0.85;
+      } else if (stateRef.current === "recording") {
+        // Pinned "Aktiv" (demo stopped via the legend): keep the synthetic
+        // voice talking — the preview must never sit dead (TJ).
+        speak();
       } else {
         levelRef.current *= 0.85;
       }
