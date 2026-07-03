@@ -188,6 +188,7 @@
     "meetingCreating": "Erstelle Meeting…",
     "meetingOpened": "Meeting {{code}} geöffnet",
     "statTranscriptions": "Transkriptionen",
+    "statWords": "Wörter",
     "statInHistory": "Im Verlauf",
     "statAudioMin": "Audio (min)",
     "statTimeSaved": "Zeit gespart",

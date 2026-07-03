@@ -72,7 +72,15 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             created_at  INTEGER NOT NULL,
             updated_at  INTEGER NOT NULL
          );
-         CREATE INDEX IF NOT EXISTS idx_vcand_status ON vocab_candidates(status, updated_at DESC);",
+         CREATE INDEX IF NOT EXISTS idx_vcand_status ON vocab_candidates(status, updated_at DESC);
+         CREATE TABLE IF NOT EXISTS account_stats (
+            account        TEXT    PRIMARY KEY,
+            transcriptions INTEGER NOT NULL DEFAULT 0,
+            audio_seconds  REAL    NOT NULL DEFAULT 0,
+            words          INTEGER NOT NULL DEFAULT 0,
+            chars          INTEGER NOT NULL DEFAULT 0,
+            updated_at     INTEGER NOT NULL DEFAULT 0
+         );",
     )?;
     *DB.lock() = Some(conn);
     log::info!("store: opened {}", path.display());
@@ -191,6 +199,86 @@ pub fn delete_history(id: i64) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
     let _ = conn.execute("DELETE FROM history WHERE id = ?1", params![id]);
+}
+
+/// Sum of whitespace-word and character counts across the retained history rows.
+/// Used once, at seed time, to backfill the `words`/`chars` figures for users
+/// upgrading from the pre-stats builds (best-effort — only covers rows still in
+/// the retention window; every dictation afterwards is counted exactly).
+pub fn history_word_char_sum() -> (i64, i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return (0, 0) };
+    let Ok(mut stmt) = conn.prepare("SELECT text FROM history") else { return (0, 0) };
+    let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else { return (0, 0) };
+    let (mut words, mut chars) = (0i64, 0i64);
+    for t in rows.filter_map(Result::ok) {
+        words += t.split_whitespace().count() as i64;
+        chars += t.chars().count() as i64;
+    }
+    (words, chars)
+}
+
+// ---- Per-account usage stats (Home dashboard — real, account-scoped, lifetime) ----
+//
+// Partitioned by the same `account` key as orb profiles (workspace → email →
+// "local"), so each signed-in identity accrues and sees only its own numbers.
+// These are lifetime totals — never pruned like history — accumulated from the
+// real measurements of every completed dictation.
+
+/// Add one completed dictation's real measurements to `account`'s running
+/// totals, creating the row on the first dictation for a fresh account.
+pub fn bump_account_stats(account: &str, audio_seconds: f64, words: i64, chars: i64, now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let r = conn.execute(
+        "INSERT INTO account_stats (account, transcriptions, audio_seconds, words, chars, updated_at)
+         VALUES (?1, 1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(account) DO UPDATE SET
+            transcriptions = transcriptions + 1,
+            audio_seconds  = audio_seconds + excluded.audio_seconds,
+            words          = words + excluded.words,
+            chars          = chars + excluded.chars,
+            updated_at     = excluded.updated_at",
+        params![account, audio_seconds.max(0.0), words.max(0), chars.max(0), now],
+    );
+    if let Err(e) = r {
+        log::warn!("store: account_stats bump failed: {e}");
+    }
+}
+
+/// Lifetime totals for `account` as `(transcriptions, audio_seconds, words,
+/// chars)` — all zero if the account has no dictations yet.
+pub fn get_account_stats(account: &str) -> (i64, f64, i64, i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return (0, 0.0, 0, 0) };
+    conn.query_row(
+        "SELECT transcriptions, audio_seconds, words, chars FROM account_stats WHERE account = ?1",
+        params![account],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    )
+    .unwrap_or((0, 0.0, 0, 0))
+}
+
+/// One-time seed of an account's row from the legacy global config counters, so
+/// upgrading users keep their historical numbers instead of resetting to zero.
+/// `INSERT OR IGNORE` — a no-op if the account already has a row (e.g. a
+/// dictation already created it), so it can never double-count.
+pub fn seed_account_stats(
+    account: &str,
+    transcriptions: i64,
+    audio_seconds: f64,
+    words: i64,
+    chars: i64,
+    now: i64,
+) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO account_stats
+            (account, transcriptions, audio_seconds, words, chars, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![account, transcriptions.max(0), audio_seconds.max(0.0), words.max(0), chars.max(0), now],
+    );
 }
 
 pub fn clear_history() {
@@ -636,6 +724,22 @@ mod tests {
             a.iter().filter_map(|p| p["id"].as_str()).collect();
         assert!(ids.contains("p1") && ids.contains("p3")); // server p1 + local-dirty p3
         assert!(!ids.contains("p2")); // synced+deleted, not on server → gone
+
+        // Account stats: per-account accumulation + isolation, seed-once semantics.
+        assert_eq!(get_account_stats("em:a"), (0, 0.0, 0, 0)); // none yet
+        bump_account_stats("em:a", 5.0, 3, 20, 1000);
+        bump_account_stats("em:a", 7.5, 4, 25, 1001);
+        bump_account_stats("em:b", 2.0, 1, 6, 1002); // different account
+        let (n, secs, w, c) = get_account_stats("em:a");
+        assert_eq!((n, w, c), (2, 7, 45)); // 1+1, 3+4, 20+25
+        assert!((secs - 12.5).abs() < 1e-9);
+        assert_eq!(get_account_stats("em:b"), (1, 2.0, 1, 6)); // isolated
+        // Seed is a no-op once a row exists (never double-counts a live account)…
+        seed_account_stats("em:a", 999, 999.0, 999, 999, 2000);
+        assert_eq!(get_account_stats("em:a").0, 2);
+        // …but seeds a fresh account's historical totals from config.
+        seed_account_stats("em:c", 10, 100.0, 50, 300, 2000);
+        assert_eq!(get_account_stats("em:c"), (10, 100.0, 50, 300));
 
         let _ = std::fs::remove_file(&path);
     }

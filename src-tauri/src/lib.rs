@@ -124,6 +124,7 @@ pub fn run() {
             commands::open_external,
             commands::history_list,
             commands::history_count,
+            commands::account_stats,
             commands::delete_history_entry,
             commands::clear_history,
             commands::vocab_candidates,
@@ -221,6 +222,33 @@ pub fn run() {
                             let _ = c.save();
                         }
                         Err(e) => log::warn!("store: migration failed: {e}"),
+                    }
+                }
+
+                // One-time seed of the per-account stats table from the legacy
+                // global counters, so users upgrading from pre-stats builds keep
+                // their historical numbers (attributed to whichever account is
+                // active at upgrade — once, guarded by `stats_seeded`). Words/chars
+                // are backfilled from the retained history; exact from here on.
+                {
+                    let mut c = st.config.lock();
+                    if !c.stats_seeded {
+                        let account = crate::presets::account_key(&c);
+                        let (words, chars) = store::history_word_char_sum();
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        store::seed_account_stats(
+                            &account,
+                            c.total_transcriptions,
+                            c.total_audio_seconds,
+                            words,
+                            chars,
+                            now,
+                        );
+                        c.stats_seeded = true;
+                        let _ = c.save();
                     }
                 }
             }

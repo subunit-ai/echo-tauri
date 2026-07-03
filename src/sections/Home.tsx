@@ -5,25 +5,42 @@ import { StreamingSwitch } from "../components/StreamingSwitch";
 import { MicIcon } from "../components/icons";
 import { RecordPanel } from "../components/RecordPanel";
 import {
-  historyCount,
+  accountStats,
   historyList,
   onHistoryChanged,
   patchForUiMode,
   uiModeOf,
+  type AccountStats,
   type HistoryEntry,
 } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
+const EMPTY_STATS: AccountStats = {
+  transcriptions: 0,
+  audio_seconds: 0,
+  words: 0,
+  chars: 0,
+  time_saved_seconds: 0,
+};
+
+/** Compact human duration for the "time saved" card: seconds → min under an
+ * hour, else one-decimal hours (de-style comma applied by the caller's locale). */
+function fmtSaved(seconds: number): { value: string; unit: string } {
+  if (seconds < 3600) return { value: String(Math.round(seconds / 60)), unit: "min" };
+  return { value: (seconds / 3600).toFixed(1), unit: "h" };
+}
+
 export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
   const { t } = useTranslation();
   const { config, patch } = useConfig();
-  // Recent dictations + count from the SQLite store, refreshed live.
+  // Recent dictations (SQLite store) + real per-account stats, refreshed live
+  // whenever a dictation lands (the backend emits echo://history-changed).
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
-  const [count, setCount] = useState(0);
+  const [stats, setStats] = useState<AccountStats>(EMPTY_STATS);
   useEffect(() => {
     const refresh = () => {
       historyList("", 5).then(setRecent).catch(() => {});
-      historyCount().then(setCount).catch(() => {});
+      accountStats().then(setStats).catch(() => {});
     };
     refresh();
     const un = onHistoryChanged(refresh);
@@ -32,6 +49,8 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
     };
   }, []);
   if (!config) return null;
+
+  const saved = fmtSaved(stats.time_saved_seconds);
 
   return (
     <div>
@@ -70,21 +89,21 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
       <div className="stat-grid" style={{ marginTop: 24 }}>
         <div className="card stat-card">
           <div className="label">{t("home.statTranscriptions")}</div>
-          <div className="value">{config.total_transcriptions}</div>
+          <div className="value">{stats.transcriptions.toLocaleString()}</div>
         </div>
         <div className="card stat-card">
-          <div className="label">{t("home.statInHistory")}</div>
-          <div className="value">{count}</div>
+          <div className="label">{t("home.statWords")}</div>
+          <div className="value">{stats.words.toLocaleString()}</div>
         </div>
         <div className="card stat-card">
           <div className="label">{t("home.statAudioMin")}</div>
-          <div className="value">{Math.round(config.total_audio_seconds / 60)}</div>
+          <div className="value">{Math.round(stats.audio_seconds / 60).toLocaleString()}</div>
         </div>
         <div className="card stat-card">
           <div className="label">{t("home.statTimeSaved")}</div>
           <div className="value">
-            {Math.round((config.total_audio_seconds * 3) / 60)}
-            <span style={{ fontSize: 13, opacity: 0.6 }}> {t("home.unitMin")}</span>
+            {saved.value}
+            <span style={{ fontSize: 13, opacity: 0.6 }}> {saved.unit}</span>
           </div>
         </div>
       </div>

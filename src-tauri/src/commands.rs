@@ -502,14 +502,20 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    // Stats (config) + history/meetings (SQLite store).
-    let (history_enabled, history_size) = {
+    // Stats: legacy global config counters + per-account lifetime totals (the
+    // Home dashboard reads the latter — real, account-scoped). Word/char counts
+    // come from the actually delivered text so "time saved" is a genuine
+    // calculation, not a fixed multiplier.
+    let words = result.text.split_whitespace().count() as i64;
+    let chars = result.text.chars().count() as i64;
+    let (history_enabled, history_size, account) = {
         let mut c = state.config.lock();
         c.total_transcriptions += 1;
         c.total_audio_seconds += duration_s;
         let _ = c.save();
-        (c.history_enabled, c.history_size.max(0) as usize)
+        (c.history_enabled, c.history_size.max(0) as usize, crate::presets::account_key(&c))
     };
+    crate::store::bump_account_stats(&account, duration_s, words, chars, now as i64);
     if history_enabled && !result.text.trim().is_empty() {
         let entry = serde_json::json!({
             "text": result.text,
@@ -677,6 +683,48 @@ pub fn vocab_undo(app: AppHandle, key: String) {
 #[tauri::command]
 pub fn history_count() -> i64 {
     crate::store::count_history()
+}
+
+/// Average sustained typing speed (words per minute) for a general user — the
+/// baseline dictation is compared against for "time saved". Deliberately
+/// conservative: pro typists exceed 70 WPM, hunt-and-peck sits near 25; ~40 WPM
+/// is a widely cited average, so the figure reads as credible, not inflated.
+const TYPING_WPM: f64 = 40.0;
+
+/// Real "time saved" by dictating instead of typing: the seconds it would take
+/// to TYPE `words` at [`TYPING_WPM`], minus the seconds actually spent speaking.
+/// Clamped at zero (a tiny clip with almost no words can't cost more than it
+/// saves). This is the honest calculation behind the Home stat.
+pub fn time_saved_seconds(words: i64, audio_seconds: f64) -> f64 {
+    let typing = (words.max(0) as f64) / TYPING_WPM * 60.0;
+    (typing - audio_seconds).max(0.0)
+}
+
+/// Real, account-scoped lifetime usage for the Home dashboard. The account is
+/// resolved from the signed-in identity (workspace → email → "local"), so each
+/// account only ever sees its own numbers. All fields are accumulated from the
+/// real measurements of every completed dictation; `time_saved_seconds` is
+/// derived via [`time_saved_seconds`] — no decorative multipliers.
+#[derive(serde::Serialize)]
+pub struct AccountStats {
+    pub transcriptions: i64,
+    pub audio_seconds: f64,
+    pub words: i64,
+    pub chars: i64,
+    pub time_saved_seconds: f64,
+}
+
+#[tauri::command]
+pub fn account_stats(state: State<'_, AppState>) -> AccountStats {
+    let account = crate::presets::account_key(&state.config.lock());
+    let (transcriptions, audio_seconds, words, chars) = crate::store::get_account_stats(&account);
+    AccountStats {
+        transcriptions,
+        audio_seconds,
+        words,
+        chars,
+        time_saved_seconds: time_saved_seconds(words, audio_seconds),
+    }
 }
 
 /// All stored meetings, newest first (each with its store `id`).
@@ -1312,3 +1360,21 @@ mod meet_local_stubs {
 }
 #[cfg(not(feature = "local-meet"))]
 pub use meet_local_stubs::*;
+
+#[cfg(test)]
+mod stats_tests {
+    use super::time_saved_seconds;
+
+    #[test]
+    fn time_saved_is_typing_minus_speaking() {
+        // 40 words at 40 WPM = 60s to type; spoken in 20s → 40s saved.
+        assert!((time_saved_seconds(40, 20.0) - 40.0).abs() < 1e-9);
+        // 400 words = 600s typing, spoken in 200s → 400s saved.
+        assert!((time_saved_seconds(400, 200.0) - 400.0).abs() < 1e-9);
+        // Never negative: a long ramble with few words can't cost more than it saves.
+        assert_eq!(time_saved_seconds(1, 300.0), 0.0);
+        // Zero words → zero saved, no panic.
+        assert_eq!(time_saved_seconds(0, 0.0), 0.0);
+        assert_eq!(time_saved_seconds(-5, 0.0), 0.0);
+    }
+}

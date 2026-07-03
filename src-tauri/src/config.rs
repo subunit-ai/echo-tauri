@@ -292,6 +292,10 @@ pub struct Config {
 
     pub total_transcriptions: i64,
     pub total_audio_seconds: f64,
+    /// One-time guard: has the legacy global counters → per-account `account_stats`
+    /// seed run yet? Set true after the first post-upgrade startup so the historical
+    /// totals are attributed to one account exactly once (never double-counted).
+    pub stats_seeded: bool,
 }
 
 impl Default for Config {
@@ -406,6 +410,7 @@ impl Default for Config {
 
             total_transcriptions: 0,
             total_audio_seconds: 0.0,
+            stats_seeded: false,
         }
     }
 }

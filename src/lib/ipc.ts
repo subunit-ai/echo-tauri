@@ -206,6 +206,18 @@ export const historyList = (query = "", limit = 200, offset = 0) =>
   invoke<HistoryEntry[]>("history_list", { query, limit, offset });
 /** Total stored history entries. */
 export const historyCount = () => invoke<number>("history_count");
+
+/** Real, account-scoped lifetime usage for the Home dashboard. Accumulated from
+ * every completed dictation; `time_saved_seconds` is a genuine typing-vs-speaking
+ * calculation, not a decorative multiplier. */
+export interface AccountStats {
+  transcriptions: number;
+  audio_seconds: number;
+  words: number;
+  chars: number;
+  time_saved_seconds: number;
+}
+export const accountStats = () => invoke<AccountStats>("account_stats");
 /** Delete one history entry by its store id. */
 export const deleteHistoryEntry = (id: number) =>
   invoke<void>("delete_history_entry", { id });

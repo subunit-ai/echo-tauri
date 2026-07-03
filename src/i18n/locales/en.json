@@ -189,6 +189,7 @@
     "meetingCreating": "Creating meeting…",
     "meetingOpened": "Meeting {{code}} opened",
     "statTranscriptions": "Transcriptions",
+    "statWords": "Words",
     "statInHistory": "In history",
     "statAudioMin": "Audio (min)",
     "statTimeSaved": "Time saved",
