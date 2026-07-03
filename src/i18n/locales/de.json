@@ -404,7 +404,7 @@
     "idleMode": "Im Leerlauf",
     "idleModeHint": "Wie sich der Orb verhält, wenn nichts passiert.",
     "orbTrigger": "Inseln zeigen",
-    "orbTriggerHint": "Ob die Orb-Funktionen beim Rüberfahren erscheinen oder erst beim Klick auf den Orb.",
+    "orbTriggerHint": "Ob die Orb-Funktionen beim Rüberfahren erscheinen oder erst beim Klick auf den Orb. Im Klick-Modus blendet ein weiterer Klick auf den Orb sie wieder aus.",
     "orbTriggerClick": "Per Klick",
     "orbTriggerHover": "Beim Rüberfahren",
     "idleNormal": "Normal",
