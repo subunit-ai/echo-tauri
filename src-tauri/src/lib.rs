@@ -145,6 +145,7 @@ pub fn run() {
             commands::hardware_info,
             commands::process_meeting,
             commands::mic_level,
+            commands::mic_features,
             commands::start_recording,
             commands::cancel_recording,
             commands::stop_and_transcribe,

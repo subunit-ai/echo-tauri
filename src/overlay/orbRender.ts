@@ -34,10 +34,32 @@ export interface OrbAnim {
   /** Onset-driven envelope (0..1, decays) — styles that "flare" on syllables
    *  (nova/droplet) bump this on a voice spike and let it fall. */
   pulse: number;
+  /** Smoothed per-band spectrum envelope (16 entries, 0..1): fast attack,
+   *  gentle release — fed from the REAL mic spectrum when the caller provides
+   *  one, otherwise from a voice-plausible synthetic fallback (previews). */
+  bandEnv: number[];
+  /** Rolling level history for the ★ Oscilloscope style (newest last). */
+  hist: number[];
+  /** Particle field for the ★ Nebula style (lazily seeded, deterministic). */
+  parts: { d: number; a0: number; sz: number; v: number }[];
+  /** Per-spoke peak-hold caps for the ★ Spectra style. */
+  caps: number[];
 }
 
 export function newOrbAnim(): OrbAnim {
-  return { t: 0, frame: 0, rings: [], blips: [], peaks: new Array(16).fill(0), lvlAvg: 0, pulse: 0 };
+  return {
+    t: 0,
+    frame: 0,
+    rings: [],
+    blips: [],
+    peaks: new Array(16).fill(0),
+    lvlAvg: 0,
+    pulse: 0,
+    bandEnv: new Array(16).fill(0),
+    hist: [],
+    parts: [],
+    caps: [],
+  };
 }
 
 function hexA(hex: string, a: number): string {
@@ -51,7 +73,11 @@ function hexA(hex: string, a: number): string {
 /**
  * Draw ONE frame of the orb into `ctx` (a 2D context sized w×h in device pixels).
  * `st` is the visual engine state, `level` the 0..1 mic energy. `an` carries the
- * animation forward between calls. Returns nothing; mutates `ctx` and `an`.
+ * animation forward between calls. `bands` is the optional REAL 16-band voice
+ * spectrum (0..1 each, bass→sibilance) from `mic_features`; when omitted (e.g.
+ * the configurator preview without a mic) a synthetic voice-shaped spectrum is
+ * derived from `level` so every style still comes alive. Returns nothing;
+ * mutates `ctx` and `an`.
  */
 export function drawOrb(
   ctx: CanvasRenderingContext2D,
@@ -61,6 +87,7 @@ export function drawOrb(
   st: EngineState,
   level: number,
   an: OrbAnim,
+  bands?: number[],
 ): void {
   // Animation speed (TJ: the default cadence felt too fast — now adjustable).
   // `t` (scaled) drives every continuous frequency below; `frame` (real frames)
@@ -118,6 +145,40 @@ export function drawOrb(
   const energy = st === "recording" ? 0.12 + lvl * 0.88 : breathe * 0.6;
   const speaking = st === "recording";
 
+  // ---- Per-band spectrum envelope --------------------------------------------
+  // Advance `an.bandEnv` (16 bands, bass→sibilance) every frame: instant-ish
+  // attack so a syllable pops the moment it lands, gentle release so bands sink
+  // instead of flickering. Real spectrum when the caller provides one, otherwise
+  // a synthetic voice-shaped fallback (lows follow the envelope, highs flutter)
+  // so the configurator preview behaves like a live session.
+  const haveBands = !!bands && bands.length > 0;
+  for (let i = 0; i < 16; i++) {
+    let raw = 0;
+    if (speaking) {
+      if (haveBands) {
+        const x = (i / 15) * (bands.length - 1);
+        const lo = Math.floor(x);
+        const hi = Math.min(bands.length - 1, lo + 1);
+        raw = bands[lo] + (bands[hi] - bands[lo]) * (x - lo);
+      } else {
+        raw =
+          lvl *
+          (0.55 + 0.45 * Math.sin(ph * (0.31 + i * 0.037) + i * 2.1)) *
+          (1 - (i / 15) * 0.35);
+      }
+    }
+    const prev = an.bandEnv[i];
+    raw = Math.min(1, Math.max(0, raw));
+    an.bandEnv[i] = raw > prev ? prev * 0.4 + raw * 0.6 : prev * 0.82 + raw * 0.18;
+  }
+  /** Smoothed band value at normalized spectrum position x (0 = bass, 1 = sibilance). */
+  const bandAt = (x: number): number => {
+    const p = Math.max(0, Math.min(1, x)) * 15;
+    const lo = Math.floor(p);
+    const hi = Math.min(15, lo + 1);
+    return an.bandEnv[lo] + (an.bandEnv[hi] - an.bandEnv[lo]) * (p - lo);
+  };
+
   switch (v.style) {
     case "sphere": {
       const r = dotR * (1 + energy * 1.4);
@@ -139,16 +200,14 @@ export function drawOrb(
       for (let i = 0; i < n; i++) {
         const k = Math.abs(i - (n - 1) / 2);
         const center = 1 - k * 0.22; // center-weighted profile (tallest in the middle)
-        // While recording, the bar HEIGHT is the real mic level (center-weighted) —
-        // small dots when silent, springing up as you speak — with only a tiny per-bar
-        // shimmer so it reads as a live VU meter, not a self-running animation.
+        // While recording each bar rides its own REAL frequency band (bass on
+        // the left → sibilance on the right) blended with the overall level, so
+        // the meter shows the voice's timbre, not five copies of one number.
         // Otherwise (idle/transcribing) keep the gentle breathing.
         const amp = speaking
-          ? Math.min(1, 0.05 + lvl * center * 1.55)
+          ? Math.min(1, 0.05 + (0.45 * lvl + 0.95 * bandAt(i / (n - 1))) * center)
           : energy * center + 0.08;
-        const shimmer = speaking
-          ? 0.9 + 0.1 * Math.sin(ph * 0.5 + i)
-          : 0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i));
+        const shimmer = speaking ? 1 : 0.6 + 0.4 * Math.abs(Math.sin(ph * 0.2 + i));
         // At rest with idle animation OFF (and silent while recording), collapse each
         // bar to a small DOT (height == width → the roundRect's bw/2 radius makes it a
         // circle) instead of a standing bar or a frozen mid-animation frame.
@@ -324,11 +383,11 @@ export function drawOrb(
       for (let i = 0; i < n; i++) {
         const k = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2); // 0 centre → 1 edge
         const profile = 1 - k * k * 0.75;
-        const band = speaking
-          ? 0.55 + 0.45 * Math.abs(Math.sin(ph * 0.33 + i * 1.7))
-          : 0.45 + 0.55 * Math.abs(Math.sin(ph * 0.13 + i * 1.7));
+        // Speaking: every column is its own REAL band (bass left → sibilance
+        // right) — a genuine equalizer now, not level × sine shimmer.
+        const band = 0.45 + 0.55 * Math.abs(Math.sin(ph * 0.13 + i * 1.7));
         const amp = speaking
-          ? Math.min(1, (0.04 + lvl * 1.5) * profile * band)
+          ? Math.min(1, (0.04 + 0.4 * lvl + 1.15 * bandAt(i / (n - 1))) * profile)
           : (energy * profile + 0.06) * band;
         const bh = idleStill ? bw : Math.max(bw, size * 0.52 * amp);
         const x = cx - total / 2 + i * (bw + gap);
@@ -379,25 +438,25 @@ export function drawOrb(
         const k = Math.abs(i - (n - 1) / 2) / Math.max(1, (n - 1) / 2);
         const profile = 1 - k * k * 0.7; // centre-weighted, tallest in the middle
         const x = cx - total / 2 + i * (bw + gap);
-        // top (dir -1) and bottom (dir 1) on different frequencies/offsets —
-        // that asymmetry is what makes it read "up AND down", not mirrored.
-        const lobes: [number, number][] = [
+        // Top lobe (dir -1) rides the LOWER half of the real spectrum, bottom
+        // lobe (dir 1) the UPPER half — vowels push up while consonants kick
+        // down: genuinely different information per direction, not two phases
+        // of the same number. Idle keeps the two-phase shimmer.
+        const lobes: [number, number, number][] = [
           [
-            speaking
-              ? 0.72 + 0.28 * Math.abs(Math.sin(ph * 0.45 + i * 1.7))
-              : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.16 + i * 1.7)),
+            speaking ? 1 : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.16 + i * 1.7)),
             -1,
+            bandAt((i / Math.max(1, n - 1)) * 0.5),
           ],
           [
-            speaking
-              ? 0.72 + 0.28 * Math.abs(Math.sin(ph * 0.37 + i * 2.3 + 2.1))
-              : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.13 + i * 2.3 + 2.1)),
+            speaking ? 1 : 0.5 + 0.5 * Math.abs(Math.sin(ph * 0.13 + i * 2.3 + 2.1)),
             1,
+            bandAt(0.5 + (i / Math.max(1, n - 1)) * 0.5),
           ],
         ];
-        for (const [shimmer, dir] of lobes) {
+        for (const [shimmer, dir, bv] of lobes) {
           const amp = speaking
-            ? Math.min(1, (0.05 + lvl * 1.5) * profile) * shimmer
+            ? Math.min(1, (0.05 + 0.4 * lvl + 1.1 * bv) * profile) * shimmer
             : (energy * profile + 0.07) * shimmer;
           // At rest with idle animation OFF, both lobes collapse to small
           // dots hugging the baseline (height == width → circle).
@@ -553,11 +612,17 @@ export function drawOrb(
       ctx.lineWidth = Math.max(2, size * 0.018);
       for (let i = 0; i < N; i++) {
         const a = (i / N) * Math.PI * 2 - Math.PI / 2;
-        const band = 0.35 + 0.65 * Math.abs(Math.sin(ph * 0.17 + i * 2.4));
+        // Speaking: the crown is the REAL spectrum, mirrored left/right —
+        // bass at the top, sibilance at the bottom. Idle keeps the shimmer.
+        const pos = i / N;
+        const mir = pos <= 0.5 ? pos * 2 : (1 - pos) * 2;
+        const band = speaking
+          ? 0.25 + 0.75 * bandAt(mir)
+          : 0.35 + 0.65 * Math.abs(Math.sin(ph * 0.17 + i * 2.4));
         const len = idleStill
           ? size * 0.012
           : speaking
-            ? size * (0.015 + lvl * 0.23 * band)
+            ? size * (0.015 + (0.06 * lvl + 0.2 * bandAt(mir)))
             : size * 0.1 * energy * band + size * 0.01;
         ctx.strokeStyle = hexA(base, 0.45 + 0.5 * band);
         ctx.beginPath();
@@ -764,6 +829,401 @@ export function drawOrb(
       ctx.fillStyle = hexA(base, 0.95);
       ctx.beginPath();
       ctx.arc(cx, cy, dotR * 0.5 * (1 + energy * 0.3), 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "nebula": {
+      // ★ Nebula — a slowly rotating spiral galaxy of ~110 additively-blended
+      // particles on a tilted disc. Each particle rides the REAL band its
+      // radius maps to (core = bass … rim = sibilance), so vowels make the
+      // heart glow while consonants sparkle through the outer arms; a voice
+      // onset sends a soft shockwave ring through the disc.
+      if (an.parts.length === 0) {
+        // Deterministic layout (LCG, no Math.random) so resume/preview repeat.
+        let seed = 7;
+        const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+        for (let i = 0; i < 110; i++) {
+          const d = 0.1 + 0.9 * Math.pow(rnd(), 0.72); // denser towards the core
+          an.parts.push({
+            d,
+            a0: (i % 3) * ((Math.PI * 2) / 3) + d * 2.7 + rnd() * 0.55, // 3 log-spiral arms
+            sz: 0.55 + rnd() * 1.15,
+            v: 0.55 + rnd() * 0.85,
+          });
+        }
+      }
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.93, onset ? Math.min(1, 0.4 + lvl * 0.6) : 0);
+      if (!idleStill && onset && frame % 7 === 0) {
+        rings.push({ r: size * 0.08, a0: 0.28 + lvl * 0.35 });
+      }
+      const tilt = -0.35;
+      const ct = Math.cos(tilt);
+      const stl = Math.sin(tilt);
+      const disc = (x: number, y: number): [number, number] => [
+        cx + x * ct - y * 0.6 * stl,
+        cy + x * stl + y * 0.6 * ct,
+      ];
+      const prevOp = ctx.globalCompositeOperation;
+      ctx.globalCompositeOperation = "lighter";
+      // shockwave rings ripple outwards through the disc
+      for (let i = rings.length - 1; i >= 0; i--) {
+        const ring = rings[i];
+        ring.r += size * 0.006 * sp;
+        const p = ring.r / (size * 0.5);
+        if (p >= 1) {
+          rings.splice(i, 1);
+          continue;
+        }
+        ctx.strokeStyle = hexA(base, ring.a0 * (1 - p) * (1 - p));
+        ctx.lineWidth = Math.max(1, size * 0.008);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, ring.r, ring.r * 0.6, tilt, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const R = size * 0.46;
+      const spin = ph * 0.006;
+      for (const p of an.parts) {
+        const bv = speaking ? bandAt(p.d) : 0;
+        const glow = speaking ? 0.16 + bv * 0.95 : 0.18 + energy * 0.42;
+        const rr = R * p.d * (1 + an.pulse * 0.14 * (1 - p.d) + bv * 0.08);
+        const a = p.a0 + spin * p.v;
+        const [x, y] = disc(Math.cos(a) * rr, Math.sin(a) * rr);
+        const pr = Math.max(0.6, size * 0.008 * p.sz * (0.8 + bv * 0.7));
+        ctx.fillStyle = hexA(base, Math.min(0.85, glow));
+        ctx.beginPath();
+        ctx.arc(x, y, pr, 0, Math.PI * 2);
+        ctx.fill();
+        // bright particles get a soft halo — cheap two-draw bloom
+        if (glow > 0.55) {
+          ctx.fillStyle = hexA(base, (glow - 0.55) * 0.35);
+          ctx.beginPath();
+          ctx.arc(x, y, pr * 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // luminous core — swells with the bass end of the spectrum
+      const bass = speaking ? bandAt(0.08) : 0;
+      const coreR = size * (0.09 + 0.05 * energy + 0.06 * bass + 0.04 * an.pulse);
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.2);
+      core.addColorStop(0, "rgba(255,255,255,0.75)");
+      core.addColorStop(0.25, hexA(base, 0.85));
+      core.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = prevOp;
+      break;
+    }
+    case "ferro": {
+      // ★ Ferrofluid — a liquid-metal bead whose surface is displaced by the
+      // REAL spectrum: low bands roll broad slow lobes, upper bands raise
+      // sharp magnet-spikes (|sin|³ keeps them needle-like), and a voice
+      // onset shivers the whole surface. Glossy gradient + rim light + double
+      // specular sell the liquid.
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.45 + lvl * 0.55) : 0);
+      const bass = bandAt(0.08);
+      const treb = (an.bandEnv[12] + an.bandEnv[13] + an.bandEnv[14] + an.bandEnv[15]) / 4;
+      const R = dotR * (1.4 + energy * 0.5 + bass * 0.45);
+      ctx.beginPath();
+      const STEPS = 120;
+      for (let i = 0; i <= STEPS; i++) {
+        const a = (i / STEPS) * Math.PI * 2;
+        let disp: number;
+        if (speaking) {
+          disp =
+            0.07 * bandAt(0.12) * Math.sin(a * 2 + ph * 0.08) +
+            0.1 * bandAt(0.35) * Math.sin(a * 3 - ph * 0.11) +
+            0.12 * bandAt(0.58) * Math.sin(a * 5 + ph * 0.15) +
+            0.13 * bandAt(0.8) * Math.sin(a * 8 - ph * 0.2) +
+            0.24 * treb * Math.pow(Math.abs(Math.sin(a * 11 + ph * 0.26)), 3) +
+            0.1 * an.pulse * Math.sin(a * 6 + ph * 0.3);
+        } else {
+          disp = idleStill
+            ? 0
+            : 0.05 * energy * Math.sin(a * 3 + ph * 0.09) +
+              0.03 * energy * Math.sin(a * 5 - ph * 0.12);
+        }
+        const rr = R * (1 + disp);
+        const x = cx + Math.cos(a) * rr;
+        const y = cy + Math.sin(a) * rr;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      const grad = ctx.createRadialGradient(
+        cx - R * 0.35,
+        cy - R * 0.35,
+        R * 0.08,
+        cx,
+        cy,
+        R * 1.45,
+      );
+      grad.addColorStop(0, hexA(base, 0.98));
+      grad.addColorStop(0.5, hexA(base, 0.62));
+      grad.addColorStop(0.85, hexA(base, 0.24));
+      grad.addColorStop(1, hexA(base, 0.06));
+      ctx.fillStyle = grad;
+      ctx.shadowBlur = size * (0.04 + 0.05 * energy);
+      ctx.shadowColor = base;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // rim light along the displaced surface
+      ctx.strokeStyle = hexA(base, 0.5 + 0.3 * energy);
+      ctx.lineWidth = Math.max(1, size * 0.007);
+      ctx.stroke();
+      // double specular: main gloss + a small counter-sparkle
+      ctx.fillStyle = "rgba(255,255,255,0.26)";
+      ctx.beginPath();
+      ctx.ellipse(cx - R * 0.36, cy - R * 0.42, R * 0.26, R * 0.13, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath();
+      ctx.ellipse(cx + R * 0.3, cy + R * 0.34, R * 0.1, R * 0.05, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "scope": {
+      // ★ Oscilloscope — a studio scope for the voice: the REAL level history
+      // scrolls left, so the last few seconds of speech are literally readable
+      // in the orb — syllables, pauses, emphasis. Symmetric gradient fill,
+      // glowing centre trace, live playhead dot at the newest sample.
+      const W = 96;
+      if (an.hist.length !== W) an.hist = new Array(W).fill(0);
+      if (!idleStill && frame % Math.max(1, Math.round(2 / sp)) === 0) {
+        an.hist.push(
+          speaking ? lvl : st === "idle" && v.idlePulse ? 0.03 + 0.02 * Math.sin(t * 0.05) : 0.015,
+        );
+        an.hist.shift();
+      }
+      const half = size * 0.42;
+      const hMax = size * 0.3;
+      const xAt = (i: number) => cx - half + 2 * half * (i / (W - 1));
+      // faint baseline + scope ticks
+      ctx.strokeStyle = hexA(base, 0.16);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - half, cy);
+      ctx.lineTo(cx + half, cy);
+      ctx.stroke();
+      ctx.strokeStyle = hexA(base, 0.07);
+      for (let g = 1; g <= 3; g++) {
+        const gx = cx - half + (2 * half * g) / 4;
+        ctx.beginPath();
+        ctx.moveTo(gx, cy - hMax * 0.8);
+        ctx.lineTo(gx, cy + hMax * 0.8);
+        ctx.stroke();
+      }
+      // symmetric envelope fill, faded toward the old (left) edge
+      const fade = ctx.createLinearGradient(cx - half, 0, cx + half, 0);
+      fade.addColorStop(0, hexA(base, 0));
+      fade.addColorStop(0.35, hexA(base, 0.3));
+      fade.addColorStop(1, hexA(base, 0.55));
+      ctx.fillStyle = fade;
+      ctx.beginPath();
+      for (let i = 0; i < W; i++) {
+        const y = cy - Math.max(size * 0.006, an.hist[i] * hMax);
+        i === 0 ? ctx.moveTo(xAt(i), y) : ctx.lineTo(xAt(i), y);
+      }
+      for (let i = W - 1; i >= 0; i--) {
+        ctx.lineTo(xAt(i), cy + Math.max(size * 0.006, an.hist[i] * hMax));
+      }
+      ctx.closePath();
+      ctx.fill();
+      // bright top trace with glow
+      ctx.strokeStyle = hexA(base, 0.95);
+      ctx.lineWidth = Math.max(1.4, size * 0.012);
+      ctx.shadowBlur = size * 0.04;
+      ctx.shadowColor = base;
+      ctx.beginPath();
+      for (let i = 0; i < W; i++) {
+        const y = cy - Math.max(size * 0.006, an.hist[i] * hMax);
+        i === 0 ? ctx.moveTo(xAt(i), y) : ctx.lineTo(xAt(i), y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // playhead — the "now" dot rides the newest sample
+      const nowY = cy - Math.max(size * 0.006, an.hist[W - 1] * hMax);
+      const pr = Math.max(2, size * (0.016 + 0.014 * lvl));
+      const pg = ctx.createRadialGradient(cx + half, nowY, 0, cx + half, nowY, pr * 3);
+      pg.addColorStop(0, "rgba(255,255,255,0.9)");
+      pg.addColorStop(0.35, hexA(base, 0.8));
+      pg.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(cx + half, nowY, pr * 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "prism": {
+      // ★ Prisma — a rotating hexagonal crystal: each facet is lit by its own
+      // slice of the REAL spectrum (bass facet → sibilance facet), the edges
+      // catch light with the energy, and a voice onset fires thin refraction
+      // rays from the vertices. A counter-rotating inner core adds depth.
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.91, onset ? Math.min(1, 0.45 + lvl * 0.55) : 0);
+      const R = size * (0.23 + 0.05 * energy);
+      const rot = ph * 0.008;
+      const vx: [number, number][] = [];
+      for (let i = 0; i < 6; i++) {
+        const a = rot + (i / 6) * Math.PI * 2 - Math.PI / 2;
+        vx.push([cx + Math.cos(a) * R, cy + Math.sin(a) * R]);
+      }
+      // dim base outline first — the per-facet lit edges paint OVER it, so
+      // the band-lighting stays readable instead of being overdrawn
+      ctx.strokeStyle = hexA(base, 0.28 + 0.15 * energy);
+      ctx.lineWidth = Math.max(1.2, size * 0.008);
+      ctx.shadowBlur = size * 0.03 * (0.5 + energy);
+      ctx.shadowColor = base;
+      ctx.beginPath();
+      for (let i = 0; i <= 6; i++) {
+        const [x, y] = vx[i % 6];
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      // facets — gradient wedges from the heart to each edge
+      for (let i = 0; i < 6; i++) {
+        const [x1, y1] = vx[i];
+        const [x2, y2] = vx[(i + 1) % 6];
+        const bv = speaking
+          ? bandAt(i / 5)
+          : idleStill
+            ? 0.12
+            : energy * (0.35 + 0.3 * Math.sin(ph * 0.1 + i * 1.9));
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        const fg = ctx.createLinearGradient(cx, cy, mx, my);
+        fg.addColorStop(0, hexA(base, 0.03));
+        fg.addColorStop(1, hexA(base, 0.08 + 0.72 * Math.min(1, bv)));
+        ctx.fillStyle = fg;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.closePath();
+        ctx.fill();
+        // the outer edge of a lit facet catches its band's light — this is
+        // what makes the "frequency facets" readable at a glance
+        ctx.strokeStyle = hexA(base, 0.12 + 0.85 * Math.min(1, bv));
+        ctx.lineWidth = Math.max(1.4, size * 0.011);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      // counter-rotating inner core hexagon
+      ctx.strokeStyle = hexA(base, 0.25 + 0.3 * energy);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= 6; i++) {
+        const a = -rot * 1.6 + ((i % 6) / 6) * Math.PI * 2 - Math.PI / 2;
+        const x = cx + Math.cos(a) * R * 0.45;
+        const y = cy + Math.sin(a) * R * 0.45;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      // refraction rays burst from the vertices on syllables
+      if (an.pulse > 0.06 && !idleStill) {
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 6; i++) {
+          const a = rot + (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const bv = speaking ? bandAt(i / 5) : energy * 0.5;
+          const len = size * (0.05 + 0.17 * an.pulse * (0.35 + bv));
+          ctx.strokeStyle = hexA(base, 0.65 * an.pulse);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+          ctx.lineTo(cx + Math.cos(a) * (R + len), cy + Math.sin(a) * (R + len));
+          ctx.stroke();
+        }
+      }
+      // glowing heart
+      const heart = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.42);
+      heart.addColorStop(0, "rgba(255,255,255,0.5)");
+      heart.addColorStop(0.3, hexA(base, 0.75));
+      heart.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = heart;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "spectra": {
+      // ★ Spectra — a circular REAL-spectrum analyzer: 48 rounded spokes
+      // around a breathing ring (bass at the top, mirrored down both sides to
+      // sibilance at the bottom), each with a peak-hold cap that springs up
+      // and sinks back — the classic high-end visualizer, tuned to voice.
+      const N = 48;
+      if (an.caps.length !== N) an.caps = new Array(N).fill(0);
+      const r0 = size * 0.2;
+      const maxLen = size * 0.2;
+      ctx.strokeStyle = hexA(base, 0.14);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r0 * 0.93, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineCap = "round";
+      for (let i = 0; i < N; i++) {
+        const a = -Math.PI / 2 + (i / N) * Math.PI * 2 + ph * 0.004;
+        const pos = i / N;
+        const mir = pos <= 0.5 ? pos * 2 : (1 - pos) * 2;
+        const bv = speaking
+          ? bandAt(mir)
+          : idleStill
+            ? 0
+            : energy * (0.22 + 0.3 * Math.abs(Math.sin(ph * 0.11 + i * 1.3)));
+        const len = size * 0.012 + maxLen * Math.min(1, bv);
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        ctx.lineWidth = Math.max(1.6, size * 0.014);
+        ctx.strokeStyle = hexA(base, 0.3 + 0.65 * bv);
+        ctx.beginPath();
+        ctx.moveTo(cx + ca * r0, cy + sa * r0);
+        ctx.lineTo(cx + ca * (r0 + len), cy + sa * (r0 + len));
+        ctx.stroke();
+        // short inner mirror of each spoke — the crown reads on both sides
+        ctx.strokeStyle = hexA(base, 0.14 + 0.3 * bv);
+        ctx.lineWidth = Math.max(1.2, size * 0.01);
+        ctx.beginPath();
+        ctx.moveTo(cx + ca * (r0 * 0.86), cy + sa * (r0 * 0.86));
+        ctx.lineTo(cx + ca * (r0 * 0.86 - len * 0.3), cy + sa * (r0 * 0.86 - len * 0.3));
+        ctx.stroke();
+        // peak-hold cap: springs with the band, sinks back (fast enough to
+        // hug the crown — slower and the dots read as scattered noise)
+        an.caps[i] = idleStill ? len : Math.max(an.caps[i] - size * 0.0058 * sp, len);
+        if (!idleStill && an.caps[i] > len + size * 0.015) {
+          ctx.fillStyle = hexA(base, 0.42);
+          ctx.beginPath();
+          ctx.arc(
+            cx + ca * (r0 + an.caps[i] + size * 0.012),
+            cy + sa * (r0 + an.caps[i] + size * 0.012),
+            Math.max(1, size * 0.007),
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
+      }
+      ctx.lineCap = "butt";
+      // breathing core that follows the voice level
+      const coreR = dotR * (0.75 + energy * 0.45);
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 1.9);
+      core.addColorStop(0, hexA(base, 0.95));
+      core.addColorStop(0.55, hexA(base, 0.35));
+      core.addColorStop(1, hexA(base, 0));
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR * 1.9, 0, Math.PI * 2);
       ctx.fill();
       break;
     }

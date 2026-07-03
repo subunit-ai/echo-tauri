@@ -912,6 +912,22 @@ pub fn mic_level(state: State<'_, AppState>) -> f32 {
     state.recorder.level()
 }
 
+/// Level + real 16-band voice spectrum in one call — the orb's per-frame food.
+/// One IPC round-trip instead of two; bands are all-zero when not recording.
+#[derive(Clone, serde::Serialize)]
+pub struct MicFeatures {
+    pub level: f32,
+    pub bands: Vec<f32>,
+}
+
+#[tauri::command]
+pub fn mic_features(state: State<'_, AppState>) -> MicFeatures {
+    MicFeatures {
+        level: state.recorder.level(),
+        bands: crate::recorder::band_levels().to_vec(),
+    }
+}
+
 #[tauri::command]
 pub fn start_recording(app: AppHandle) {
     do_start(&app);

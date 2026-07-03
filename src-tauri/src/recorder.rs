@@ -20,6 +20,125 @@ use parking_lot::Mutex;
 /// dictation; long-form meeting capture (M3) will stream to disk instead.
 const MAX_RECORD_SECONDS: usize = 1800;
 
+/// Number of spectral bands published for the orb visualizers (log-spaced over
+/// the voice range). Kept small: it crosses the IPC boundary ~30×/s.
+pub const BAND_COUNT: usize = 16;
+/// Lowest / highest band centre frequency (Hz). 85 Hz ≈ male fundamental,
+/// 6.8 kHz ≈ sibilance — together they cover where a voice actually lives.
+const BAND_F_LO: f32 = 85.0;
+const BAND_F_HI: f32 = 6800.0;
+
+// Per-band levels (0..1, f32 bits), published by the analyzer at each hop and
+// read by the `mic_features` command. Statics mirror the REACT_* pattern below:
+// there is exactly one Recorder per app.
+static BAND_LEVELS: [AtomicU32; BAND_COUNT] = [const { AtomicU32::new(0) }; BAND_COUNT];
+
+/// Current per-band spectrum (0..1 each), zeroed when not recording.
+pub fn band_levels() -> [f32; BAND_COUNT] {
+    let mut out = [0f32; BAND_COUNT];
+    for (i, b) in BAND_LEVELS.iter().enumerate() {
+        out[i] = f32::from_bits(b.load(Ordering::Relaxed));
+    }
+    out
+}
+
+fn clear_bands() {
+    for b in &BAND_LEVELS {
+        b.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Sliding-window Goertzel spectrum analyzer feeding [`BAND_LEVELS`].
+///
+/// Why Goertzel instead of an FFT dependency: we only need 16 log-spaced voice
+/// bands, and 16 single-bin Goertzel passes over a ~40 ms window are a few µs of
+/// work per 20 ms hop — cheap enough to run inline on the audio callback without
+/// pulling in rustfft. The window is Hann-weighted so band energy is stable
+/// (no leakage flicker), and the whole analysis is gated by the same noise
+/// floor as the scalar VU so idle hiss never lights the orb.
+struct Analyzer {
+    ring: Vec<f32>,
+    pos: usize,
+    until_hop: usize,
+    hop_len: usize,
+    coeffs: [f32; BAND_COUNT],
+    hann: Vec<f32>,
+}
+
+impl Analyzer {
+    fn new(sample_rate: u32) -> Self {
+        let sr = sample_rate.max(8000) as f32;
+        // ~40 ms window (freq resolution ≈ 25 Hz), ~20 ms hop → 50 spectra/s,
+        // comfortably above the UI's ~30 Hz poll.
+        let win = ((sr * 0.04) as usize).clamp(512, 4096);
+        let mut coeffs = [0f32; BAND_COUNT];
+        for (i, c) in coeffs.iter_mut().enumerate() {
+            let f = BAND_F_LO * (BAND_F_HI / BAND_F_LO).powf(i as f32 / (BAND_COUNT - 1) as f32);
+            let f = f.min(sr * 0.45); // never above (near) Nyquist
+            *c = 2.0 * (2.0 * std::f32::consts::PI * f / sr).cos();
+        }
+        let hann: Vec<f32> = (0..win)
+            .map(|j| 0.5 - 0.5 * (2.0 * std::f32::consts::PI * j as f32 / (win - 1) as f32).cos())
+            .collect();
+        Self {
+            ring: vec![0.0; win],
+            pos: 0,
+            until_hop: win / 2,
+            hop_len: win / 2,
+            coeffs,
+            hann,
+        }
+    }
+
+    /// Push one mono sample; publishes a fresh spectrum every hop.
+    fn feed(&mut self, s: f32) {
+        self.ring[self.pos] = s;
+        self.pos = (self.pos + 1) % self.ring.len();
+        self.until_hop -= 1;
+        if self.until_hop == 0 {
+            self.until_hop = self.hop_len;
+            let bands = self.analyze();
+            for (i, b) in bands.iter().enumerate() {
+                BAND_LEVELS[i].store(b.to_bits(), Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// One spectrum over the current window: Goertzel power per band → dB →
+    /// 0..1 with a gentle high-frequency tilt (voices roll off with frequency;
+    /// without the tilt the upper bands would never visibly move).
+    fn analyze(&self) -> [f32; BAND_COUNT] {
+        let win = self.ring.len();
+        let mut out = [0f32; BAND_COUNT];
+        // Same gate as the scalar VU: true silence keeps the spectrum at rest.
+        let noise_floor = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
+        let mut sum_sq = 0f32;
+        for &s in &self.ring {
+            sum_sq += s * s;
+        }
+        if (sum_sq / win as f32).sqrt() < noise_floor {
+            return out;
+        }
+        for (bi, coeff) in self.coeffs.iter().enumerate() {
+            let (mut s1, mut s2) = (0f32, 0f32);
+            for j in 0..win {
+                let x = self.ring[(self.pos + j) % win] * self.hann[j];
+                let s0 = x + coeff * s1 - s2;
+                s2 = s1;
+                s1 = s0;
+            }
+            let power = (s1 * s1 + s2 * s2 - coeff * s1 * s2).max(0.0);
+            // Hann coherent gain is 0.5 → a full-scale sine peaks the bin at
+            // win/4; normalising by that makes `amp` ≈ the sine's amplitude.
+            let amp = power.sqrt() / (win as f32 * 0.25);
+            let db = 20.0 * (amp + 1e-6).log10();
+            let tilt = 14.0 * (bi as f32 / (BAND_COUNT - 1) as f32);
+            out[bi] = (((db + tilt) + 54.0) / 42.0).clamp(0.0, 1.0).powf(0.8);
+        }
+        out
+    }
+}
+
 pub struct Capture {
     pub samples: Vec<f32>,
     pub sample_rate: u32,
@@ -181,6 +300,7 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
             Cmd::Stop(reply) => {
                 recording.store(false, Ordering::Relaxed);
                 level.store(0, Ordering::Relaxed);
+                clear_bands();
                 match active.take() {
                     Some((stream, buf, sr)) => {
                         drop(stream); // halt capture + release the mic (coreaudio
@@ -247,6 +367,10 @@ fn build_stream(
     let fmt = supported.sample_format();
     let config: cpal::StreamConfig = supported.into();
     let buf = Arc::new(Mutex::new(Vec::<f32>::new()));
+    // Fresh spectrum analyzer per stream (window sized to the device rate);
+    // stale bands from a previous session are cleared right away.
+    clear_bands();
+    let analyzer = Arc::new(Mutex::new(Analyzer::new(sample_rate)));
     // Hard cap so a forgotten (toggle) recording can't exhaust memory. Long-form
     // meeting capture (M3) will stream to disk instead.
     let max_samples = sample_rate as usize * MAX_RECORD_SECONDS;
@@ -254,33 +378,33 @@ fn build_stream(
 
     let stream = match fmt {
         cpal::SampleFormat::F32 => {
-            let (b, l) = (buf.clone(), level.clone());
+            let (b, l, a) = (buf.clone(), level.clone(), analyzer.clone());
             device.build_input_stream(
                 &config,
-                move |data: &[f32], _| ingest(data, channels, max_samples, &b, &l),
+                move |data: &[f32], _| ingest(data, channels, max_samples, &b, &l, &a),
                 err_fn,
                 None,
             )?
         }
         cpal::SampleFormat::I16 => {
-            let (b, l) = (buf.clone(), level.clone());
+            let (b, l, a) = (buf.clone(), level.clone(), analyzer.clone());
             device.build_input_stream(
                 &config,
                 move |data: &[i16], _| {
                     let f: Vec<f32> = data.iter().map(|s| *s as f32 / 32768.0).collect();
-                    ingest(&f, channels, max_samples, &b, &l);
+                    ingest(&f, channels, max_samples, &b, &l, &a);
                 },
                 err_fn,
                 None,
             )?
         }
         cpal::SampleFormat::U16 => {
-            let (b, l) = (buf.clone(), level.clone());
+            let (b, l, a) = (buf.clone(), level.clone(), analyzer.clone());
             device.build_input_stream(
                 &config,
                 move |data: &[u16], _| {
                     let f: Vec<f32> = data.iter().map(|s| (*s as f32 - 32768.0) / 32768.0).collect();
-                    ingest(&f, channels, max_samples, &b, &l);
+                    ingest(&f, channels, max_samples, &b, &l, &a);
                 },
                 err_fn,
                 None,
@@ -317,10 +441,14 @@ fn ingest(
     max: usize,
     buf: &Arc<Mutex<Vec<f32>>>,
     level: &Arc<AtomicU32>,
+    analyzer: &Arc<Mutex<Analyzer>>,
 ) {
     let mut sum_sq = 0f32;
     let n;
     {
+        // Lock order: analyzer → buf (only place both are held; band reads go
+        // through atomics, so nothing else ever takes the analyzer lock).
+        let mut an = analyzer.lock();
         let mut guard = buf.lock();
         let capped = guard.len() >= max;
         if channels <= 1 {
@@ -329,6 +457,7 @@ fn ingest(
             }
             for &s in data {
                 sum_sq += s * s;
+                an.feed(s);
             }
             n = data.len();
         } else {
@@ -346,6 +475,7 @@ fn ingest(
                     guard.push(m);
                 }
                 sum_sq += m * m;
+                an.feed(m);
             }
             n = frames;
         }
@@ -371,5 +501,50 @@ pub fn list_input_devices() -> Vec<String> {
     match host.input_devices() {
         Ok(devs) => devs.filter_map(|d| d.name().ok()).collect(),
         Err(_) => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: f32 = 48_000.0;
+
+    /// Centre frequency of band `i` — mirrors `Analyzer::new`.
+    fn band_freq(i: usize) -> f32 {
+        BAND_F_LO * (BAND_F_HI / BAND_F_LO).powf(i as f32 / (BAND_COUNT - 1) as f32)
+    }
+
+    fn analyze_sine(freq: f32, amp: f32) -> [f32; BAND_COUNT] {
+        let mut an = Analyzer::new(SR as u32);
+        let win = an.ring.len();
+        for i in 0..win {
+            an.ring[an.pos] = amp * (2.0 * std::f32::consts::PI * freq * i as f32 / SR).sin();
+            an.pos = (an.pos + 1) % win;
+        }
+        an.analyze()
+    }
+
+    #[test]
+    fn sine_lights_its_own_band() {
+        // A sine exactly on band 5's centre must dominate the spectrum there.
+        let out = analyze_sine(band_freq(5), 0.25);
+        let max_i = (0..BAND_COUNT).max_by(|&a, &b| out[a].total_cmp(&out[b])).unwrap();
+        assert_eq!(max_i, 5, "expected band 5 to peak, spectrum: {out:?}");
+        assert!(out[5] > 0.6, "on-centre band too weak: {}", out[5]);
+        assert!(out[0] < out[5] * 0.6 && out[15] < out[5] * 0.6, "spectrum not selective: {out:?}");
+    }
+
+    #[test]
+    fn silence_stays_dark() {
+        let out = analyze_sine(band_freq(8), 0.0);
+        assert!(out.iter().all(|&b| b == 0.0), "silence lit bands: {out:?}");
+    }
+
+    #[test]
+    fn below_noise_floor_is_gated() {
+        // Amplitude well under the default 0.01 RMS gate → fully dark.
+        let out = analyze_sine(band_freq(8), 0.005);
+        assert!(out.iter().all(|&b| b == 0.0), "sub-gate signal lit bands: {out:?}");
     }
 }
