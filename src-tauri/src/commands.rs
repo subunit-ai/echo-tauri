@@ -415,6 +415,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 log::info!("transcribe: server cleanup unavailable (subscription limit) — pasting raw, skipping retry");
                 result.text
             }
+            // This take came from the cloud→local fallback — the cloud is down
+            // RIGHT NOW, so a separate /v1/cleanup call would only stall the
+            // paste on a second doomed request. Deliver the local text as-is.
+            _ if result.quality_mode == "local-fallback" => {
+                log::info!("transcribe: local fallback — skipping cloud cleanup, pasting raw");
+                result.text
+            }
             _ if cfg.cleanup_enabled && style != "raw" => {
                 crate::cleanup::maybe_cleanup(&cfg, &result.text, &style)
             }

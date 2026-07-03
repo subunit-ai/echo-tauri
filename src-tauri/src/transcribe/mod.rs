@@ -206,20 +206,33 @@ fn local_fallback(
 ) -> Option<TranscriptResult> {
     #[cfg(feature = "local-whisper")]
     {
-        if !crate::models::is_downloaded(&cfg.local_model) {
+        // Use the configured model when it's on disk, otherwise ANY downloaded
+        // model (best first) — previously an undownloaded `local_model` killed
+        // the fallback even when another model was sitting right there.
+        let model = if crate::models::is_downloaded(&cfg.local_model) {
+            cfg.local_model.clone()
+        } else if let Some(m) = crate::models::best_downloaded() {
+            m
+        } else {
             log::warn!(
-                "cloud failed ({}) and local model `{}` is not downloaded — no fallback",
-                cloud_err.code,
-                cfg.local_model
+                "cloud failed ({}) and no local model is downloaded — no fallback",
+                cloud_err.code
             );
             return None;
-        }
+        };
         log::warn!(
             "cloud failed ({}: {}) — falling back to local model `{}`",
             cloud_err.code,
             cloud_err.message,
-            cfg.local_model
+            model
         );
+        // local::run reads cfg.local_model — hand it the resolved model without
+        // touching the user's saved config (one-shot, this take only).
+        let cfg = Config {
+            local_model: model,
+            ..cfg.clone()
+        };
+        let cfg = &cfg;
         let t_stt = std::time::Instant::now();
         match local::run(cfg, samples, sample_rate, want_segments) {
             Ok(mut r) => {
