@@ -225,29 +225,31 @@ pub fn run() {
                     }
                 }
 
-                // One-time seed of the per-account stats table from the legacy
-                // global counters, so users upgrading from pre-stats builds keep
-                // their historical numbers (attributed to whichever account is
-                // active at upgrade — once, guarded by `stats_seeded`). Words/chars
-                // are backfilled from the retained history; exact from here on.
+                // Seed / repair the per-account stats table from the legacy global
+                // counters, so users upgrading from pre-stats builds keep their
+                // historical numbers (attributed to whichever account is active at
+                // upgrade). Versioned so a changed seed heals already-seeded
+                // installs: v1 backfilled historical words from the tiny retained
+                // history window → inconsistent with lifetime audio → "time saved"
+                // clamped to 0; v2 estimates historical words from the audio total.
+                const STATS_SEED_VERSION: i32 = 2;
                 {
                     let mut c = st.config.lock();
-                    if !c.stats_seeded {
+                    if c.stats_seed_version < STATS_SEED_VERSION {
                         let account = crate::presets::account_key(&c);
-                        let (words, chars) = store::history_word_char_sum();
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map(|d| d.as_secs() as i64)
                             .unwrap_or(0);
-                        store::seed_account_stats(
+                        store::seed_or_repair_account_stats(
                             &account,
                             c.total_transcriptions,
                             c.total_audio_seconds,
-                            words,
-                            chars,
+                            crate::commands::SPEAKING_WPM_ESTIMATE,
                             now,
                         );
                         c.stats_seeded = true;
+                        c.stats_seed_version = STATS_SEED_VERSION;
                         let _ = c.save();
                     }
                 }

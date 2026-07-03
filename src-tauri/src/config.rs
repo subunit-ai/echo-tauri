@@ -296,6 +296,12 @@ pub struct Config {
     /// seed run yet? Set true after the first post-upgrade startup so the historical
     /// totals are attributed to one account exactly once (never double-counted).
     pub stats_seeded: bool,
+    /// Seed schema version for `account_stats`. Bumped when the seed logic changes
+    /// so already-seeded installs get repaired: v1 backfilled historical words from
+    /// the tiny retained-history window → wildly inconsistent with the lifetime
+    /// audio total, which clamped "time saved" to zero. v2 estimates historical
+    /// words from the audio instead.
+    pub stats_seed_version: i32,
 }
 
 impl Default for Config {
@@ -411,6 +417,7 @@ impl Default for Config {
             total_transcriptions: 0,
             total_audio_seconds: 0.0,
             stats_seeded: false,
+            stats_seed_version: 0,
         }
     }
 }

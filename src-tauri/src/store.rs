@@ -201,23 +201,6 @@ pub fn delete_history(id: i64) {
     let _ = conn.execute("DELETE FROM history WHERE id = ?1", params![id]);
 }
 
-/// Sum of whitespace-word and character counts across the retained history rows.
-/// Used once, at seed time, to backfill the `words`/`chars` figures for users
-/// upgrading from the pre-stats builds (best-effort — only covers rows still in
-/// the retention window; every dictation afterwards is counted exactly).
-pub fn history_word_char_sum() -> (i64, i64) {
-    let guard = DB.lock();
-    let Some(conn) = guard.as_ref() else { return (0, 0) };
-    let Ok(mut stmt) = conn.prepare("SELECT text FROM history") else { return (0, 0) };
-    let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) else { return (0, 0) };
-    let (mut words, mut chars) = (0i64, 0i64);
-    for t in rows.filter_map(Result::ok) {
-        words += t.split_whitespace().count() as i64;
-        chars += t.chars().count() as i64;
-    }
-    (words, chars)
-}
-
 // ---- Per-account usage stats (Home dashboard — real, account-scoped, lifetime) ----
 //
 // Partitioned by the same `account` key as orb profiles (workspace → email →
@@ -259,26 +242,53 @@ pub fn get_account_stats(account: &str) -> (i64, f64, i64, i64) {
     .unwrap_or((0, 0.0, 0, 0))
 }
 
-/// One-time seed of an account's row from the legacy global config counters, so
-/// upgrading users keep their historical numbers instead of resetting to zero.
-/// `INSERT OR IGNORE` — a no-op if the account already has a row (e.g. a
-/// dictation already created it), so it can never double-count.
-pub fn seed_account_stats(
+/// Seed (or repair) an account's stats from the legacy global counters. Pre-stats
+/// builds never tracked words, so the historical word count is *estimated* from
+/// the audio total at an average speaking rate — the only figure consistent with
+/// the (real) lifetime audio, so "time saved" reflects the real history instead of
+/// clamping to zero. Every dictation from here on contributes its exact word count.
+///
+/// Idempotent by design: a fresh account is inserted with the estimate; an
+/// already-seeded account only has its `words`/`chars` re-estimated from whatever
+/// audio it holds now — `transcriptions` and `audio_seconds` are preserved, so a
+/// repair pass can never double-count real accumulated usage.
+pub fn seed_or_repair_account_stats(
     account: &str,
     transcriptions: i64,
     audio_seconds: f64,
-    words: i64,
-    chars: i64,
+    speaking_wpm: f64,
     now: i64,
 ) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
-    let _ = conn.execute(
-        "INSERT OR IGNORE INTO account_stats
-            (account, transcriptions, audio_seconds, words, chars, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![account, transcriptions.max(0), audio_seconds.max(0.0), words.max(0), chars.max(0), now],
-    );
+    let est = |secs: f64| ((secs.max(0.0)) / 60.0 * speaking_wpm).round() as i64;
+    let existing: Option<f64> = conn
+        .query_row(
+            "SELECT audio_seconds FROM account_stats WHERE account = ?1",
+            params![account],
+            |r| r.get(0),
+        )
+        .ok();
+    let r = match existing {
+        None => {
+            let w = est(audio_seconds);
+            conn.execute(
+                "INSERT INTO account_stats (account, transcriptions, audio_seconds, words, chars, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![account, transcriptions.max(0), audio_seconds.max(0.0), w, w * 6, now],
+            )
+        }
+        Some(aud) => {
+            let w = est(aud);
+            conn.execute(
+                "UPDATE account_stats SET words = ?2, chars = ?3, updated_at = ?4 WHERE account = ?1",
+                params![account, w, w * 6, now],
+            )
+        }
+    };
+    if let Err(e) = r {
+        log::warn!("store: account_stats seed/repair failed: {e}");
+    }
 }
 
 pub fn clear_history() {
@@ -725,7 +735,7 @@ mod tests {
         assert!(ids.contains("p1") && ids.contains("p3")); // server p1 + local-dirty p3
         assert!(!ids.contains("p2")); // synced+deleted, not on server → gone
 
-        // Account stats: per-account accumulation + isolation, seed-once semantics.
+        // Account stats: per-account accumulation + isolation.
         assert_eq!(get_account_stats("em:a"), (0, 0.0, 0, 0)); // none yet
         bump_account_stats("em:a", 5.0, 3, 20, 1000);
         bump_account_stats("em:a", 7.5, 4, 25, 1001);
@@ -734,12 +744,19 @@ mod tests {
         assert_eq!((n, w, c), (2, 7, 45)); // 1+1, 3+4, 20+25
         assert!((secs - 12.5).abs() < 1e-9);
         assert_eq!(get_account_stats("em:b"), (1, 2.0, 1, 6)); // isolated
-        // Seed is a no-op once a row exists (never double-counts a live account)…
-        seed_account_stats("em:a", 999, 999.0, 999, 999, 2000);
-        assert_eq!(get_account_stats("em:a").0, 2);
-        // …but seeds a fresh account's historical totals from config.
-        seed_account_stats("em:c", 10, 100.0, 50, 300, 2000);
-        assert_eq!(get_account_stats("em:c"), (10, 100.0, 50, 300));
+        // Seed a FRESH account: no row yet → historical words are ESTIMATED from
+        // the audio total (120s @ 130 wpm = 260 words), transcriptions/audio kept.
+        seed_or_repair_account_stats("em:seed", 10, 120.0, 130.0, 2000);
+        let (sn, saud, sw, sc) = get_account_stats("em:seed");
+        assert_eq!((sn, sw, sc), (10, 260, 260 * 6));
+        assert!((saud - 120.0).abs() < 1e-9);
+        // REPAIR an existing (mis-seeded) row: words re-estimated from ITS own
+        // audio; transcriptions + audio preserved (never double-counted).
+        seed_or_repair_account_stats("em:a", 999, 999.0, 130.0, 3000);
+        let (rn, raud, rw, _) = get_account_stats("em:a");
+        assert_eq!(rn, 2); // transcriptions untouched by repair
+        assert!((raud - 12.5).abs() < 1e-9); // audio untouched
+        assert_eq!(rw, (12.5 / 60.0 * 130.0f64).round() as i64); // words = est(existing audio) = 27
 
         let _ = std::fs::remove_file(&path);
     }

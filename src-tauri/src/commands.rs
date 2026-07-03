@@ -691,6 +691,12 @@ pub fn history_count() -> i64 {
 /// is a widely cited average, so the figure reads as credible, not inflated.
 const TYPING_WPM: f64 = 40.0;
 
+/// Average speaking rate (words per minute), used ONLY to estimate the word count
+/// of dictations recorded by pre-stats builds (which never stored words), so the
+/// historical "time saved" is consistent with the real lifetime audio. Every new
+/// dictation contributes its exact counted words instead of this estimate.
+pub const SPEAKING_WPM_ESTIMATE: f64 = 130.0;
+
 /// Real "time saved" by dictating instead of typing: the seconds it would take
 /// to TYPE `words` at [`TYPING_WPM`], minus the seconds actually spent speaking.
 /// Clamped at zero (a tiny clip with almost no words can't cost more than it
