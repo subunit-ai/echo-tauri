@@ -11,6 +11,7 @@ import {
   type VocabEntry,
 } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
+import { Toggle } from "../components/Toggle";
 
 const CATS = ["Person", "Company", "Tech", "Place", "Other"];
 
@@ -172,10 +173,30 @@ export function Vocabulary() {
     setDraft(null);
   };
 
+  const enabled = config.vocab_enabled;
+
   return (
     <div>
       <h1 className="section-title">{t("vocab.title")}</h1>
       <p className="section-sub">{t("vocab.subtitle")}</p>
+
+      {/* Master switch — decoupled from cleanup. On = replacements apply on every
+          path (streaming + batch, cleanup on or off); off = Whisper gets no bias
+          and no post-replace runs at all. */}
+      <div
+        className="card"
+        style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}
+      >
+        <div style={{ flex: 1 }}>
+          <div className="name">{t("vocab.enabledTitle")}</div>
+          <p className="section-sub" style={{ margin: "2px 0 0" }}>
+            {t("vocab.enabledSub")}
+          </p>
+        </div>
+        <Toggle checked={enabled} onChange={(v) => patch({ vocab_enabled: v })} />
+      </div>
+
+      <div style={{ opacity: enabled ? 1 : 0.45, pointerEvents: enabled ? "auto" : "none" }}>
       <AutoVocab />
       <div className="card">
         <table className="vocab">
@@ -256,6 +277,7 @@ export function Vocabulary() {
             {t("common.save")}
           </button>
         </div>
+      </div>
       </div>
     </div>
   );

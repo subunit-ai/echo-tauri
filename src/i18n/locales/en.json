@@ -247,6 +247,8 @@
   "vocab": {
     "title": "Vocabulary",
     "subtitle": "Custom terms bias Whisper and fix recurring mishearings. „Sounds like“ → becomes „written as“.",
+    "enabledTitle": "Vocabulary active",
+    "enabledSub": "Replaces your terms on every dictation — independent of whether cleanup is on or off.",
     "colSoundsLike": "Sounds like",
     "colWriteAs": "Written as",
     "colAliases": "Aliases (comma-separated)",

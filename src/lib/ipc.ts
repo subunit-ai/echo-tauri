@@ -104,6 +104,7 @@ export interface Config {
   sound_start_id: string;
   sound_paste_id: string;
 
+  vocab_enabled: boolean;
   vocabulary: VocabEntry[];
   vocabulary_default_seeded: boolean;
   dach_format_enabled: boolean;

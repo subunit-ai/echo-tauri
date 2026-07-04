@@ -247,6 +247,8 @@
   "vocab": {
     "title": "Vokabular",
     "subtitle": "Eigene Begriffe biasen Whisper und korrigieren wiederkehrende Verhörer. „Klingt wie\" → wird zu „Schreibweise\".",
+    "enabledTitle": "Vokabular aktiv",
+    "enabledSub": "Ersetzt deine Begriffe bei jedem Diktat – unabhängig davon, ob die Aufbereitung an oder aus ist.",
     "colSoundsLike": "Klingt wie",
     "colWriteAs": "Schreibweise",
     "colAliases": "Aliase (Komma-getrennt)",
