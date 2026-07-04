@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.5.68"
+version = "0.5.69"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -142,3 +142,9 @@ local-whisper-gpu = ["local-whisper", "whisper-rs/vulkan"]
 # Binaries!). OPT-IN pro Plattform: erst in Release-Builds aktivieren, wenn die
 # ort-Binaries dort CI-verifiziert sind (Win-ARM!).
 local-meet = ["local-whisper", "meet-core/embedder", "dep:md5"]
+
+[dev-dependencies]
+# E2E resume tests only: SO_LINGER(0) forces a TCP RST on drop — the "network
+# died hard" a FIN-drop can't simulate (the server's final send would still
+# succeed into a half-closed socket and nothing would get parked).
+socket2 = "0.5"
