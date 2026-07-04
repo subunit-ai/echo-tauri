@@ -600,6 +600,7 @@ export function Settings() {
                     ["light", t("settings.themeLight")],
                     ["liquid", t("settings.themeLiquid")],
                     ["dark", t("settings.themeDark")],
+                    ["black", t("settings.themeBlack")],
                   ]}
                 />
               </Row>

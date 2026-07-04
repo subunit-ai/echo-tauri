@@ -220,3 +220,55 @@
 
   color-scheme: dark;
 }
+
+/* ── Schwarz — a true no-colour dark mode: flat black, neutral greys, no aurora
+   mesh, and a monochrome (light-grey) "accent" instead of cyan. For people who
+   want zero hue. The coloured sliders (streaming pill, LOCAL/CLOUD) are also
+   neutralised to grey in app.css under this theme. */
+:root[data-theme="black"] {
+  --bg: #000000;
+  --ink: #f2f2f2;
+  --ink2: #9a9a9c;
+  --ink3: #67676a;
+
+  /* accent aliases (--accent/--accent-text/--cyan-ink…) all resolve from --cyan,
+     so making it grey turns every var-driven accent monochrome. */
+  --cyan: #e6e6e8;
+  --cyan-d: #d0d0d2;
+  --cyan-ink: #f6f6f6;
+
+  --glass: rgba(28, 28, 30, 0.72);
+  --glass2: rgba(22, 22, 24, 0.62);
+  --line: rgba(255, 255, 255, 0.09);
+  --line2: rgba(255, 255, 255, 0.14);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+  --glass-edge2: rgba(255, 255, 255, 0.14);
+  --rim: rgba(255, 255, 255, 0.08);
+  --rim-soft: rgba(255, 255, 255, 0.05);
+  --rim-cta: rgba(255, 255, 255, 0.22);
+
+  --fill-strong: rgba(38, 38, 40, 0.82);
+  --fill-focus: rgba(10, 10, 11, 0.96);
+  --fill-mid: rgba(42, 42, 44, 0.6);
+  --fill-soft: rgba(34, 34, 36, 0.6);
+  --fill-weak: rgba(30, 30, 32, 0.6);
+  --fill-ghost-hover: rgba(50, 50, 52, 0.72);
+  --menu-bg: rgba(18, 18, 20, 0.96);
+  --recap-bg: rgba(14, 14, 16, 0.96);
+  --grad-fade: rgba(14, 14, 16, 0.5);
+  --scrim: rgba(0, 0, 0, 0.7);
+
+  --shadow: 0 26px 64px -28px rgba(0, 0, 0, 0.85);
+  --shadow-sm: 0 12px 30px -18px rgba(0, 0, 0, 0.8);
+
+  --page-grad: #000000; /* flat black — no gradient */
+  --mesh1: transparent; /* no aurora blobs */
+  --mesh2: transparent;
+  --mesh3: transparent;
+
+  /* neutralise the semantic status hues toward monochrome-friendly muted tones
+     (kept just distinguishable; still no saturated colour bleeding into chrome) */
+  --bg-deep: rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}

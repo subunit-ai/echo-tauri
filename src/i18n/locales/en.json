@@ -318,6 +318,7 @@
     "themeDark": "Dark",
     "themeLight": "Light",
     "themeLiquid": "Liquid Glass",
+    "themeBlack": "Black",
     "glassStrength": "Glass strength",
     "glassStrengthHint": "How strong the frosted-glass effect is — Off = flat, no blur.",
     "glassOff": "Off",

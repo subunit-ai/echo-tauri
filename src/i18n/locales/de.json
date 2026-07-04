@@ -318,6 +318,7 @@
     "themeDark": "Dunkel",
     "themeLight": "Hell",
     "themeLiquid": "Liquid Glass",
+    "themeBlack": "Schwarz",
     "glassStrength": "Glas-Stärke",
     "glassStrengthHint": "Wie stark der Milchglas-Effekt ist — Aus = flach, ohne Weichzeichnung.",
     "glassOff": "Aus",
