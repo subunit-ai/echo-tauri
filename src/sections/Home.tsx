@@ -70,7 +70,6 @@ export function Home({
       </h1>
       {who ? (
         <p className="section-sub">
-          {t("home.hotkeyLabel")}: <b>{config.hotkey}</b> ·{" "}
           {config.recording_mode === "hold" ? t("home.modeHold") : t("home.modeToggle")}
         </p>
       ) : (
@@ -78,7 +77,7 @@ export function Home({
           <button className="linklike" onClick={onOpenAccount}>
             {t("home.addName")}
           </button>{" "}
-          · {t("home.hotkeyLabel")}: <b>{config.hotkey}</b>
+          · {config.recording_mode === "hold" ? t("home.modeHold") : t("home.modeToggle")}
         </p>
       )}
 

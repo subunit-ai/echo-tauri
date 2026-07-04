@@ -138,7 +138,7 @@ function AccountCard({
 
   return (
     <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
-      <Avatar name={nickname || name || email} size={34} />
+      <Avatar name={nickname || name || email} size={40} />
       <span className="sa-meta">
         <span className="sa-name">{primary}</span>
         <span className="sa-sub">{secondary}</span>
