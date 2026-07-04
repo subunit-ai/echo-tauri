@@ -13,6 +13,9 @@ use crate::config::Config;
 /// real transcription — the tokens still bias spelling either way (measured:
 /// space-join yields materially fewer spurious commas). See `despam_commas`.
 pub fn vocab_prompt(cfg: &Config) -> String {
+    if !cfg.vocab_enabled {
+        return String::new();
+    }
     let mut seen = HashSet::new();
     let mut terms = Vec::new();
     for e in &cfg.vocabulary {
@@ -27,6 +30,9 @@ pub fn vocab_prompt(cfg: &Config) -> String {
 /// Post-process: replace each `sounds_like`/alias with its `write_as`
 /// (whole-word, case-insensitive) to fix persistent mishears.
 pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
+    if !cfg.vocab_enabled {
+        return text.to_string();
+    }
     // Gather every (pattern → target) pair across ALL entries, then apply the
     // longest patterns first. This is global, not per-entry, so a multi-word
     // term ("Klod Koud" → "Claude Code", "Open Claw" → "OpenClaw") wins over a
@@ -188,6 +194,27 @@ mod tests {
         // Not matching sub-word
         let result5 = apply_vocab_replace("I use Klod Kouding", &cfg);
         assert_eq!(result5, "I use Klod Kouding");
+    }
+
+    #[test]
+    fn test_vocab_disabled_is_passthrough() {
+        let mut cfg = Config::default();
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: "Sky".to_string(),
+            write_as: "SCAI".to_string(),
+            aliases: vec![],
+            category: "Company".to_string(),
+        });
+
+        // Enabled (default): the whole-word replace fires.
+        assert_eq!(apply_vocab_replace("ich nutze Sky", &cfg), "ich nutze SCAI");
+        assert_eq!(vocab_prompt(&cfg), "SCAI");
+
+        // Disabled: both the bias prompt AND the post-replace go dark, so the
+        // master toggle is authoritative on every engine path.
+        cfg.vocab_enabled = false;
+        assert_eq!(apply_vocab_replace("ich nutze Sky", &cfg), "ich nutze Sky");
+        assert_eq!(vocab_prompt(&cfg), "");
     }
 
     #[test]

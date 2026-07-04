@@ -50,6 +50,12 @@ fn default_category() -> String {
     "Other".to_string()
 }
 
+/// Serde default for opt-out bool flags: an existing config that predates the
+/// field should keep the feature ON (only an explicit user toggle turns it off).
+fn default_true() -> bool {
+    true
+}
+
 /// Bump when adding new default vocab terms/aliases that EXISTING (already-seeded)
 /// users should receive. `merge_default_vocab_updates` runs once per bump and adds
 /// only what's missing — see there. v1 = 2026-05-28 batch (Syncore/Citron/Claude
@@ -282,6 +288,13 @@ pub struct Config {
     /// One-time guard: seed the two new toggles from the legacy `sound_enabled` once.
     pub sound_split_migrated: bool,
 
+    /// Master switch for the whole vocabulary feature — Whisper bias prompt AND
+    /// the deterministic whole-word post-replace ("Sky" → "SCAI"). Independent of
+    /// `cleanup_enabled`: with this on, replacements apply on EVERY path (batch +
+    /// streaming, cleanup on or off). Old configs default to on.
+    #[serde(default = "default_true")]
+    pub vocab_enabled: bool,
+
     pub vocabulary: Vec<VocabEntry>,
     #[serde(skip)]
     pub vocab_regex_cache: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, regex::Regex>>>,
@@ -417,6 +430,7 @@ impl Default for Config {
             sound_paste_id: "standard".to_string(),
             sound_split_migrated: false,
 
+            vocab_enabled: true,
             vocabulary: Vec::new(),
             vocab_regex_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             vocabulary_default_seeded: false,
