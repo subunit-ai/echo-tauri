@@ -1,4 +1,9 @@
 {
+  "crash": {
+    "title": "Something went wrong",
+    "body": "Echo hit an unexpected error. Reloading the view usually fixes it.",
+    "reload": "Reload"
+  },
   "perm": {
     "needsAccessibility": "Auto-paste needs Accessibility access. Your text is on the clipboard — enable Echo under System Settings → Privacy & Security → Accessibility."
   },
@@ -194,6 +199,7 @@
     "statAudioMin": "Audio (min)",
     "statTimeSaved": "Time saved",
     "unitMin": "min",
+    "unitHour": "h",
     "recentHeading": "Recent",
     "emptyHistory": "No transcriptions yet — hit your hotkey and get going."
   },
@@ -369,6 +375,15 @@
     "orbPreset": "Color preset",
     "orbPresetHint": "Ready-made palettes — picking one sets all three state colors.",
     "orbPresetCustom": "Custom",
+    "orbPresets": {
+      "klassik": "Classic",
+      "aurora": "Aurora",
+      "mono": "Mono Cyan",
+      "sunset": "Sunset",
+      "smaragd": "Emerald"
+    },
+    "orbStylePrev": "Previous style",
+    "orbStyleNext": "Next style",
     "orbColorIdle": "Color — Idle",
     "orbColorIdleHint": "Resting state, waiting for input.",
     "orbColorWorking": "Color — Active",

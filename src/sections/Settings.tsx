@@ -397,11 +397,11 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
         <div className="oc-sub">{t("settings.orbConfiguratorHint")}</div>
       </div>
       <div className="oc-stage" style={{ minHeight: stageMin }}>
-        <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label="prev" title={styleLabel}>
+        <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label={t("settings.orbStylePrev")} title={styleLabel}>
           ‹
         </button>
         <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} />
-        <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label="next" title={styleLabel}>
+        <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label={t("settings.orbStyleNext")} title={styleLabel}>
           ›
         </button>
       </div>
@@ -919,7 +919,7 @@ export function Settings() {
                 value={currentPreset}
                 onChange={applyPreset}
                 options={[
-                  ...ORB_PRESETS.map((p): [string, string] => [p.key, p.label]),
+                  ...ORB_PRESETS.map((p): [string, string] => [p.key, t(`settings.orbPresets.${p.key}`)]),
                   ["custom", t("settings.orbPresetCustom")],
                 ]}
               />

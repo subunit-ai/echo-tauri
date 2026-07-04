@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./i18n"; // initialize translations before first render
+import i18n from "./i18n"; // initialize translations before first render (sync)
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -33,11 +33,8 @@ function CrashScreen({ error }: { error: unknown }) {
         color: "#e2e8f0",
       }}
     >
-      <h2 style={{ color: "#22d3ee", margin: 0 }}>Etwas ist schiefgelaufen</h2>
-      <p style={{ maxWidth: 420, opacity: 0.85, margin: 0 }}>
-        Echo ist auf einen unerwarteten Fehler gestoßen. Ein Neustart der Ansicht
-        behebt das meist.
-      </p>
+      <h2 style={{ color: "#22d3ee", margin: 0 }}>{i18n.t("crash.title")}</h2>
+      <p style={{ maxWidth: 420, opacity: 0.85, margin: 0 }}>{i18n.t("crash.body")}</p>
       <code style={{ fontSize: "0.75rem", opacity: 0.6, maxWidth: 460, wordBreak: "break-word" }}>
         {msg}
       </code>
@@ -55,7 +52,7 @@ function CrashScreen({ error }: { error: unknown }) {
           cursor: "pointer",
         }}
       >
-        Neu laden
+        {i18n.t("crash.reload")}
       </button>
     </div>
   );

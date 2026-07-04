@@ -25,9 +25,9 @@ const EMPTY_STATS: AccountStats = {
 
 /** Compact human duration for the "time saved" card: seconds → min under an
  * hour, else one-decimal hours (de-style comma applied by the caller's locale). */
-function fmtSaved(seconds: number): { value: string; unit: string } {
-  if (seconds < 3600) return { value: String(Math.round(seconds / 60)), unit: "min" };
-  return { value: (seconds / 3600).toFixed(1), unit: "h" };
+function fmtSaved(seconds: number): { value: string; unitKey: string } {
+  if (seconds < 3600) return { value: String(Math.round(seconds / 60)), unitKey: "home.unitMin" };
+  return { value: (seconds / 3600).toFixed(1), unitKey: "home.unitHour" };
 }
 
 export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
@@ -103,7 +103,7 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
           <div className="label">{t("home.statTimeSaved")}</div>
           <div className="value">
             {saved.value}
-            <span style={{ fontSize: 13, opacity: 0.6 }}> {saved.unit}</span>
+            <span style={{ fontSize: 13, opacity: 0.6 }}> {t(saved.unitKey)}</span>
           </div>
         </div>
       </div>
