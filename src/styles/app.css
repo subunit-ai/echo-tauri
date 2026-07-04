@@ -624,7 +624,9 @@ button {
   left: 6px;
   width: calc((100% - 18px) / 2);
   border-radius: 13px;
-  transition: transform 0.28s var(--ease-in-out), background 0.2s var(--ease-out),
+  /* ease-OUT starts instantly on click; ease-in-out hesitated at the start
+     which read as sluggish on a direct click. */
+  transition: transform 0.2s var(--ease-out), background 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out);
   z-index: 0;
   background: linear-gradient(180deg, #2bd6ee, #06b6d4);
@@ -670,8 +672,10 @@ button {
   padding: 4px;
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
 }
-/* Glass thumb — a floating tinted pill with a soft cyan glow + inner rim, not a
-   flat bordered box. Its width is exactly one column; translateX(idx*100%) snaps
+/* Solid, vibrant per-mode pill (same family as the LOCAL/CLOUD switch) so the
+   control reads as colourful, not a washed-out tint. Its colour + glow shift as
+   it slides — Standard = blue, Schnell = cyan, Live = violet — reusing the app's
+   existing mode palette. Width is exactly one column; translateX(idx*100%) snaps
    it to the active segment. */
 .stream-thumb {
   position: absolute;
@@ -681,17 +685,20 @@ button {
   width: calc((100% - 8px) / 3);
   border-radius: 9px;
   z-index: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 26%, transparent),
-    color-mix(in srgb, var(--accent) 14%, transparent)
-  );
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent) 55%, transparent),
-    inset 0 1px 0 var(--rim);
-  /* Glides to the segment with the same crisp on-screen-movement curve as the
-     LOCAL/CLOUD pill — strong ease-in-out, no bounce (enterprise, not playful). */
-  transition: transform 0.26s var(--ease-in-out), box-shadow 0.26s var(--ease-out);
+  background: linear-gradient(180deg, #2bd6ee, #06b6d4);
+  box-shadow: 0 4px 14px -2px rgba(6, 182, 212, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  /* ease-OUT starts instantly on click; the previous ease-in-out hesitated at
+     the start, which read as sluggish the moment the user is watching most. */
+  transition: transform 0.16s var(--ease-out), background 0.2s var(--ease-out),
+    box-shadow 0.2s var(--ease-out);
+}
+.stream-thumb.off {
+  background: linear-gradient(180deg, #5b8cff, #3b6ef0);
+  box-shadow: 0 4px 14px -2px rgba(59, 110, 240, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+.stream-thumb.live {
+  background: linear-gradient(180deg, #b18cff, #7c5cf0);
+  box-shadow: 0 4px 14px -2px rgba(124, 92, 240, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 .stream-seg {
   position: relative;
@@ -708,7 +715,8 @@ button {
   transition: color 0.2s var(--ease-out), transform 0.13s var(--ease-out);
 }
 .stream-seg.active {
-  color: var(--accent-bright);
+  /* dark ink reads crisply on the bright pill (same as the LOCAL/CLOUD segments) */
+  color: #07101f;
   font-weight: 700;
 }
 @media (hover: hover) and (pointer: fine) {
