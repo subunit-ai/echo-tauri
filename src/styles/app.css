@@ -884,6 +884,29 @@ button {
   gap: 6px;
   margin-bottom: 18px;
 }
+
+/* Section header inside a settings tab — clusters related rows so a tab reads as
+   predictable groups instead of one flat scroll (the IA fix). */
+.set-group-h {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  padding: 18px 2px 6px;
+}
+.set-group:first-child .set-group-h {
+  padding-top: 2px;
+}
+.set-group-h::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
 .sub-tab {
   background: var(--glass2);
   border: 1px solid var(--glass-edge);

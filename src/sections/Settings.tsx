@@ -36,9 +36,10 @@ import { SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
-type Tab = "general" | "transcription" | "overlay" | "account";
+type Tab = "allgemein" | "dictation" | "transcription" | "overlay" | "account";
 const TABS: { key: Tab; labelKey: string }[] = [
-  { key: "general", labelKey: "settings.tabGeneral" },
+  { key: "allgemein", labelKey: "settings.tabGeneral" },
+  { key: "dictation", labelKey: "settings.tabDictation" },
   { key: "transcription", labelKey: "settings.tabTranscription" },
   { key: "overlay", labelKey: "settings.tabOverlay" },
   { key: "account", labelKey: "settings.tabAccount" },
@@ -51,6 +52,17 @@ function Row({ name, hint, children }: { name: string; hint?: string; children: 
         <div className="name">{name}</div>
         {hint && <div className="hint">{hint}</div>}
       </div>
+      {children}
+    </div>
+  );
+}
+
+/** A titled section within a settings tab — the uppercase divider header that
+ *  clusters related rows (the IA fix: no tab used to have any grouping). */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="set-group">
+      <div className="set-group-h">{title}</div>
       {children}
     </div>
   );
@@ -433,7 +445,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
 export function Settings() {
   const { t } = useTranslation();
   const { config, patch, reload, save, savedTick } = useConfig();
-  const [tab, setTab] = useState<Tab>("general");
+  const [tab, setTab] = useState<Tab>("allgemein");
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loginErr, setLoginErr] = useState("");
@@ -577,158 +589,78 @@ export function Settings() {
       </div>
 
       <div className="card">
-        {tab === "general" && (
+        {tab === "allgemein" && (
           <>
-            <Row name={t("settings.recordingMode")} hint={t("settings.recordingModeHint")}>
-              <Sel
-                value={c.recording_mode}
-                onChange={(v) => set("recording_mode", v)}
-                options={[
-                  ["hold", t("settings.recordingModeHold")],
-                  ["toggle", t("settings.recordingModeToggle")],
-                ]}
-              />
-            </Row>
-            <Row name={t("settings.hotkey")} hint={t("settings.hotkeyHint")}>
-              <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
-            </Row>
-            <Row name={t("settings.promptHotkey")} hint={t("settings.promptHotkeyHint")}>
-              <HotkeyCapture value={c.prompt_console_hotkey} onChange={(v) => set("prompt_console_hotkey", v)} />
-            </Row>
-            <Row name={t("settings.promptAsTarget")} hint={t("settings.promptAsTargetHint")}>
-              <Toggle checked={c.prompt_console_as_target} onChange={(v) => set("prompt_console_as_target", v)} />
-            </Row>
-            <Row name={t("settings.microphone")}>
-              <Sel
-                value={c.mic_device_name || ""}
-                onChange={(v) => set("mic_device_name", v)}
-                options={[["", t("settings.micSystemDefault")], ...devices.map((d): [string, string] => [d, d])]}
-              />
-            </Row>
-            <Row name={t("settings.autoPaste")} hint={t("settings.autoPasteHint")}>
-              <Toggle checked={c.autopaste} onChange={(v) => set("autopaste", v)} />
-            </Row>
-            <Row name={t("settings.targetLock")} hint={t("settings.targetLockHint")}>
-              <Toggle checked={c.target_lock} onChange={(v) => set("target_lock", v)} />
-            </Row>
-            <Row name={t("settings.showBubble")} hint={t("settings.showBubbleHint")}>
-              <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
-            </Row>
-            <Row name={t("settings.autostart")} hint={t("settings.autostartHint")}>
-              <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
-            </Row>
-            <Row name={t("settings.soundStart")} hint={t("settings.soundStartHint")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Toggle checked={c.sound_start_enabled} onChange={(v) => set("sound_start_enabled", v)} />
+            <Group title={t("settings.secAppearance")}>
+              <Row name={t("settings.theme")}>
                 <Sel
-                  value={c.sound_start_id || "standard"}
-                  onChange={(v) => set("sound_start_id", v)}
-                  options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                  value={c.ui_theme}
+                  onChange={(v) => set("ui_theme", v)}
+                  options={[
+                    ["light", t("settings.themeLight")],
+                    ["liquid", t("settings.themeLiquid")],
+                    ["dark", t("settings.themeDark")],
+                  ]}
                 />
-                <button
-                  className="sub-tab"
-                  title={t("settings.soundPreview")}
-                  onClick={() => playSound(c.sound_start_id || "standard", "start", c.sound_volume)}
-                >
-                  ▶
-                </button>
-              </div>
-            </Row>
-            <Row name={t("settings.soundPaste")} hint={t("settings.soundPasteHint")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Toggle checked={c.sound_paste_enabled} onChange={(v) => set("sound_paste_enabled", v)} />
+              </Row>
+              <Row name={t("settings.glassStrength")} hint={t("settings.glassStrengthHint")}>
                 <Sel
-                  value={c.sound_paste_id || "standard"}
-                  onChange={(v) => set("sound_paste_id", v)}
-                  options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                  value={String(c.glass_strength ?? 2)}
+                  onChange={(v) => set("glass_strength", parseInt(v, 10))}
+                  options={[
+                    ["0", t("settings.glassOff")],
+                    ["1", t("settings.glassSubtle")],
+                    ["2", t("settings.glassStandard")],
+                    ["3", t("settings.glassStrong")],
+                  ]}
                 />
-                <button
-                  className="sub-tab"
-                  title={t("settings.soundPreview")}
-                  onClick={() => playSound(c.sound_paste_id || "standard", "paste", c.sound_volume)}
-                >
-                  ▶
-                </button>
-              </div>
-            </Row>
-            <Row name={t("settings.volume")} hint={t("settings.volumeHint")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={c.sound_volume}
-                  onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
+              </Row>
+              <Row name={t("settings.uiScale")} hint={t("settings.uiScaleHint")}>
+                <Sel
+                  value={String(Math.round((c.ui_scale ?? 1) * 100))}
+                  onChange={(v) => set("ui_scale", parseInt(v, 10) / 100)}
+                  options={[
+                    ["100", "100 %"],
+                    ["90", "90 %"],
+                    ["80", "80 %"],
+                    ["70", "70 %"],
+                    ["60", "60 %"],
+                  ]}
                 />
-                <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, fontSize: "0.8rem", opacity: 0.8 }}>
-                  {Math.round((c.sound_volume ?? 0) * 100)}%
-                </span>
-              </div>
-            </Row>
-            <Row name={t("settings.theme")}>
-              <Sel
-                value={c.ui_theme}
-                onChange={(v) => set("ui_theme", v)}
-                options={[
-                  ["light", t("settings.themeLight")],
-                  ["liquid", t("settings.themeLiquid")],
-                  ["dark", t("settings.themeDark")],
-                ]}
-              />
-            </Row>
-            <Row name={t("settings.glassStrength")} hint={t("settings.glassStrengthHint")}>
-              <Sel
-                value={String(c.glass_strength ?? 2)}
-                onChange={(v) => set("glass_strength", parseInt(v, 10))}
-                options={[
-                  ["0", t("settings.glassOff")],
-                  ["1", t("settings.glassSubtle")],
-                  ["2", t("settings.glassStandard")],
-                  ["3", t("settings.glassStrong")],
-                ]}
-              />
-            </Row>
-            <Row name={t("settings.uiScale")} hint={t("settings.uiScaleHint")}>
-              <Sel
-                value={String(Math.round((c.ui_scale ?? 1) * 100))}
-                onChange={(v) => set("ui_scale", parseInt(v, 10) / 100)}
-                options={[
-                  ["100", "100 %"],
-                  ["90", "90 %"],
-                  ["80", "80 %"],
-                  ["70", "70 %"],
-                  ["60", "60 %"],
-                ]}
-              />
-            </Row>
-            <Row name={t("settings.language")} hint={t("settings.languageHint")}>
-              <Sel
-                value={c.ui_language}
-                onChange={(v) => {
-                  setLanguage(v);
-                  set("ui_language", v);
-                }}
-                options={SUPPORTED_LANGUAGES.map((l) => [l.code, l.label])}
-              />
-            </Row>
-            <Row name={t("settings.autoUpdate")}>
-              <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
-            </Row>
-            <Row name={t("settings.updates")} hint={updateMsg}>
-              {foundUpdate ? (
-                <button className="sub-tab" onClick={doInstall} disabled={updating}>
-                  {updating ? t("settings.installing") : t("settings.installNow", { version: foundUpdate })}
-                </button>
-              ) : (
-                <button className="sub-tab" onClick={doUpdate}>
-                  {t("settings.checkForUpdates")}
-                </button>
-              )}
-            </Row>
+              </Row>
+              <Row name={t("settings.language")} hint={t("settings.languageHint")}>
+                <Sel
+                  value={c.ui_language}
+                  onChange={(v) => {
+                    setLanguage(v);
+                    set("ui_language", v);
+                  }}
+                  options={SUPPORTED_LANGUAGES.map((l) => [l.code, l.label])}
+                />
+              </Row>
+            </Group>
 
-            <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--line, rgba(255,255,255,0.08))" }}>
-              <div className="name" style={{ marginBottom: 8, opacity: 0.7 }}>{t("settings.aboutEcho")}</div>
+            <Group title={t("settings.secStartup")}>
+              <Row name={t("settings.autostart")} hint={t("settings.autostartHint")}>
+                <Toggle checked={c.autostart_enabled} onChange={toggleAutostart} />
+              </Row>
+              <Row name={t("settings.autoUpdate")}>
+                <Toggle checked={c.auto_update_check} onChange={(v) => set("auto_update_check", v)} />
+              </Row>
+              <Row name={t("settings.updates")} hint={updateMsg}>
+                {foundUpdate ? (
+                  <button className="sub-tab" onClick={doInstall} disabled={updating}>
+                    {updating ? t("settings.installing") : t("settings.installNow", { version: foundUpdate })}
+                  </button>
+                ) : (
+                  <button className="sub-tab" onClick={doUpdate}>
+                    {t("settings.checkForUpdates")}
+                  </button>
+                )}
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secAbout")}>
               <Row name={t("settings.version")} hint={ver ? t("settings.versionHint", { version: ver }) : ""}>
                 <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
               </Row>
@@ -750,81 +682,188 @@ export function Settings() {
                   {t("settings.replayIntroBtn")}
                 </button>
               </Row>
-            </div>
+            </Group>
+          </>
+        )}
+
+        {tab === "dictation" && (
+          <>
+            <Group title={t("settings.secInput")}>
+              <Row name={t("settings.recordingMode")} hint={t("settings.recordingModeHint")}>
+                <Sel
+                  value={c.recording_mode}
+                  onChange={(v) => set("recording_mode", v)}
+                  options={[
+                    ["hold", t("settings.recordingModeHold")],
+                    ["toggle", t("settings.recordingModeToggle")],
+                  ]}
+                />
+              </Row>
+              <Row name={t("settings.hotkey")} hint={t("settings.hotkeyHint")}>
+                <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
+              </Row>
+              <Row name={t("settings.microphone")}>
+                <Sel
+                  value={c.mic_device_name || ""}
+                  onChange={(v) => set("mic_device_name", v)}
+                  options={[["", t("settings.micSystemDefault")], ...devices.map((d): [string, string] => [d, d])]}
+                />
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secOutput")}>
+              <Row name={t("settings.autoPaste")} hint={t("settings.autoPasteHint")}>
+                <Toggle checked={c.autopaste} onChange={(v) => set("autopaste", v)} />
+              </Row>
+              <Row name={t("settings.targetLock")} hint={t("settings.targetLockHint")}>
+                <Toggle checked={c.target_lock} onChange={(v) => set("target_lock", v)} />
+              </Row>
+              <Row name={t("settings.promptHotkey")} hint={t("settings.promptHotkeyHint")}>
+                <HotkeyCapture value={c.prompt_console_hotkey} onChange={(v) => set("prompt_console_hotkey", v)} />
+              </Row>
+              <Row name={t("settings.promptAsTarget")} hint={t("settings.promptAsTargetHint")}>
+                <Toggle checked={c.prompt_console_as_target} onChange={(v) => set("prompt_console_as_target", v)} />
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secFeedback")}>
+              <Row name={t("settings.showBubble")} hint={t("settings.showBubbleHint")}>
+                <Toggle checked={c.show_bubble} onChange={(v) => set("show_bubble", v)} />
+              </Row>
+              <Row name={t("settings.soundStart")} hint={t("settings.soundStartHint")}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle checked={c.sound_start_enabled} onChange={(v) => set("sound_start_enabled", v)} />
+                  <Sel
+                    value={c.sound_start_id || "standard"}
+                    onChange={(v) => set("sound_start_id", v)}
+                    options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                  />
+                  <button
+                    className="sub-tab"
+                    title={t("settings.soundPreview")}
+                    onClick={() => playSound(c.sound_start_id || "standard", "start", c.sound_volume)}
+                  >
+                    ▶
+                  </button>
+                </div>
+              </Row>
+              <Row name={t("settings.soundPaste")} hint={t("settings.soundPasteHint")}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle checked={c.sound_paste_enabled} onChange={(v) => set("sound_paste_enabled", v)} />
+                  <Sel
+                    value={c.sound_paste_id || "standard"}
+                    onChange={(v) => set("sound_paste_id", v)}
+                    options={SOUND_PRESETS.map((p): [string, string] => [p.id, t(p.labelKey)])}
+                  />
+                  <button
+                    className="sub-tab"
+                    title={t("settings.soundPreview")}
+                    onClick={() => playSound(c.sound_paste_id || "standard", "paste", c.sound_volume)}
+                  >
+                    ▶
+                  </button>
+                </div>
+              </Row>
+              <Row name={t("settings.volume")} hint={t("settings.volumeHint")}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={c.sound_volume}
+                    onChange={(e) => set("sound_volume", parseFloat(e.target.value))}
+                  />
+                  <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 34, fontSize: "0.8rem", opacity: 0.8 }}>
+                    {Math.round((c.sound_volume ?? 0) * 100)}%
+                  </span>
+                </div>
+              </Row>
+            </Group>
           </>
         )}
 
         {tab === "transcription" && (
           <>
-            {/* Stacked full-width row (like the model manager below) — squeezed
-                next to the label the 3-segment switch wrapped and looked broken. */}
-            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-              <div className="meta">
-                <div className="name">{t("settings.mode")}</div>
-                <div className="hint">{t("settings.modeHint")}</div>
-              </div>
-              <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
-            </div>
-            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-              <div className="meta">
-                <div className="name">{t("settings.localModel")}</div>
-                <div className="hint">
-                  {t("settings.localModelHint")}
+            <Group title={t("settings.secEngine")}>
+              {/* Stacked full-width row (like the model manager below) — squeezed
+                  next to the label the 3-segment switch wrapped and looked broken. */}
+              <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                <div className="meta">
+                  <div className="name">{t("settings.mode")}</div>
+                  <div className="hint">{t("settings.modeHint")}</div>
                 </div>
+                <BigModeSwitch value={uiModeOf(c)} onChange={(m) => patch(patchForUiMode(m))} />
               </div>
-              <ModelManager />
-            </div>
-            <Row name={t("settings.transcriptionLanguage")} hint={t("settings.transcriptionLanguageHint")}>
-              <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
-            </Row>
-            <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
-              <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
-            </Row>
-            <Row name={t("settings.cloudQuality")} hint={t("settings.cloudQualityHint")}>
-              <Sel
-                value={c.cloud_quality_mode}
-                onChange={(v) => set("cloud_quality_mode", v)}
-                options={[
-                  ["quality", t("settings.cloudQualityQuality")],
-                  ["highest", t("settings.cloudQualityHighest")],
-                ]}
-              />
-            </Row>
-            <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-              <div className="meta">
-                <div className="name">{t("settings.streaming")}</div>
-                <div className="hint">{t("settings.streamingHint")}</div>
-              </div>
-              <StreamingSwitch
-                value={c.streaming_mode}
-                onChange={(m) => {
-                  set("streaming_mode", m);
-                  // Streaming-live already types live → clear the redundant
-                  // instant-live-typing so the two can't both be active.
-                  if (m === "live") set("instant_live_typing", false);
-                }}
-                disabled={uiModeOf(c) === "local"}
-              />
-              {c.streaming_mode === "live" && c.recording_mode === "hold" && (
-                <div className="hint" style={{ color: "var(--warn, #f59e0b)" }}>
-                  {t("settings.streamingLiveTapNote")}
+              <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                <div className="meta">
+                  <div className="name">{t("settings.localModel")}</div>
+                  <div className="hint">
+                    {t("settings.localModelHint")}
+                  </div>
                 </div>
-              )}
-            </div>
-            <Row
-              name={t("settings.instantLiveTyping")}
-              hint={
-                c.streaming_mode === "live"
-                  ? t("settings.instantLiveTypingLiveNote")
-                  : t("settings.instantLiveTypingHint")
-              }
-            >
-              <Toggle
-                checked={c.streaming_mode === "live" ? false : c.instant_live_typing}
-                disabled={c.streaming_mode === "live"}
-                onChange={(v) => set("instant_live_typing", v)}
-              />
-            </Row>
+                <ModelManager />
+              </div>
+              <Row name={t("settings.cloudQuality")} hint={t("settings.cloudQualityHint")}>
+                <Sel
+                  value={c.cloud_quality_mode}
+                  onChange={(v) => set("cloud_quality_mode", v)}
+                  options={[
+                    ["quality", t("settings.cloudQualityQuality")],
+                    ["highest", t("settings.cloudQualityHighest")],
+                  ]}
+                />
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secLangSpeaker")}>
+              <Row name={t("settings.transcriptionLanguage")} hint={t("settings.transcriptionLanguageHint")}>
+                <Sel value={c.language} onChange={(v) => set("language", v)} options={LANGUAGES} />
+              </Row>
+              <Row name={t("settings.diarization")} hint={t("settings.diarizationHint")}>
+                <Toggle checked={c.diarization_enabled} onChange={(v) => set("diarization_enabled", v)} />
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secLiveTyping")}>
+              <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
+                <div className="meta">
+                  <div className="name">{t("settings.streaming")}</div>
+                  <div className="hint">{t("settings.streamingHint")}</div>
+                </div>
+                <StreamingSwitch
+                  value={c.streaming_mode}
+                  onChange={(m) => {
+                    set("streaming_mode", m);
+                    // Streaming-live already types live → clear the redundant
+                    // instant-live-typing so the two can't both be active.
+                    if (m === "live") set("instant_live_typing", false);
+                  }}
+                  disabled={uiModeOf(c) === "local"}
+                />
+                {c.streaming_mode === "live" && c.recording_mode === "hold" && (
+                  <div className="hint" style={{ color: "var(--warn, #f59e0b)" }}>
+                    {t("settings.streamingLiveTapNote")}
+                  </div>
+                )}
+              </div>
+              <Row
+                name={t("settings.instantLiveTyping")}
+                hint={
+                  c.streaming_mode === "live"
+                    ? t("settings.instantLiveTypingLiveNote")
+                    : t("settings.instantLiveTypingHint")
+                }
+              >
+                <Toggle
+                  checked={c.streaming_mode === "live" ? false : c.instant_live_typing}
+                  disabled={c.streaming_mode === "live"}
+                  onChange={(v) => set("instant_live_typing", v)}
+                />
+              </Row>
+            </Group>
+
+            <Group title={t("settings.secCleanup")}>
             <Row name={t("settings.dachFormat")} hint={t("settings.dachFormatHint")}>
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />
             </Row>
@@ -893,6 +932,7 @@ export function Settings() {
                 </button>
               </div>
             )}
+            </Group>
           </>
         )}
 
@@ -1020,6 +1060,7 @@ export function Settings() {
 
         {tab === "account" && (
           <>
+            <Group title={t("settings.secAccount")}>
             <Row
               name={t("settings.account")}
               hint={
@@ -1073,12 +1114,16 @@ export function Settings() {
                 {t("settings.openAccount")}
               </button>
             </Row>
+            </Group>
+
+            <Group title={t("settings.secData")}>
             <Row name={t("settings.saveToSynapse")} hint={t("settings.saveToSynapseHint")}>
               <Toggle checked={c.synapse_save_enabled} onChange={(v) => set("synapse_save_enabled", v)} />
             </Row>
             <Row name={t("settings.saveHistory")}>
               <Toggle checked={c.history_enabled} onChange={(v) => set("history_enabled", v)} />
             </Row>
+            </Group>
           </>
         )}
       </div>
