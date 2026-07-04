@@ -137,6 +137,113 @@ pub fn despam_commas(text: &str) -> String {
     out.join(" ")
 }
 
+/// True if `w` (the bare core, no surrounding punctuation) is an unambiguous
+/// vocal filler — a hesitation sound that is NEVER a real word, so removing it
+/// can't corrupt meaning. Precision-first: tokens that ARE real words are
+/// deliberately excluded — "eh" ("das ist eh gut"), "um"/"er"/"man"/"also",
+/// and "mm" (millimetre). Case-insensitive; tolerates repeated letters
+/// ("ähhh", "hmmm", "ähmm").
+fn is_filler(w: &str) -> bool {
+    let cs: Vec<char> = w.to_lowercase().chars().collect();
+    if cs.len() < 2 {
+        return false; // single letters ("m", "ä") are too ambiguous to cut
+    }
+    match cs[0] {
+        // äh, ähh, ähm, ähmm — a leading ä/ö like this never opens a real word.
+        'ä' | 'ö' => hm_tail(&cs[1..], false),
+        // ehm/ehmm ONLY — never "eh", which is a real word (require a trailing m).
+        'e' => hm_tail(&cs[1..], true),
+        // Pure hum clusters containing BOTH an h and an m: hm, mh, hmm, mhm, mmh.
+        // Excludes "mm" (millimetre) and "hh" (not fillers).
+        'h' | 'm' => {
+            cs.iter().all(|c| *c == 'h' || *c == 'm')
+                && cs.contains(&'h')
+                && cs.contains(&'m')
+        }
+        _ => false,
+    }
+}
+
+/// After the leading vowel, the tail must be `h`+ then `m`* (e.g. "h", "hm",
+/// "hmm"). `require_m` forces at least one trailing 'm' (used for the 'e' lead so
+/// "eh" is rejected but "ehm" accepted).
+fn hm_tail(rest: &[char], require_m: bool) -> bool {
+    let h = rest.iter().take_while(|c| **c == 'h').count();
+    if h == 0 {
+        return false;
+    }
+    let m = &rest[h..];
+    if !m.iter().all(|c| *c == 'm') {
+        return false;
+    }
+    !require_m || !m.is_empty()
+}
+
+/// Deterministic, zero-latency removal of hesitation fillers ("äh", "ähm",
+/// "hmm", …) from raw dictation — the cheap "cleanup" that costs no round trip
+/// (unlike the AI `/v1/cleanup`). Whole-word only, tolerates a trailing comma
+/// (Whisper brackets fillers with commas: "…, ähm, …"), tidies the resulting
+/// spacing/commas, and re-capitalizes the sentence if a leading filler was cut.
+/// Precision-first: only `is_filler` tokens are ever touched, so real words are
+/// never removed. Idempotent.
+pub fn strip_fillers(text: &str) -> String {
+    if text.trim().is_empty() {
+        return text.to_string();
+    }
+    let toks: Vec<&str> = text.split_whitespace().collect();
+    let mut kept: Vec<String> = Vec::with_capacity(toks.len());
+    let mut removed_leading = false;
+    for tok in &toks {
+        // Test the core with one optional trailing comma stripped ("ähm," → "ähm").
+        let had_comma = tok.ends_with(',');
+        let core = tok.strip_suffix(',').unwrap_or(tok);
+        if is_filler(core) {
+            if kept.is_empty() {
+                removed_leading = true;
+            } else if had_comma {
+                // Parenthetical filler "X, äh, Y": also drop the comma that opened
+                // it so the two clauses rejoin cleanly ("X Y"), not "X, Y".
+                if let Some(last) = kept.last_mut() {
+                    if let Some(stripped) = last.strip_suffix(',') {
+                        *last = stripped.to_string();
+                    }
+                }
+            }
+            continue; // drop the filler (and its own trailing comma)
+        }
+        kept.push((*tok).to_string());
+    }
+    let mut out = kept.join(" ");
+    // Tidy artifacts: a comma left dangling where a filler sat ("ist, gut" ← "ist, äh, gut"),
+    // a doubled comma, and a leading comma from a cut sentence-initial filler.
+    out = out.replace(" ,", ",").replace(",,", ",");
+    let trimmed = out.trim_start_matches([',', ' ']).to_string();
+    out = trimmed;
+    if removed_leading {
+        // The sentence lost its capitalized opener — re-capitalize the new first word.
+        let mut chars = out.chars();
+        if let Some(first) = chars.next() {
+            out = first.to_uppercase().collect::<String>() + chars.as_str();
+        }
+    }
+    out
+}
+
+/// The full deterministic post-transcription pass shared by EVERY engine path
+/// (cloud / local / streaming final). All zero-latency, no LLM, no network:
+/// vocabulary replace → comma de-spam → optional filler strip. Keeping it in one
+/// place means the three paths can never drift (the streaming path historically
+/// missed some of these).
+pub fn post_process(text: &str, cfg: &Config) -> String {
+    let t = apply_vocab_replace(text, cfg);
+    let t = despam_commas(&t);
+    if cfg.filler_removal_enabled {
+        strip_fillers(&t)
+    } else {
+        t
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +340,45 @@ mod tests {
 
         // Idempotent: a second pass changes nothing.
         assert_eq!(despam_commas(&despam_commas(spam)), despam_commas(spam));
+    }
+
+    #[test]
+    fn strip_fillers_removes_hesitations_only() {
+        // Leading filler cut → sentence re-capitalized.
+        assert_eq!(
+            strip_fillers("Ähm, ich denke, äh, das ist gut."),
+            "Ich denke das ist gut."
+        );
+        // Mid-sentence bare filler.
+        assert_eq!(strip_fillers("das ist hmm interessant"), "das ist interessant");
+        // Parenthetical filler rejoins cleanly (both commas gone).
+        assert_eq!(strip_fillers("Ich glaube, ähm, das passt"), "Ich glaube das passt");
+        // Repeated letters.
+        assert_eq!(strip_fillers("Also ähhh warte öhm ja"), "Also warte ja");
+        // Idempotent.
+        let s = "Ähm, na klar, äh, machen wir.";
+        assert_eq!(strip_fillers(&strip_fillers(s)), strip_fillers(s));
+    }
+
+    #[test]
+    fn strip_fillers_never_touches_real_words() {
+        // "eh"/"um"/"er"/"man"/"also"/"mm" are real words, NOT fillers.
+        let real = "Das ist eh gut, um zehn, er kommt, ein mm Abstand.";
+        assert_eq!(strip_fillers(real), real);
+        // Whole-word only: "ähnlich" starts with "äh" but must stay intact.
+        assert_eq!(strip_fillers("etwas ähnliches"), "etwas ähnliches");
+        assert!(!is_filler("eh") && !is_filler("um") && !is_filler("mm") && !is_filler("ohm"));
+        assert!(is_filler("äh") && is_filler("ähm") && is_filler("hmm") && is_filler("mhm") && is_filler("ehm"));
+    }
+
+    #[test]
+    fn post_process_filler_gated_by_toggle() {
+        let mut cfg = Config::default();
+        assert!(!cfg.filler_removal_enabled); // opt-in, off by default
+        // Off: fillers survive the deterministic pass.
+        assert_eq!(post_process("Ähm das ist gut", &cfg), "Ähm das ist gut");
+        // On: fillers stripped, still zero-latency (no network).
+        cfg.filler_removal_enabled = true;
+        assert_eq!(post_process("Ähm das ist gut", &cfg), "Das ist gut");
     }
 }

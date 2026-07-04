@@ -198,6 +198,13 @@ pub struct Config {
     pub cleanup_auto_mode: bool,
     pub auto_mode_overrides: HashMap<String, String>,
 
+    /// Deterministic, zero-latency filler-word strip ("äh"/"ähm"/"hmm" → gone).
+    /// A local text pass (no `/v1/cleanup` round trip), so it's the "light
+    /// cleanup" for users who keep the AI cleanup off to stay fast. Off by
+    /// default (changes output); old configs default off via serde.
+    #[serde(default)]
+    pub filler_removal_enabled: bool,
+
     pub long_form_threshold_seconds: i32,
     pub long_form_cleanup_style: String,
 
@@ -382,6 +389,7 @@ impl Default for Config {
             cleanup_style: "prompt".to_string(),
             cleanup_auto_mode: false,
             auto_mode_overrides: HashMap::new(),
+            filler_removal_enabled: false,
 
             long_form_threshold_seconds: 240,
             long_form_cleanup_style: "raw".to_string(),

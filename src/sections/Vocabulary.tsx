@@ -20,41 +20,36 @@ const CATS = ["Person", "Company", "Tech", "Place", "Other"];
 // → reload → re-render, so we don't want to re-run that cascade on every open.
 let lastVocabScanAt = 0;
 
-/** Auto-vocabulary: surfaces recurring mis-heard terms detected from history.
+/** The "Vorschläge" tab: recurring mis-heard terms Echo detected from history.
  *  High-confidence ones were already learned silently (shown under "gelernt"
- *  with undo); the rest are pending suggestions the user confirms/corrects. */
-function AutoVocab() {
+ *  with undo); the rest are pending suggestions the user confirms/corrects.
+ *  Presentational — candidate state is lifted to `Vocabulary` so the tab badge
+ *  can show the pending count. */
+function AutoVocab({
+  pending,
+  learned,
+  onReload,
+}: {
+  pending: VocabCandidate[];
+  learned: VocabCandidate[];
+  onReload: () => void;
+}) {
   const { t } = useTranslation();
-  const [pending, setPending] = useState<VocabCandidate[]>([]);
-  const [learned, setLearned] = useState<VocabCandidate[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
-
-  const reload = () => {
-    vocabCandidates("pending").then(setPending).catch(() => {});
-    vocabCandidates("added").then(setLearned).catch(() => {});
-  };
-  useEffect(() => {
-    const un = listen("echo://vocab-candidates-changed", reload);
-    reload(); // show current candidates immediately (async, non-blocking)
-    // Defer the rescan a frame so it never competes with the section's first
-    // paint — opening Vocabulary stays instant — and throttle re-opens.
-    const now = Date.now();
-    if (now - lastVocabScanAt > 30_000) {
-      lastVocabScanAt = now;
-      requestAnimationFrame(() => vocabScan().catch(() => {}));
-    }
-    return () => {
-      un.then((f) => f()).catch(() => {});
-    };
-  }, []);
-
-  if (pending.length === 0 && learned.length === 0) return null;
 
   const spelling = (c: VocabCandidate) => edits[c.key] ?? c.suggestion ?? c.key;
   const variants = (c: VocabCandidate) => c.variants.map(([v]) => v).join(", ");
 
+  if (pending.length === 0 && learned.length === 0) {
+    return (
+      <div className="card">
+        <p className="section-sub" style={{ margin: 0 }}>{t("vocab.suggestEmpty")}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div className="card">
       <div className="name" style={{ opacity: 0.7, marginBottom: 4 }}>{t("vocab.autoTitle")}</div>
       <p className="section-sub" style={{ marginTop: 0 }}>{t("vocab.autoSub")}</p>
 
@@ -82,11 +77,11 @@ function AutoVocab() {
           <button
             className="sub-tab"
             style={{ borderColor: "var(--accent)", color: "var(--accent-bright)" }}
-            onClick={() => vocabConfirm(c.key, spelling(c)).then(reload)}
+            onClick={() => vocabConfirm(c.key, spelling(c)).then(onReload)}
           >
             {t("vocab.autoAdd")}
           </button>
-          <button className="sub-tab" onClick={() => vocabIgnore(c.key).then(reload)}>
+          <button className="sub-tab" onClick={() => vocabIgnore(c.key).then(onReload)}>
             {t("vocab.autoIgnore")}
           </button>
         </div>
@@ -111,7 +106,7 @@ function AutoVocab() {
               >
                 {c.added_term}
                 <button
-                  onClick={() => vocabUndo(c.key).then(reload)}
+                  onClick={() => vocabUndo(c.key).then(onReload)}
                   title={t("vocab.autoUndo")}
                   style={{
                     background: "none",
@@ -133,7 +128,9 @@ function AutoVocab() {
   );
 }
 
-export function Vocabulary() {
+/** The "Wörterbuch" tab: the editable list of custom terms. Add is surfaced at
+ *  the top so it's the first thing in reach. */
+function Dictionary() {
   const { config, patch } = useConfig();
   const { t } = useTranslation();
   const [draft, setDraft] = useState<VocabEntry[] | null>(null);
@@ -173,6 +170,121 @@ export function Vocabulary() {
     setDraft(null);
   };
 
+  return (
+    <div className="card">
+      {/* Actions on top — quickest reach to add a term. */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "center" }}>
+        <button
+          className="sub-tab"
+          style={{ borderColor: "var(--accent)", color: "var(--accent-bright)" }}
+          onClick={add}
+        >
+          {t("vocab.addEntry")}
+        </button>
+        <div style={{ flex: 1 }} />
+        {dirty && (
+          <button className="sub-tab" onClick={() => setDraft(null)}>
+            {t("vocab.discard")}
+          </button>
+        )}
+        <button className="sub-tab" onClick={save} disabled={!dirty}>
+          {t("common.save")}
+        </button>
+      </div>
+
+      <table className="vocab">
+        <thead>
+          <tr>
+            <th>{t("vocab.colSoundsLike")}</th>
+            <th>{t("vocab.colWriteAs")}</th>
+            <th>{t("vocab.colAliases")}</th>
+            <th>{t("vocab.colCategory")}</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((e, i) => (
+            <tr key={i}>
+              <td>
+                <input
+                  value={e.sounds_like}
+                  onChange={(ev) => setField(i, "sounds_like", ev.target.value)}
+                />
+              </td>
+              <td>
+                <input
+                  value={e.write_as}
+                  onChange={(ev) => setField(i, "write_as", ev.target.value)}
+                />
+              </td>
+              <td>
+                <input
+                  value={e.aliases.join(", ")}
+                  onChange={(ev) => setAliases(i, ev.target.value)}
+                />
+              </td>
+              <td>
+                <select
+                  value={e.category}
+                  onChange={(ev) => setField(i, "category", ev.target.value)}
+                >
+                  {CATS.map((c) => (
+                    <option key={c} value={c}>
+                      {t(`vocab.cat.${c}`)}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <button className="rowdel" onClick={() => del(i)} title={t("common.delete")}>
+                  ✕
+                </button>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="empty">
+                {t("vocab.empty")}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function Vocabulary() {
+  const { config, patch } = useConfig();
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"dict" | "suggest">("dict");
+
+  // Candidate state is lifted here (not inside AutoVocab) so the "Vorschläge"
+  // tab can carry a live pending-count badge without a second fetch.
+  const [pending, setPending] = useState<VocabCandidate[]>([]);
+  const [learned, setLearned] = useState<VocabCandidate[]>([]);
+  const reloadCandidates = () => {
+    vocabCandidates("pending").then(setPending).catch(() => {});
+    vocabCandidates("added").then(setLearned).catch(() => {});
+  };
+  useEffect(() => {
+    const un = listen("echo://vocab-candidates-changed", reloadCandidates);
+    reloadCandidates(); // show current candidates immediately (async, non-blocking)
+    // Defer the rescan a frame so it never competes with the section's first
+    // paint — opening Vocabulary stays instant — and throttle re-opens.
+    const now = Date.now();
+    if (now - lastVocabScanAt > 30_000) {
+      lastVocabScanAt = now;
+      requestAnimationFrame(() => vocabScan().catch(() => {}));
+    }
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, []);
+
+  if (!config) return null;
+
   const enabled = config.vocab_enabled;
 
   return (
@@ -197,87 +309,29 @@ export function Vocabulary() {
       </div>
 
       <div style={{ opacity: enabled ? 1 : 0.45, pointerEvents: enabled ? "auto" : "none" }}>
-      <AutoVocab />
-      <div className="card">
-        <table className="vocab">
-          <thead>
-            <tr>
-              <th>{t("vocab.colSoundsLike")}</th>
-              <th>{t("vocab.colWriteAs")}</th>
-              <th>{t("vocab.colAliases")}</th>
-              <th>{t("vocab.colCategory")}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((e, i) => (
-              <tr key={i}>
-                <td>
-                  <input
-                    value={e.sounds_like}
-                    onChange={(ev) => setField(i, "sounds_like", ev.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={e.write_as}
-                    onChange={(ev) => setField(i, "write_as", ev.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={e.aliases.join(", ")}
-                    onChange={(ev) => setAliases(i, ev.target.value)}
-                  />
-                </td>
-                <td>
-                  <select
-                    value={e.category}
-                    onChange={(ev) => setField(i, "category", ev.target.value)}
-                  >
-                    {CATS.map((c) => (
-                      <option key={c} value={c}>
-                        {t(`vocab.cat.${c}`)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <button className="rowdel" onClick={() => del(i)} title={t("common.delete")}>
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="empty">
-                  {t("vocab.empty")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <div style={{ display: "flex", gap: 10, marginTop: 16, alignItems: "center" }}>
-          <button className="sub-tab" onClick={add}>
-            {t("vocab.addEntry")}
-          </button>
-          <div style={{ flex: 1 }} />
-          {dirty && (
-            <button className="sub-tab" onClick={() => setDraft(null)}>
-              {t("vocab.discard")}
-            </button>
-          )}
+        <div className="sub-tabs" style={{ marginBottom: 16 }}>
           <button
-            className="sub-tab"
-            style={{ borderColor: "var(--accent)", color: "var(--accent-bright)" }}
-            onClick={save}
-            disabled={!dirty}
+            className={`sub-tab ${tab === "dict" ? "active" : ""}`}
+            onClick={() => setTab("dict")}
           >
-            {t("common.save")}
+            {t("vocab.tabDict")}
+          </button>
+          <button
+            className={`sub-tab ${tab === "suggest" ? "active" : ""}`}
+            onClick={() => setTab("suggest")}
+          >
+            {t("vocab.tabSuggestions")}
+            {pending.length > 0 && (
+              <span className="tier-badge" style={{ marginLeft: 8 }}>{pending.length}</span>
+            )}
           </button>
         </div>
-      </div>
+
+        {tab === "dict" ? (
+          <Dictionary />
+        ) : (
+          <AutoVocab pending={pending} learned={learned} onReload={reloadCandidates} />
+        )}
       </div>
     </div>
   );
