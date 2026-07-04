@@ -62,6 +62,18 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.zoom = scale && scale > 0 ? String(scale) : "1";
   }, [config?.ui_scale]);
 
+  // Liquid-glass frost strength (0 = off … 3 = strong) → --glass-mul on the root,
+  // which every backdrop-filter blur (and its saturate) is scaled by. Step 2 =
+  // the standard look (mul 1.0). data-glass="off" is a hook for fully-flat CSS.
+  useEffect(() => {
+    const s = Math.max(0, Math.min(3, config?.glass_strength ?? 2));
+    const mul = [0, 0.55, 1, 1.5][s];
+    const root = document.documentElement;
+    root.style.setProperty("--glass-mul", String(mul));
+    if (mul === 0) root.setAttribute("data-glass", "off");
+    else root.removeAttribute("data-glass");
+  }, [config?.glass_strength]);
+
   const patch = useCallback(
     async (p: Partial<Config>) => {
       setLocal((prev) => {

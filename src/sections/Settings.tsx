@@ -671,8 +671,21 @@ export function Settings() {
                 value={c.ui_theme}
                 onChange={(v) => set("ui_theme", v)}
                 options={[
-                  ["dark", t("settings.themeDark")],
                   ["light", t("settings.themeLight")],
+                  ["liquid", t("settings.themeLiquid")],
+                  ["dark", t("settings.themeDark")],
+                ]}
+              />
+            </Row>
+            <Row name={t("settings.glassStrength")} hint={t("settings.glassStrengthHint")}>
+              <Sel
+                value={String(c.glass_strength ?? 2)}
+                onChange={(v) => set("glass_strength", parseInt(v, 10))}
+                options={[
+                  ["0", t("settings.glassOff")],
+                  ["1", t("settings.glassSubtle")],
+                  ["2", t("settings.glassStandard")],
+                  ["3", t("settings.glassStrong")],
                 ]}
               />
             </Row>

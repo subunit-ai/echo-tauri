@@ -96,9 +96,13 @@
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* strong on-screen movement: sliding pills, toggle thumbs */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-style drawer / sheet rise */
 
-  /* ── Glass primitive (apply with: backdrop-filter: var(--blur-glass)) ── */
-  --blur-glass: blur(34px) saturate(1.7);
-  --blur-chip: blur(20px) saturate(1.5);
+  /* ── Glass primitive (apply with: backdrop-filter: var(--blur-glass)) ──
+     Frost strength is user-tunable: --glass-mul (set from glass_strength in
+     ConfigContext — 0 = off … ~1.5 = strong) scales every backdrop blur, so one
+     slider dials the whole app from flat to heavy frost. */
+  --glass-mul: 1;
+  --blur-glass: blur(calc(34px * var(--glass-mul))) saturate(calc(1 + 0.7 * var(--glass-mul)));
+  --blur-chip: blur(calc(20px * var(--glass-mul))) saturate(calc(1 + 0.5 * var(--glass-mul)));
 
   /* ════ Legacy aliases → new glass tokens (keep existing components alive) ════ */
   --accent: var(--cyan);
@@ -174,4 +178,45 @@
   --bg-deep: rgba(255, 255, 255, 0.45);
 
   color-scheme: light;
+}
+
+/* ── Liquid Glass — the illuminated showpiece. Inherits the dark palette but
+   makes the surfaces markedly MORE transparent and the aurora mesh far more
+   vivid, so switching into it visibly floods the app with coloured light behind
+   the frost (glass reads strongly here, unlike plain Dark). Ink stays light. */
+:root[data-theme="liquid"] {
+  --bg: #0a1a3c;
+
+  /* Much more see-through than dark (was ~0.55/0.42) so the mesh glows through. */
+  --glass: rgba(40, 68, 128, 0.30);
+  --glass2: rgba(40, 68, 128, 0.22);
+
+  --line: rgba(160, 200, 255, 0.16);
+  --line2: rgba(160, 200, 255, 0.24);
+  --glass-edge: rgba(170, 205, 255, 0.30);
+  --glass-edge2: rgba(170, 205, 255, 0.36);
+  --rim: rgba(210, 232, 255, 0.30);
+  --rim-soft: rgba(210, 232, 255, 0.18);
+
+  --fill-strong: rgba(26, 48, 94, 0.44); /* fields still legible, but glassy */
+  --fill-focus: rgba(14, 30, 62, 0.9);
+  --fill-mid: rgba(34, 60, 112, 0.4);
+  --fill-soft: rgba(34, 60, 112, 0.36);
+  --fill-weak: rgba(34, 60, 112, 0.3);
+  --fill-ghost-hover: rgba(48, 80, 140, 0.5);
+  --menu-bg: rgba(14, 30, 60, 0.9); /* dropdowns stay legible */
+  --recap-bg: rgba(14, 30, 60, 0.92);
+  --scrim: rgba(4, 12, 30, 0.6);
+
+  --shadow: 0 26px 66px -26px rgba(0, 0, 0, 0.66);
+
+  /* Coloured light gradient + vivid aurora blobs (dark uses ~0.3/0.26). */
+  --page-grad: linear-gradient(158deg, #0d1f46 0%, #0a1a3c 48%, #0b1734 100%) #0a1a3c;
+  --mesh1: rgba(34, 211, 238, 0.52);
+  --mesh2: rgba(124, 92, 240, 0.46);
+  --mesh3: rgba(16, 185, 129, 0.4);
+
+  --bg-deep: rgba(8, 20, 44, 0.5);
+
+  color-scheme: dark;
 }

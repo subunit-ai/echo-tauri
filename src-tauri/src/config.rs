@@ -223,7 +223,13 @@ pub struct Config {
     pub autostart_migrated: bool,
     pub has_seen_onboarding: bool,
     pub ui_language: String,
+    /// Appearance: "light" | "liquid" (illuminated Liquid-Glass showpiece) |
+    /// "dark". Reflected on <html data-theme> in ConfigContext.
     pub ui_theme: String,
+    /// Liquid-glass frost strength: 0 = off (flat, solid surfaces) … 3 = strong
+    /// frost. Drives --glass-mul on the document root; 2 = the standard look.
+    /// Old configs lack it → container #[serde(default)] seeds the Default (2).
+    pub glass_strength: i32,
     /// Overall UI scale (CSS `zoom` on the document root) so the whole app can be
     /// shrunk into a compact "module" — 1.0 = normal, down to ~0.6. Applied in
     /// ConfigContext; the window min-size is small enough to follow it.
@@ -378,6 +384,7 @@ impl Default for Config {
             has_seen_onboarding: false,
             ui_language: "de".to_string(),
             ui_theme: "dark".to_string(),
+            glass_strength: 2,
             ui_scale: 1.0,
 
             plan: "free".to_string(),
@@ -504,6 +511,8 @@ impl Config {
         } else {
             1.0
         };
+        // Guard the glass-strength step against corrupt/out-of-range values.
+        self.glass_strength = self.glass_strength.clamp(0, 3);
         // Live streaming ALREADY types progressively as you speak, so the separate
         // "instant live typing" (type the final at the end) is redundant with it —
         // two live-typing settings at once are confusing ("doppelt gemoppelt") and a

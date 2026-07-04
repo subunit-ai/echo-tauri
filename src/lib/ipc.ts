@@ -72,7 +72,8 @@ export interface Config {
   autostart_enabled: boolean;
   has_seen_onboarding: boolean;
   ui_language: string;
-  ui_theme: string; // dark | light
+  ui_theme: string; // light | liquid | dark
+  glass_strength: number; // liquid-glass frost step: 0 = off … 3 = strong (2 = standard)
   ui_scale: number; // overall UI zoom (1.0 = normal, down to ~0.6 = compact)
 
   plan: string; // free | trial | pro

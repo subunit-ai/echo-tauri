@@ -40,6 +40,14 @@ body::before {
     radial-gradient(46% 36% at 95% 11%, var(--mesh2), transparent 60%),
     radial-gradient(72% 52% at 50% 103%, var(--mesh3), transparent 60%);
 }
+/* Liquid Glass floods the canvas with more, larger, brighter light pools so the
+   coloured light reads strongly through the (more transparent) frosted glass. */
+:root[data-theme="liquid"] body::before {
+  background: radial-gradient(58% 46% at 10% 4%, var(--mesh1), transparent 62%),
+    radial-gradient(52% 42% at 96% 12%, var(--mesh2), transparent 62%),
+    radial-gradient(80% 60% at 50% 105%, var(--mesh3), transparent 62%),
+    radial-gradient(46% 44% at 74% 58%, rgba(59, 110, 240, 0.34), transparent 60%);
+}
 
 /* Keyboard focus ring — cyan, offset, keyboard-nav only. */
 :focus-visible {
