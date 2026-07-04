@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Avatar } from "./Avatar";
+import { useConfig } from "../state/ConfigContext";
 
 export type Section =
   | "home"
@@ -62,11 +64,15 @@ const ITEMS: { key: Section; labelKey: string; pro?: boolean }[] = [
 export function Sidebar({
   active,
   onSelect,
+  onAccount,
 }: {
   active: Section;
   onSelect: (s: Section) => void;
+  /** Open the account area (Settings → Account tab). */
+  onAccount: () => void;
 }) {
   const { t } = useTranslation();
+  const { config } = useConfig();
   // A single filled pill slides between items instead of the fill hard-cutting
   // from button to button. We MEASURE the active button (offsetTop/Height) rather
   // than hardcoding row geometry, so the pill stays exact regardless of font
@@ -104,6 +110,42 @@ export function Sidebar({
           {it.pro && <span className="tier-badge nav-pro">Pro</span>}
         </button>
       ))}
+
+      <AccountCard config={config} onClick={onAccount} />
     </nav>
+  );
+}
+
+/** Bottom-left account card: initials avatar + nickname (falls back to name, then
+ *  the email local part), secondary line shows the email or a sign-in hint. The
+ *  whole card is one button that jumps into Settings → Account. Pinned to the
+ *  sidebar's bottom via `margin-top:auto` (see .side-account). */
+function AccountCard({
+  config,
+  onClick,
+}: {
+  config: ReturnType<typeof useConfig>["config"];
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const nickname = config?.nickname?.trim() || "";
+  const name = config?.display_name?.trim() || "";
+  const email = config?.account_email?.trim() || "";
+  const emailLocal = email ? email.split("@")[0] : "";
+
+  const primary = nickname || name || emailLocal || t("account.guest");
+  const secondary = email || t("account.notSignedIn");
+
+  return (
+    <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
+      <Avatar name={nickname || name || email} size={34} />
+      <span className="sa-meta">
+        <span className="sa-name">{primary}</span>
+        <span className="sa-sub">{secondary}</span>
+      </span>
+      <svg className="sa-gear" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    </button>
   );
 }

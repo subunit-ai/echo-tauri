@@ -67,6 +67,8 @@ export interface Config {
   prompt_console_glass: string;
   recording_mode: string; // toggle | hold
   account_email: string;
+  display_name: string; // full name — auto-seeded from JWT on login, user-editable
+  nickname: string; // Spitzname — how Echo addresses the user (greeting + account panel)
   last_cloud_mode: string;
   auto_update_check: boolean;
   autostart_enabled: boolean;

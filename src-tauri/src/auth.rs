@@ -88,6 +88,7 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                     .unwrap_or(0);
                 let workspace = params.get("workspace_id").cloned().unwrap_or_default();
                 let email = email_from_jwt(&access).unwrap_or_default();
+                let jwt_name = name_from_jwt(&access);
 
                 {
                     let st = app.state::<AppState>();
@@ -99,6 +100,13 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                     c.subunit_workspace_id = workspace;
                     if !email.is_empty() {
                         c.account_email = email.clone();
+                    }
+                    // Seed the display name from the account ONLY if the user hasn't
+                    // set one — their own entry always wins and is never clobbered.
+                    if c.display_name.trim().is_empty() {
+                        if let Some(n) = jwt_name {
+                            c.display_name = n;
+                        }
                     }
                     let _ = c.save();
                 }
@@ -444,4 +452,25 @@ fn email_from_jwt(token: &str) -> Option<String> {
         .and_then(|v| v.as_str())
         .or_else(|| j.get("sub").and_then(|v| v.as_str()))
         .map(|s| s.to_string())
+}
+
+/// Best-effort human name from the JWT for seeding the display name. Tries the
+/// common OIDC name claims in order; returns None if none carry a usable value
+/// (many of our tokens only have `email`/`sub`, in which case the user just
+/// types their name in Settings). Trimmed; empty strings are treated as absent.
+fn name_from_jwt(token: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let j: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    for key in ["name", "given_name", "preferred_username", "nickname"] {
+        if let Some(s) = j.get(key).and_then(|v| v.as_str()) {
+            let s = s.trim();
+            if !s.is_empty() {
+                return Some(s.to_string());
+            }
+        }
+    }
+    None
 }

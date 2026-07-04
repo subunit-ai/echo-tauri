@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Avatar } from "../components/Avatar";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
 import { ModelManager } from "../components/ModelManager";
@@ -36,7 +37,8 @@ import { SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
-type Tab = "allgemein" | "dictation" | "transcription" | "overlay" | "account";
+export type SettingsTab = "allgemein" | "dictation" | "transcription" | "overlay" | "account";
+type Tab = SettingsTab;
 const TABS: { key: Tab; labelKey: string }[] = [
   { key: "allgemein", labelKey: "settings.tabGeneral" },
   { key: "dictation", labelKey: "settings.tabDictation" },
@@ -65,6 +67,62 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
       <div className="set-group-h">{title}</div>
       {children}
     </div>
+  );
+}
+
+/** A single-line text setting. Buffers locally and commits on blur / Enter so we
+ *  don't write config to disk on every keystroke (and the cursor never jumps).
+ *  Re-syncs if the underlying value changes from elsewhere (e.g. JWT auto-seed). */
+function TextRow({
+  name,
+  hint,
+  value,
+  placeholder,
+  maxLength,
+  onCommit,
+}: {
+  name: string;
+  hint?: string;
+  value: string;
+  placeholder?: string;
+  maxLength?: number;
+  onCommit: (v: string) => void;
+}) {
+  const [buf, setBuf] = useState(value);
+  const focused = useRef(false);
+  // Adopt external changes only while not being edited (avoids clobbering typing).
+  useEffect(() => {
+    if (!focused.current) setBuf(value);
+  }, [value]);
+  const commit = () => {
+    const v = buf.trim();
+    // Normalise the visible buffer too, so a whitespace-only edit (which won't
+    // patch, since the trimmed value is unchanged) doesn't leave stale spaces on
+    // screen — the input is controlled by `buf`, not `value`.
+    if (v !== buf) setBuf(v);
+    if (v !== value) onCommit(v);
+  };
+  return (
+    <Row name={name} hint={hint}>
+      <input
+        type="text"
+        className="text-setting"
+        value={buf}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(e) => setBuf(e.target.value)}
+        onBlur={() => {
+          focused.current = false;
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+      />
+    </Row>
   );
 }
 
@@ -442,10 +500,14 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
   );
 }
 
-export function Settings() {
+export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (t: SettingsTab) => void } = {}) {
   const { t } = useTranslation();
   const { config, patch, reload, save, savedTick } = useConfig();
-  const [tab, setTab] = useState<Tab>("allgemein");
+  // Tab state is CONTROLLED when the parent passes tab/onTab (so the sidebar's
+  // account card can deep-link into the Account tab); otherwise it self-manages.
+  const [localTab, setLocalTab] = useState<Tab>("allgemein");
+  const tab = tabProp ?? localTab;
+  const setTab = onTab ?? setLocalTab;
   const [devices, setDevices] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loginErr, setLoginErr] = useState("");
@@ -1061,6 +1123,33 @@ export function Settings() {
 
         {tab === "account" && (
           <>
+            <Group title={t("settings.secProfile")}>
+              <div className="profile-head">
+                <Avatar name={c.nickname || c.display_name || c.account_email} size={56} />
+                <div className="profile-id">
+                  <div className="profile-name">
+                    {c.nickname || c.display_name || t("account.guest")}
+                  </div>
+                  {c.account_email && <div className="profile-mail">{c.account_email}</div>}
+                </div>
+              </div>
+              <TextRow
+                name={t("settings.displayName")}
+                hint={t("settings.displayNameHint")}
+                value={c.display_name}
+                placeholder={t("settings.displayNamePlaceholder")}
+                maxLength={60}
+                onCommit={(v) => set("display_name", v)}
+              />
+              <TextRow
+                name={t("settings.nickname")}
+                hint={t("settings.nicknameHint")}
+                value={c.nickname}
+                placeholder={t("settings.nicknamePlaceholder")}
+                maxLength={30}
+                onCommit={(v) => set("nickname", v)}
+              />
+            </Group>
             <Group title={t("settings.secAccount")}>
             <Row
               name={t("settings.account")}

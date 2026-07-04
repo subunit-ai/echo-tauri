@@ -8,7 +8,7 @@ import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Meetings } from "./sections/Meetings";
 import { Intro } from "./intro/Intro";
-import { Settings } from "./sections/Settings";
+import { Settings, type SettingsTab } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
@@ -26,6 +26,13 @@ function Shell() {
   const openMeeting = (tab: "offline" | "live") => {
     setMeetingTab(tab);
     setSection("meetings");
+  };
+  // Settings' active tab is lifted here so the bottom-left account card can deep-
+  // link straight into the Account tab (and the greeting's "edit name" too).
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("allgemein");
+  const openSettings = (tab: SettingsTab) => {
+    setSettingsTab(tab);
+    setSection("settings");
   };
 
   // Section switching must feel INSTANT. We deliberately do NOT key <main> on the
@@ -53,12 +60,12 @@ function Shell() {
       <Header />
       {/* Offline- and Live-Meeting now live under the single "Meeting" section (its own
           sub-tab switcher); the sidebar just navigates to it. */}
-      <Sidebar active={section} onSelect={setSection} />
+      <Sidebar active={section} onSelect={setSection} onAccount={() => openSettings("account")} />
       <main className="content" ref={mainRef}>
         <div className="page-animate">
-          {section === "home" && <Home onStartMeeting={() => openMeeting("live")} />}
+          {section === "home" && <Home onStartMeeting={() => openMeeting("live")} onOpenAccount={() => openSettings("account")} />}
           {section === "history" && <History />}
-          {section === "settings" && <Settings />}
+          {section === "settings" && <Settings tab={settingsTab} onTab={setSettingsTab} />}
           {section === "meetings" && <Meetings tab={meetingTab} onTab={setMeetingTab} />}
           {section === "vocabulary" && <Vocabulary />}
           {section === "help" && <Help />}

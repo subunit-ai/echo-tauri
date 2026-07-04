@@ -187,6 +187,8 @@
   },
   "home": {
     "title": "Push & speak",
+    "greeting": "Welcome back, {{name}}",
+    "addName": "Add your name",
     "hotkeyLabel": "Hotkey",
     "modeHold": "Hold to record",
     "modeToggle": "Toggle to record",
@@ -202,6 +204,11 @@
     "unitHour": "h",
     "recentHeading": "Recent",
     "emptyHistory": "No transcriptions yet — hit your hotkey and get going."
+  },
+  "account": {
+    "guest": "Account",
+    "notSignedIn": "Not signed in",
+    "openSettings": "Open account & settings"
   },
   "history": {
     "title": "History",
@@ -278,8 +285,15 @@
     "secLangSpeaker": "Language & speakers",
     "secLiveTyping": "Live typing",
     "secCleanup": "Cleanup",
+    "secProfile": "Profile",
     "secAccount": "Account",
     "secData": "Data & privacy",
+    "displayName": "Name",
+    "displayNameHint": "Your full name",
+    "displayNamePlaceholder": "e.g. Tom Jansen",
+    "nickname": "Nickname",
+    "nicknameHint": "How Echo addresses you",
+    "nicknamePlaceholder": "e.g. TJ",
     "tabOverlay": "Overlay",
     "tabAccount": "Account",
     "recordingMode": "Recording mode",

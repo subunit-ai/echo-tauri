@@ -211,6 +211,12 @@ pub struct Config {
     pub recording_mode: String,
 
     pub account_email: String,
+    /// User-facing identity for the greeting + bottom-left account panel.
+    /// `display_name` is auto-seeded from the JWT `name` claim on login IF still
+    /// empty (see auth.rs); `nickname` (Spitzname) is always user-entered. Both
+    /// local-first; container #[serde(default)] seeds old configs to "".
+    pub display_name: String,
+    pub nickname: String,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
     /// Auto-detect a running Teams/Zoom/Meet meeting and prompt to record it.
@@ -376,6 +382,8 @@ impl Default for Config {
             recording_mode: "hold".to_string(),
 
             account_email: String::new(),
+            display_name: String::new(),
+            nickname: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
             meeting_autodetect: true,

@@ -187,6 +187,8 @@
   },
   "home": {
     "title": "Drücken & sprechen",
+    "greeting": "Willkommen zurück, {{name}}",
+    "addName": "Namen hinzufügen",
     "hotkeyLabel": "Hotkey",
     "modeHold": "Halten zum Aufnehmen",
     "modeToggle": "Umschalten zum Aufnehmen",
@@ -202,6 +204,11 @@
     "unitHour": "Std.",
     "recentHeading": "Zuletzt",
     "emptyHistory": "Noch keine Transkriptionen — drück deinen Hotkey und leg los."
+  },
+  "account": {
+    "guest": "Konto",
+    "notSignedIn": "Nicht angemeldet",
+    "openSettings": "Konto & Einstellungen öffnen"
   },
   "history": {
     "title": "Verlauf",
@@ -278,8 +285,15 @@
     "secLangSpeaker": "Sprache & Sprecher",
     "secLiveTyping": "Live-Tippen",
     "secCleanup": "Cleanup",
+    "secProfile": "Profil",
     "secAccount": "Konto",
     "secData": "Daten & Privatsphäre",
+    "displayName": "Name",
+    "displayNameHint": "Dein voller Name",
+    "displayNamePlaceholder": "z. B. Tom Jansen",
+    "nickname": "Spitzname",
+    "nicknameHint": "So spricht Echo dich an",
+    "nicknamePlaceholder": "z. B. TJ",
     "tabOverlay": "Overlay",
     "tabAccount": "Account",
     "recordingMode": "Aufnahme-Modus",

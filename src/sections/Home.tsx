@@ -30,7 +30,13 @@ function fmtSaved(seconds: number): { value: string; unitKey: string } {
   return { value: (seconds / 3600).toFixed(1), unitKey: "home.unitHour" };
 }
 
-export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
+export function Home({
+  onStartMeeting,
+  onOpenAccount,
+}: {
+  onStartMeeting?: () => void;
+  onOpenAccount?: () => void;
+}) {
   const { t } = useTranslation();
   const { config, patch } = useConfig();
   // Recent dictations (SQLite store) + real per-account stats, refreshed live
@@ -52,13 +58,29 @@ export function Home({ onStartMeeting }: { onStartMeeting?: () => void }) {
 
   const saved = fmtSaved(stats.time_saved_seconds);
 
+  // Time-NEUTRAL greeting, coupled to the account name. We deliberately avoid any
+  // time-of-day phrasing ("Guten Morgen") — it just greets by nickname (falls back
+  // to the full name). No name yet → the generic title + a gentle "add name" nudge.
+  const who = config.nickname?.trim() || config.display_name?.trim() || "";
+
   return (
     <div>
-      <h1 className="section-title">{t("home.title")}</h1>
-      <p className="section-sub">
-        {t("home.hotkeyLabel")}: <b>{config.hotkey}</b> ·{" "}
-        {config.recording_mode === "hold" ? t("home.modeHold") : t("home.modeToggle")}
-      </p>
+      <h1 className="section-title">
+        {who ? t("home.greeting", { name: who }) : t("home.title")}
+      </h1>
+      {who ? (
+        <p className="section-sub">
+          {t("home.hotkeyLabel")}: <b>{config.hotkey}</b> ·{" "}
+          {config.recording_mode === "hold" ? t("home.modeHold") : t("home.modeToggle")}
+        </p>
+      ) : (
+        <p className="section-sub">
+          <button className="linklike" onClick={onOpenAccount}>
+            {t("home.addName")}
+          </button>{" "}
+          · {t("home.hotkeyLabel")}: <b>{config.hotkey}</b>
+        </p>
+      )}
 
       <RecordPanel />
 
