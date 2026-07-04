@@ -71,9 +71,14 @@ pub fn transcribe_subunit(
     // One immediate retry on transport-level failures (connection refused/reset,
     // or a stale pooled connection the server closed while idle). The request is
     // idempotent; without this a single dropped connection loses the dictation.
+    // Only FAST first failures retry: those are the refused/reset/stale-pool
+    // class. A failure that took seconds (DNS timeout, dead route) means the
+    // network is down right now — an identical retry just doubles the dead time
+    // on the release path before the local fallback can act.
+    let t_first = std::time::Instant::now();
     let resp = match build_request(audio.clone())?.send() {
         Ok(r) => r,
-        Err(e) if crate::http::is_transient(&e) => {
+        Err(e) if crate::http::is_transient(&e) && t_first.elapsed() < Duration::from_secs(2) => {
             log::warn!("transcribe: transient transport error, retrying once: {e}");
             build_request(audio)?
                 .send()

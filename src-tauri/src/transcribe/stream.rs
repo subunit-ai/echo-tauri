@@ -60,6 +60,24 @@ pub struct StreamFinal {
 pub struct StreamFailure {
     pub error: EngineError,
     pub capture: Option<Capture>,
+    /// Server-issued resume handle (from `ready`). When present, the server
+    /// parks this session's audio (and possibly the computed final) for a
+    /// short window after an abnormal drop — `resume_finish` can collect it
+    /// over a fresh socket instead of re-uploading the whole take.
+    pub resume_id: Option<String>,
+}
+
+/// What the server's `ready` frame announced for this connection.
+#[derive(Default)]
+struct ReadyInfo {
+    /// Handle under which the server would park this session on a drop.
+    resume_id: Option<String>,
+    /// Resume only: bytes of 16 kHz s16le audio the server already holds —
+    /// the client ships exactly the remainder.
+    received_bytes: u64,
+    /// Resume only: the final was already computed; the server replays it
+    /// immediately — send nothing, just await it.
+    final_ready: bool,
 }
 
 enum Ctl {
@@ -315,6 +333,16 @@ const READ_TIMEOUT: Duration = Duration::from_millis(30);
 const READY_DEADLINE: Duration = Duration::from_secs(10);
 /// Final = quality decode + optional AI cleanup (Claude) — generous ceiling.
 const FINAL_DEADLINE: Duration = Duration::from_secs(90);
+/// Liveness watchdog while awaiting the final: ping this often, and declare
+/// the link dead after this much TOTAL silence (no partial, no pong, no
+/// close). Pongs answer at the protocol layer even while the server decodes,
+/// so real silence means the path is gone — fail in ~15 s and let the resume/
+/// batch fallback act instead of sitting out the 90 s ceiling on a dead line.
+const FINAL_PING_EVERY: Duration = Duration::from_secs(3);
+const FINAL_SILENCE_DEADLINE: Duration = Duration::from_secs(15);
+/// Resume ships raw 16 kHz PCM (32 KB/s). Above this tail size (~16 s of
+/// missing audio) the Opus-compressed batch upload is the cheaper wire path.
+const RESUME_MAX_TAIL_BYTES: usize = 512_000;
 
 /// Begin a streaming session for the recording that `do_start` just opened.
 /// Cloud mode only; no-op otherwise. Replaces any previous session.
@@ -356,13 +384,18 @@ pub fn cancel() {
 pub fn finish() -> Option<Result<StreamFinal, StreamFailure>> {
     let s = ACTIVE.lock().take()?;
     if s.ctl_tx.send(Ctl::Finish).is_err() {
-        return None; // thread already gone without reporting — classic path
+        // Thread already gone (mid-hold break). It may have left a failure —
+        // with the resume handle under which the server parked the audio it
+        // had received — in the done channel: surface it so the caller can
+        // resume instead of re-uploading. Nothing queued → classic path.
+        return s.done_rx.try_recv().ok();
     }
     match s.done_rx.recv_timeout(FINAL_DEADLINE + Duration::from_secs(5)) {
         Ok(r) => Some(r),
         Err(_) => Some(Err(StreamFailure {
             error: EngineError::new("network", "Streaming-Final nicht erhalten (Timeout)"),
             capture: None,
+            resume_id: None,
         })),
     }
 }
@@ -377,15 +410,21 @@ fn session_thread(
     gen: u64,
 ) {
     // Unavailable ⇒ report once and leave; the caller's fallback owns the take.
-    let mut ws = match connect(&app) {
-        Ok(ws) => ws,
+    let (mut ws, ready) = match connect(&app, None) {
+        Ok(ok) => ok,
         Err(e) => {
             log::info!("stream: unavailable ({}) — classic path will handle it", e.message);
-            let _ = done_tx.send(Err(StreamFailure { error: e, capture: None }));
+            let _ = done_tx.send(Err(StreamFailure { error: e, capture: None, resume_id: None }));
             return;
         }
     };
-    log::info!("stream: connected, live partials on (live_typing={live})");
+    // The server parks a dropped session under this handle — every failure
+    // from here on carries it so the caller can resume instead of re-upload.
+    let rid = ready.resume_id;
+    log::info!(
+        "stream: connected, live partials on (live_typing={live}, resumable={})",
+        rid.is_some()
+    );
     dbg_begin(); // opt-in fixture capture (ECHO_LIVE_DEBUG)
 
     // LocalAgreement state for "live" mode — None unless live typing is on.
@@ -407,7 +446,7 @@ fn session_thread(
                 return;
             }
             Ok(Ctl::Finish) => {
-                let result = finish_flow(&app, &mut ws, &mut feed, live_state.as_mut());
+                let result = finish_flow(&app, &mut ws, &mut feed, live_state.as_mut(), &rid);
                 let _ = done_tx.send(result);
                 return;
             }
@@ -416,12 +455,20 @@ fn session_thread(
                     // Mid-stream break: the recording continues locally — hand
                     // the failure over and let finish() fall back classically.
                     log::warn!("stream: feed failed ({}) — degrading to classic", e.message);
-                    let _ = done_tx.send(Err(StreamFailure { error: e, capture: None }));
+                    let _ = done_tx.send(Err(StreamFailure {
+                        error: e,
+                        capture: None,
+                        resume_id: rid.clone(),
+                    }));
                     return;
                 }
                 if let Err(e) = drain_partials(&app, &mut ws, live_state.as_mut()) {
                     log::warn!("stream: read failed ({}) — degrading to classic", e.message);
-                    let _ = done_tx.send(Err(StreamFailure { error: e, capture: None }));
+                    let _ = done_tx.send(Err(StreamFailure {
+                        error: e,
+                        capture: None,
+                        resume_id: rid.clone(),
+                    }));
                     return;
                 }
             }
@@ -429,8 +476,9 @@ fn session_thread(
     }
 }
 
-/// Open the socket, authenticate, await `ready`.
-fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
+/// Open the socket, authenticate, await `ready`. With `resume`, ask the
+/// server to continue a parked session instead of starting fresh.
+fn connect(app: &AppHandle, resume: Option<&str>) -> Result<(Ws, ReadyInfo), EngineError> {
     let state = app.state::<AppState>();
     if state.config.lock().mode == "subunit" {
         crate::auth::ensure_fresh(app);
@@ -513,7 +561,7 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
     } else {
         String::new()
     };
-    let hello = serde_json::json!({
+    let mut hello = serde_json::json!({
         "token": cfg.subunit_access_token,
         "api_key": cfg.subunit_api_key,
         "language": cfg.language,
@@ -521,11 +569,15 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
         "prompt": vocab::vocab_prompt(&cfg),
         "cleanup_style": style,
     });
+    if let Some(rid) = resume {
+        hello["resume"] = serde_json::Value::String(rid.to_string());
+    }
     ws.send(Message::Text(hello.to_string()))
         .map_err(|e| EngineError::new("network", format!("Stream-Hello: {e}")))?;
 
     // Await ready. The 5 s socket read timeout shows up as WouldBlock — treat
     // it as a deadline tick, not an error.
+    let ready;
     loop {
         if Instant::now() > deadline {
             return Err(EngineError::new("network", "Stream-Server antwortet nicht (ready)"));
@@ -534,7 +586,25 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
             Ok(Message::Text(t)) => {
                 let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
                 match v.get("type").and_then(|t| t.as_str()) {
-                    Some("ready") => break,
+                    Some("ready") => {
+                        // Older servers send a bare ready — every field is optional.
+                        ready = ReadyInfo {
+                            resume_id: v
+                                .get("resume_id")
+                                .and_then(|r| r.as_str())
+                                .filter(|r| !r.is_empty())
+                                .map(|r| r.to_string()),
+                            received_bytes: v
+                                .get("received_bytes")
+                                .and_then(|b| b.as_u64())
+                                .unwrap_or(0),
+                            final_ready: v
+                                .get("final_ready")
+                                .and_then(|f| f.as_bool())
+                                .unwrap_or(false),
+                        };
+                        break;
+                    }
                     Some("error") => {
                         // The server names the rejection class in `code` so the
                         // caller can route paywall vs re-login vs retry.
@@ -576,7 +646,7 @@ fn connect(app: &AppHandle) -> Result<Ws, EngineError> {
     }
 
     set_read_timeout(&mut ws, READ_TIMEOUT);
-    Ok(ws)
+    Ok((ws, ready))
 }
 
 fn resolve(addr: (&str, u16)) -> Option<std::net::SocketAddr> {
@@ -1203,16 +1273,200 @@ mod tests {
             }
         }
     }
+
+    // ── Resume E2E (live server) ─────────────────────────────────────────
+    // Prove the flaky-network recovery against the real endpoint: a hard
+    // TCP drop (no close frame) must park the session server-side, and a
+    // reconnect with the resume handle must continue it — mid-stream (tail
+    // shipped) and after a computed-but-undelivered final (instant replay).
+
+    fn dictate_test_target() -> Option<(String, String, String)> {
+        if let Ok(url) = std::env::var("ECHO_DICTATE_TEST_URL") {
+            return Some((url, String::new(), "test-key".to_string()));
+        }
+        let cfg_path = crate::config::config_file();
+        let raw = std::fs::read_to_string(&cfg_path).ok()?;
+        let cfg: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        let token = cfg["subunit_access_token"].as_str().unwrap_or_default();
+        let api_key = cfg["subunit_api_key"].as_str().unwrap_or_default();
+        if token.is_empty() && api_key.is_empty() {
+            println!("SKIP: not signed in");
+            return None;
+        }
+        let url = cfg["subunit_endpoint"]
+            .as_str()
+            .unwrap_or("https://transcribe.subunit.ai/v1/transcribe")
+            .replace("https://", "wss://")
+            .replace("/v1/transcribe", "/v1/dictate");
+        Some((url, token.to_string(), api_key.to_string()))
+    }
+
+    fn test_tone(seconds: f32) -> Vec<u8> {
+        (0..(16_000.0 * seconds) as usize)
+            .flat_map(|i| {
+                let t = i as f32 / 16_000.0;
+                let v = 0.3 * (2.0 * std::f32::consts::PI * 220.0 * t).sin()
+                    * (0.5 + 0.5 * (i as f32 / 800.0).sin());
+                ((v * 32767.0) as i16).to_le_bytes()
+            })
+            .collect()
+    }
+
+    fn ws_hello(
+        endpoint: &str,
+        token: &str,
+        api_key: &str,
+        resume: Option<&str>,
+    ) -> (
+        WebSocket<MaybeTlsStream<TcpStream>>,
+        serde_json::Value,
+    ) {
+        let (mut ws, _) = tungstenite::connect(endpoint).expect("connect");
+        let mut hello = serde_json::json!({
+            "token": token, "api_key": api_key,
+            "language": "de", "quality_mode": "instant", "cleanup_style": "",
+        });
+        if let Some(r) = resume {
+            hello["resume"] = serde_json::Value::String(r.to_string());
+        }
+        ws.send(Message::Text(hello.to_string())).expect("hello");
+        let frame: serde_json::Value = match ws.read().expect("ready frame") {
+            Message::Text(t) => serde_json::from_str(&t).unwrap(),
+            other => panic!("expected text, got {other:?}"),
+        };
+        (ws, frame)
+    }
+
+    /// Kill the connection the way a dying network does: SO_LINGER(0) turns
+    /// the close into a TCP RST. A plain drop only sends FIN — the server
+    /// could still WRITE into the half-closed socket, so nothing would park.
+    fn hard_kill(ws: WebSocket<MaybeTlsStream<TcpStream>>) {
+        let tcp = match ws.get_ref() {
+            MaybeTlsStream::Plain(s) => s,
+            MaybeTlsStream::Rustls(s) => &s.sock,
+            _ => return,
+        };
+        let _ = socket2::SockRef::from(tcp).set_linger(Some(Duration::ZERO));
+        drop(ws);
+    }
+
+    fn read_final(ws: &mut WebSocket<MaybeTlsStream<TcpStream>>) -> serde_json::Value {
+        loop {
+            match ws.read().expect("frame") {
+                Message::Text(t) => {
+                    let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                    match v["type"].as_str() {
+                        Some("partial") | Some("capped") => continue,
+                        Some("final") => return v,
+                        other => panic!("unexpected frame type {other:?}: {v}"),
+                    }
+                }
+                Message::Close(c) => panic!("closed before final: {c:?}"),
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn dictate_ws_resume_midstream() {
+        let Some((endpoint, token, api_key)) = dictate_test_target() else { return };
+        let (mut ws, ready) = ws_hello(&endpoint, &token, &api_key, None);
+        assert_eq!(ready["type"], "ready", "ready frame: {ready}");
+        let Some(rid) = ready["resume_id"].as_str().filter(|r| !r.is_empty()) else {
+            println!("SKIP: server has no resume support (old server?): {ready}");
+            return;
+        };
+        let rid = rid.to_string();
+
+        let tone = test_tone(3.0);
+        for chunk in tone.chunks(16_000) {
+            ws.send(Message::Binary(chunk.to_vec())).expect("audio");
+            std::thread::sleep(Duration::from_millis(80));
+        }
+        // Hard drop: no cancel, no close frame — exactly a dying network.
+        // The park lands only after the server's in-flight partial pass
+        // finishes (cold model loads take seconds) — wait generously; the
+        // production client bridges this same gap with its resume retry.
+        hard_kill(ws);
+        std::thread::sleep(Duration::from_secs(5));
+
+        let (mut ws, ready) = ws_hello(&endpoint, &token, &api_key, Some(&rid));
+        assert_eq!(ready["type"], "ready", "resume ready frame: {ready}");
+        let received = ready["received_bytes"].as_u64().expect("received_bytes") as usize;
+        assert!(
+            received > 0 && received <= tone.len(),
+            "received_bytes {} out of range (sent {})",
+            received,
+            tone.len()
+        );
+        // Ship only the missing tail — the resume contract.
+        let tail = &tone[received & !1..];
+        if !tail.is_empty() {
+            ws.send(Message::Binary(tail.to_vec())).expect("tail");
+        }
+        ws.send(Message::Text(r#"{"type":"end"}"#.into())).expect("end");
+        let fin = read_final(&mut ws);
+        let dur = fin["duration_s"].as_f64().unwrap_or(0.0);
+        assert!(
+            (dur - 3.0).abs() < 0.3,
+            "resumed final should cover the WHOLE take, got {dur}s"
+        );
+        println!(
+            "DICTATE_WS resume-midstream ok: parked {} B, tail {} B, final {}s",
+            received,
+            tail.len(),
+            dur
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn dictate_ws_resume_parked_final() {
+        let Some((endpoint, token, api_key)) = dictate_test_target() else { return };
+        let (mut ws, ready) = ws_hello(&endpoint, &token, &api_key, None);
+        assert_eq!(ready["type"], "ready", "ready frame: {ready}");
+        let Some(rid) = ready["resume_id"].as_str().filter(|r| !r.is_empty()) else {
+            println!("SKIP: server has no resume support (old server?): {ready}");
+            return;
+        };
+        let rid = rid.to_string();
+
+        let tone = test_tone(2.5);
+        for chunk in tone.chunks(16_000) {
+            ws.send(Message::Binary(chunk.to_vec())).expect("audio");
+            std::thread::sleep(Duration::from_millis(80));
+        }
+        ws.send(Message::Text(r#"{"type":"end"}"#.into())).expect("end");
+        // Vanish BEFORE the final arrives — the server computes it, delivery
+        // fails (RST), and the response must get parked for replay.
+        hard_kill(ws);
+        std::thread::sleep(Duration::from_secs(5));
+
+        let (mut ws, ready) = ws_hello(&endpoint, &token, &api_key, Some(&rid));
+        assert_eq!(ready["type"], "ready", "resume ready frame: {ready}");
+        assert_eq!(
+            ready["final_ready"].as_bool(),
+            Some(true),
+            "expected a parked final: {ready}"
+        );
+        let fin = read_final(&mut ws);
+        let dur = fin["duration_s"].as_f64().unwrap_or(0.0);
+        assert!((dur - 2.5).abs() < 0.3, "parked final duration off: {dur}s");
+        println!("DICTATE_WS resume-parked-final ok: replayed {dur}s final with zero re-upload");
+    }
 }
 
 /// Release path: flush the tail, send `end`, stop the recorder (audio already
 /// lives server-side), await the final. The stopped capture rides along on
-/// every failure so the caller can fall back to the classic upload.
+/// every failure so the caller can fall back to the classic upload — together
+/// with the resume handle, so it can try the cheap parked-session pickup first.
 fn finish_flow(
     app: &AppHandle,
     ws: &mut Ws,
     feed: &mut Resampler16k,
-    mut live: Option<&mut Live>,
+    live: Option<&mut Live>,
+    rid: &Option<String>,
 ) -> Result<StreamFinal, StreamFailure> {
     let flush_result = feed_delta(app, ws, feed, true)
         .and_then(|()| {
@@ -1225,19 +1479,36 @@ fn finish_flow(
     let capture = state.recorder.stop();
 
     if let Err(error) = flush_result {
-        return Err(StreamFailure { error, capture });
+        return Err(StreamFailure { error, capture, resume_id: rid.clone() });
     }
 
+    await_final(app, ws, live).map_err(|error| StreamFailure {
+        error,
+        capture,
+        resume_id: rid.clone(),
+    })
+}
+
+/// Await the server's `final`, forwarding late partials to the UI. A liveness
+/// watchdog pings the peer and declares the link dead after
+/// FINAL_SILENCE_DEADLINE of total silence — on a black-holed connection this
+/// hands control to the resume/batch fallback in ~15 s instead of burning the
+/// full 90 s ceiling while the user stares at "transcribing".
+fn await_final(
+    app: &AppHandle,
+    ws: &mut Ws,
+    mut live: Option<&mut Live>,
+) -> Result<StreamFinal, EngineError> {
     let deadline = Instant::now() + FINAL_DEADLINE;
+    let mut last_rx = Instant::now();
+    let mut last_ping = Instant::now();
     loop {
         if Instant::now() > deadline {
-            return Err(StreamFailure {
-                error: EngineError::new("network", "Stream-Final Timeout"),
-                capture,
-            });
+            return Err(EngineError::new("network", "Stream-Final Timeout"));
         }
         match ws.read() {
             Ok(Message::Text(t)) => {
+                last_rx = Instant::now();
                 let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
                 match v.get("type").and_then(|t| t.as_str()) {
                     Some("final") => {
@@ -1300,32 +1571,104 @@ fn finish_flow(
                             .and_then(|d| d.as_str())
                             .unwrap_or("Stream-Fehler")
                             .to_string();
-                        return Err(StreamFailure {
-                            error: EngineError::new(&code, detail),
-                            capture,
-                        });
+                        return Err(EngineError::new(&code, detail));
                     }
                     _ => {}
                 }
             }
             Ok(Message::Close(_)) => {
-                return Err(StreamFailure {
-                    error: EngineError::new("network", "Stream vor Final geschlossen"),
-                    capture,
-                });
+                return Err(EngineError::new("network", "Stream vor Final geschlossen"));
             }
-            Ok(_) => {}
+            Ok(_) => last_rx = Instant::now(), // pong/binary — the link is alive
             Err(tungstenite::Error::Io(e))
                 if matches!(
                     e.kind(),
                     std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) => {}
+                ) =>
+            {
+                if last_rx.elapsed() > FINAL_SILENCE_DEADLINE {
+                    return Err(EngineError::new(
+                        "network",
+                        "Stream-Final: Verbindung still — Fallback",
+                    ));
+                }
+                if last_ping.elapsed() >= FINAL_PING_EVERY {
+                    last_ping = Instant::now();
+                    if let Err(e) = ws.send(Message::Ping(Vec::new())) {
+                        return Err(EngineError::new("network", format!("Stream-Ping: {e}")));
+                    }
+                }
+            }
             Err(e) => {
-                return Err(StreamFailure {
-                    error: EngineError::new("network", format!("Stream-Final: {e}")),
-                    capture,
-                });
+                return Err(EngineError::new("network", format!("Stream-Final: {e}")));
             }
         }
     }
+}
+
+/// Collect a dictation the server parked after an abnormal drop: reconnect
+/// with the resume handle, ship ONLY the audio the server never received,
+/// and await the final — instead of re-uploading the whole take through the
+/// batch path, which is exactly what hurts on the flaky network that caused
+/// the drop. One retry bridges the race where the server has not yet noticed
+/// the drop (parking happens when ITS side of the socket dies).
+pub fn resume_finish(
+    app: &AppHandle,
+    resume_id: &str,
+    cap: &Capture,
+) -> Result<StreamFinal, EngineError> {
+    let t0 = Instant::now();
+    let mut retried = false;
+    let (mut ws, ready) = loop {
+        match connect(app, Some(resume_id)) {
+            Ok(ok) => break ok,
+            Err(e) if e.code == "resume_unknown" && !retried => {
+                retried = true;
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            Err(e) => return Err(e),
+        }
+    };
+
+    if !ready.final_ready {
+        // Ship the tail the server is missing. downsample_to_16k produces the
+        // byte-identical stream the session already sent (that parity is what
+        // `resampler_matches_whole_buffer_downsample` proves), so slicing at
+        // the server's received-byte count continues the buffer seamlessly.
+        let (s16, _) = super::downsample_to_16k(&cap.samples, cap.sample_rate);
+        let from_sample = ((ready.received_bytes as usize) / 2).min(s16.len());
+        let tail_bytes = (s16.len() - from_sample) * 2;
+        if tail_bytes > RESUME_MAX_TAIL_BYTES {
+            let _ = ws.close(None);
+            return Err(EngineError::new(
+                "resume_tail",
+                format!("Resume-Tail zu groß ({tail_bytes} B) — Batch-Upload ist billiger"),
+            ));
+        }
+        let mut bytes = Vec::with_capacity(tail_bytes);
+        for &s in &s16[from_sample..] {
+            bytes.extend_from_slice(&((s.clamp(-1.0, 1.0) * 32767.0) as i16).to_le_bytes());
+        }
+        for chunk in bytes.chunks(64 * 1024) {
+            ws.send(Message::Binary(chunk.to_vec()))
+                .map_err(|e| EngineError::new("network", format!("Resume-Audio: {e}")))?;
+        }
+        ws.send(Message::Text(r#"{"type":"end"}"#.into()))
+            .map_err(|e| EngineError::new("network", format!("Resume-End: {e}")))?;
+        log::info!(
+            "stream: resume — server held {} B, shipped {} B tail",
+            ready.received_bytes,
+            tail_bytes
+        );
+    } else {
+        log::info!("stream: resume — final was already computed, zero re-upload");
+    }
+
+    let fin = await_final(app, &mut ws, None)?;
+    log::info!(
+        "stream: resumed parked session ok in {:?} ({:.1}s audio)",
+        t0.elapsed(),
+        fin.duration_s
+    );
+    Ok(fin)
 }

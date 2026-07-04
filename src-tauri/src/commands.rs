@@ -206,6 +206,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // failure the preserved capture flows into the classic path below — worst case
     // is exactly today's latency, never a lost word.
     let mut streamed: Option<crate::transcribe::stream::StreamFinal> = None;
+    let mut resume_id: Option<String> = None;
     let cap_opt: Option<crate::recorder::Capture>;
     if streaming {
         emit_state(app, EngineState::Transcribing, None);
@@ -220,7 +221,11 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                     fail.error.code,
                     fail.error.message
                 );
-                cap_opt = fail.capture;
+                resume_id = fail.resume_id;
+                // Mid-hold breaks report with no capture — the recorder still
+                // holds the take; stop it here so the resume pickup and the
+                // batch fallback both have the audio.
+                cap_opt = fail.capture.or_else(|| state.recorder.stop());
             }
             None => cap_opt = state.recorder.stop(), // streaming off mid-take / never started
         }
@@ -248,6 +253,29 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             quality_mode: "cloud-stream-live".to_string(),
             ..Default::default()
         });
+    }
+
+    // Flaky-network recovery: the server parks a dropped session's audio (or
+    // its already-computed final) under the resume handle for a short window.
+    // One cheap reconnect that ships only the missing tail beats re-uploading
+    // the whole take over the very link that just failed; if it doesn't work
+    // out, the batch fallback below runs exactly as before.
+    if streamed.is_none() && crate::transcribe::stream::live_injected_chars() == 0 {
+        if let (Some(rid), Some(cap)) = (resume_id.as_deref(), cap_opt.as_ref()) {
+            match crate::transcribe::stream::resume_finish(app, rid, cap) {
+                Ok(fin) => {
+                    log::info!("transcribe: stream resumed after drop — batch re-upload skipped");
+                    streamed = Some(fin);
+                }
+                Err(e) => {
+                    log::info!(
+                        "transcribe: resume not possible ({}: {}) — classic fallback",
+                        e.code,
+                        e.message
+                    );
+                }
+            }
+        }
     }
 
     // Both paths now produce the SAME locals so the post-processing tail
