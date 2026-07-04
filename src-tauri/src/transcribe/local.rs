@@ -100,7 +100,7 @@ pub fn run(
     }
 
     Ok(TranscriptResult {
-        text: vocab::apply_vocab_replace(text.trim(), cfg),
+        text: vocab::despam_commas(&vocab::apply_vocab_replace(text.trim(), cfg)),
         quality_mode: "local".to_string(),
         segments,
         cleaned_text: None, // local engine has no combined cleanup round trip

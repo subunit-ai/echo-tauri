@@ -162,7 +162,7 @@ pub fn transcribe_subunit(
         .map(|s| s.to_string());
 
     Ok(TranscriptResult {
-        text: vocab::apply_vocab_replace(&text, cfg),
+        text: vocab::despam_commas(&vocab::apply_vocab_replace(&text, cfg)),
         quality_mode,
         segments,
         cleaned_text,
