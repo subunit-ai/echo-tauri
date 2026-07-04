@@ -14,6 +14,11 @@ import { useConfig } from "../state/ConfigContext";
 
 const CATS = ["Person", "Company", "Tech", "Place", "Other"];
 
+// Throttle the background rescan across section re-opens. The scan itself is
+// cheap (spawned off-thread in Rust), but each one emits vocab-candidates-changed
+// → reload → re-render, so we don't want to re-run that cascade on every open.
+let lastVocabScanAt = 0;
+
 /** Auto-vocabulary: surfaces recurring mis-heard terms detected from history.
  *  High-confidence ones were already learned silently (shown under "gelernt"
  *  with undo); the rest are pending suggestions the user confirms/corrects. */
@@ -28,9 +33,15 @@ function AutoVocab() {
     vocabCandidates("added").then(setLearned).catch(() => {});
   };
   useEffect(() => {
-    vocabScan().catch(() => {}); // refresh candidates when the section opens
-    reload();
     const un = listen("echo://vocab-candidates-changed", reload);
+    reload(); // show current candidates immediately (async, non-blocking)
+    // Defer the rescan a frame so it never competes with the section's first
+    // paint — opening Vocabulary stays instant — and throttle re-opens.
+    const now = Date.now();
+    if (now - lastVocabScanAt > 30_000) {
+      lastVocabScanAt = now;
+      requestAnimationFrame(() => vocabScan().catch(() => {}));
+    }
     return () => {
       un.then((f) => f()).catch(() => {});
     };

@@ -147,13 +147,18 @@ body {
   color: var(--ink2);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease,
+    box-shadow 0.15s ease, transform 0.12s var(--ease-out);
 }
 
 .pc-icon:hover {
   color: var(--ink);
   border-color: var(--glass-edge2);
   background: var(--fill-ghost-hover);
+}
+
+.pc-icon:active {
+  transform: scale(0.92);
 }
 
 .pc-icon.on {
@@ -296,13 +301,17 @@ body {
   font-size: 17px;
   line-height: 1;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.12s var(--ease-out);
 }
 
 .pc-tab-add:hover {
   color: var(--cyan);
   border-color: rgba(34, 211, 238, 0.45);
   background: var(--fill-ghost-hover);
+}
+.pc-tab-add:active {
+  transform: scale(0.92);
 }
 
 /* ---- Editor ---- */
@@ -356,7 +365,7 @@ body {
   background: rgb(10 22 42 / calc(0.35 + 0.3 * var(--pc-glass)));
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
-  animation: pc-rise 0.18s ease;
+  animation: pc-rise 0.2s var(--ease-drawer);
 }
 
 @keyframes pc-rise {
@@ -436,7 +445,7 @@ body {
   border-radius: 10px;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .pc-lib-row:hover {
@@ -475,7 +484,7 @@ body {
   background: rgb(10 22 42 / calc(0.35 + 0.3 * var(--pc-glass)));
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
-  animation: pc-rise 0.18s ease;
+  animation: pc-rise 0.2s var(--ease-drawer);
 }
 
 .pc-coach-head {
@@ -619,13 +628,18 @@ body {
   font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease,
+    transform 0.12s var(--ease-out);
 }
 
 .pc-btn:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--glass-edge2);
   background: var(--fill-ghost-hover);
+}
+
+.pc-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .pc-btn:disabled {
@@ -690,7 +704,7 @@ body {
   border: 1px solid var(--glass-edge);
   border-radius: 12px;
   box-shadow: var(--shadow);
-  animation: pc-rise 0.12s ease;
+  animation: pc-rise 0.12s var(--ease-out);
 }
 
 .pc-menu button {
@@ -733,7 +747,7 @@ body {
   border-radius: 16px;
   box-shadow: var(--shadow), inset 0 1px 0 var(--rim-soft);
   overflow: hidden;
-  animation: pc-rise 0.16s ease;
+  animation: pc-rise 0.16s var(--ease-out);
 }
 
 .pc-palette-input {
@@ -830,7 +844,7 @@ body {
   background: rgb(10 22 42 / calc(0.45 + 0.3 * var(--pc-glass)));
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
-  animation: pc-rise 0.16s ease;
+  animation: pc-rise 0.16s var(--ease-out);
 }
 
 .pc-refine-head {
@@ -967,7 +981,7 @@ body {
   border: 1px solid var(--glass-edge2);
   border-radius: 999px;
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
-  animation: pc-rise 0.16s ease;
+  animation: pc-rise 0.16s var(--ease-out);
 }
 
 .pc-undo-text {
@@ -986,12 +1000,16 @@ body {
   font-size: 11.5px;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.12s var(--ease-out);
 }
 
 .pc-undo-btn:hover {
   background: rgba(34, 211, 238, 0.26);
   color: #d9f6fd;
+}
+.pc-undo-btn:active {
+  transform: scale(0.96);
 }
 
 /* ---- Click-to-dictate: mic button + live preview bar ---- */
@@ -1027,7 +1045,7 @@ body {
   border: 1px solid rgba(34, 211, 238, 0.35);
   border-radius: 12px;
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
-  animation: pc-rise 0.16s ease;
+  animation: pc-rise 0.16s var(--ease-out);
 }
 
 .pc-dictate-dot {
@@ -1074,4 +1092,25 @@ body {
 
 .is-windows .pc-dictate {
   background: #0e1c30;
+}
+
+/* prompt.css honored no reduced-motion at all: the pc-rise panel entrances,
+   the infinite mic/dot pulses and the spinner all played regardless. */
+@media (prefers-reduced-motion: reduce) {
+  .pc-lib,
+  .pc-coach,
+  .pc-menu,
+  .pc-palette,
+  .pc-refine,
+  .pc-undo,
+  .pc-dictate {
+    animation: none;
+  }
+  .pc-btn.mic.rec,
+  .pc-dictate-dot {
+    animation: none;
+  }
+  .pc-spinner {
+    animation-duration: 1.4s;
+  }
 }

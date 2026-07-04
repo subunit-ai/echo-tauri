@@ -134,6 +134,9 @@ button {
   transform: translateY(-1px);
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.34), rgba(8, 145, 178, 0.4));
 }
+.hdr-update:active:not(:disabled) {
+  transform: scale(0.97);
+}
 .hdr-update:disabled {
   cursor: default;
   animation: none;
@@ -201,7 +204,7 @@ button {
   -webkit-backdrop-filter: var(--blur-glass);
   backdrop-filter: var(--blur-glass);
   box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.5);
-  animation: session-banner-in 0.22s ease-out;
+  animation: session-banner-in 0.24s var(--ease-out);
 }
 @keyframes session-banner-in {
   from {
@@ -245,11 +248,14 @@ button {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.01em;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s var(--ease-out), transform 0.13s var(--ease-out);
 }
 .session-banner-btn:hover:not(:disabled) {
   background: color-mix(in srgb, currentColor 18%, transparent);
   transform: translateY(-1px);
+}
+.session-banner-btn:active:not(:disabled) {
+  transform: scale(0.96);
 }
 .session-banner-btn:disabled {
   opacity: 0.6;
@@ -279,7 +285,7 @@ button {
   box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 var(--rim);
   -webkit-backdrop-filter: var(--blur-glass);
   backdrop-filter: var(--blur-glass);
-  animation: confirm-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: confirm-pop 0.2s var(--ease-out);
 }
 .confirm-title {
   margin: 0 0 8px;
@@ -373,6 +379,7 @@ button {
 
 .sidebar {
   grid-area: sidebar;
+  position: relative;
   border-right: 1px solid var(--glass-edge);
   background: var(--glass2);
   backdrop-filter: var(--blur-chip);
@@ -383,7 +390,26 @@ button {
   gap: 2px;
 }
 
+/* The active fill lives on ONE element that slides between items (measured +
+   positioned in Sidebar.tsx), so navigation reads as a single moving pill
+   rather than a hard-cut. transform-only → GPU, interruptible mid-slide. */
+.nav-indicator {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
+  border-radius: var(--r-btn);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform 0.2s var(--ease-out);
+  pointer-events: none;
+  z-index: 0;
+  will-change: transform;
+}
+
 .nav-btn {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -396,19 +422,18 @@ button {
   border-radius: var(--r-btn);
   font-size: 13.5px;
   font-weight: 500;
-  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+  transition: color 0.15s var(--ease-out), transform 0.15s var(--ease-out);
 }
-.nav-btn:hover {
-  background: var(--surface);
-  color: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .nav-btn:not(.active):hover {
+    color: var(--text);
+  }
 }
 .nav-btn:active {
   transform: scale(0.97);
 }
 .nav-btn.active {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent-bright);
-  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .nav-btn .glyph {
   font-size: 16px;
@@ -456,7 +481,7 @@ button {
 }
 
 .page-animate {
-  animation: fade-in-up 0.25s var(--ease-out) forwards;
+  animation: fade-in-up 0.16s var(--ease-out) forwards;
 }
 
 /* Pulsierender Aufnahme-Punkt (components/icons.tsx RecDot) — ersetzt 🔴. */
@@ -466,14 +491,15 @@ button {
   }
 }
 
+/* Opacity-only: the wrapper sits inside .content, which carries a
+   backdrop-filter blur — animating a translate here would re-composite that
+   whole blurred pane every frame (the felt section-swap jank). */
 @keyframes fade-in-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -598,7 +624,7 @@ button {
   left: 6px;
   width: calc((100% - 18px) / 2);
   border-radius: 13px;
-  transition: transform 0.4s var(--ease-spring), background 0.2s var(--ease-out),
+  transition: transform 0.28s var(--ease-in-out), background 0.2s var(--ease-out),
     box-shadow 0.2s var(--ease-out);
   z-index: 0;
   background: linear-gradient(180deg, #2bd6ee, #06b6d4);
@@ -607,6 +633,91 @@ button {
 .mode-ind.cloud {
   background: linear-gradient(180deg, #5b8cff, #3b6ef0);
   box-shadow: 0 4px 14px rgba(59, 110, 240, 0.38);
+}
+
+/* ---------- StreamingSwitch (Standard / Schnell / Live — 3-way glass slider) ---------- */
+.stream-switch {
+  transition: opacity 0.2s var(--ease-out);
+}
+.stream-switch[data-disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.stream-rec {
+  position: relative;
+  height: 15px;
+  margin-bottom: 4px;
+}
+.stream-rec-badge {
+  position: absolute;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--accent-bright);
+  white-space: nowrap;
+}
+.stream-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--fill-weak);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
+}
+/* Glass thumb — a floating tinted pill with a soft cyan glow + inner rim, not a
+   flat bordered box. Its width is exactly one column; translateX(idx*100%) snaps
+   it to the active segment. */
+.stream-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 9px;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 26%, transparent),
+    color-mix(in srgb, var(--accent) 14%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 1px 0 var(--rim);
+  /* Glides to the segment with the same crisp on-screen-movement curve as the
+     LOCAL/CLOUD pill — strong ease-in-out, no bounce (enterprise, not playful). */
+  transition: transform 0.26s var(--ease-in-out), box-shadow 0.26s var(--ease-out);
+}
+.stream-seg {
+  position: relative;
+  z-index: 1;
+  padding: 9px 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 9px;
+  transition: color 0.2s var(--ease-out), transform 0.13s var(--ease-out);
+}
+.stream-seg.active {
+  color: var(--accent-bright);
+  font-weight: 700;
+}
+@media (hover: hover) and (pointer: fine) {
+  .stream-seg:not(.active):hover {
+    color: var(--text);
+  }
+}
+.stream-seg:active {
+  transform: scale(0.94);
 }
 
 /* ---------- MeetLocal: Geräte-Scan (gate checklist) ---------- */
@@ -651,7 +762,7 @@ button {
   background: var(--fill-weak);
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.28s var(--ease-out), transform 0.28s var(--ease-out);
 }
 .ml-gate.show {
   opacity: 1;
@@ -700,7 +811,7 @@ button {
   color: var(--ink);
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.28s var(--ease-out), transform 0.28s var(--ease-out);
 }
 .ml-verdict.show {
   opacity: 1;
@@ -750,12 +861,24 @@ button {
   font-size: 12.5px;
   font-weight: 600;
   transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
-    background 0.15s var(--ease-out);
+    background 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.sub-tab:active {
+  transform: scale(0.97);
 }
 .sub-tab.active {
   color: var(--accent-bright);
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* MeetingPrompt banner buttons are inline-styled; this class only layers motion
+   (press-scale + eased busy-dim) so the inline colors/padding stay authoritative. */
+.meeting-cta {
+  transition: transform 0.12s var(--ease-out), opacity 0.15s var(--ease-out);
+}
+.meeting-cta:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 select,
@@ -830,7 +953,7 @@ select:hover {
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  transition: transform 0.35s var(--ease-spring);
+  transition: transform 0.22s var(--ease-out);
 }
 .toggle.on .thumb {
   transform: translateX(20px);
@@ -975,10 +1098,18 @@ select:hover {
   border-radius: 6px;
   width: 28px;
   height: 28px;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out), transform 0.12s var(--ease-out);
 }
-.rowdel:hover {
-  color: var(--rec);
-  border-color: var(--rec);
+@media (hover: hover) and (pointer: fine) {
+  .rowdel:hover {
+    color: var(--rec);
+    border-color: var(--rec);
+    background: color-mix(in srgb, var(--rec) 10%, transparent);
+  }
+}
+.rowdel:active {
+  transform: scale(0.9);
 }
 
 /* Accent-filled primary pill (shared: MeetLocal CTAs, hotkey capture). The
@@ -1105,7 +1236,16 @@ select:hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast,
+  .session-banner,
+  .confirm-card,
+  .confirm-backdrop {
+    animation: none;
+  }
+  /* Continuous attention pulses — the worst offenders for motion sensitivity. */
+  .hdr-update,
+  .session-banner-dot,
+  .ml-scan-sub.scanning {
     animation: none;
   }
   /* Honor reduced-motion for the section transition + hover/press feedback. */
@@ -1117,8 +1257,22 @@ select:hover {
   .history-item:active,
   .nav-btn:active,
   .mode-seg:active,
-  .model-row:active {
+  .model-row:active,
+  .sub-tab:active,
+  .rowdel:active,
+  .help-chip:active,
+  .hdr-update:active:not(:disabled),
+  .session-banner-btn:active:not(:disabled),
+  .meeting-cta:active:not(:disabled),
+  .stream-seg:active {
     transform: none;
+  }
+  /* Spring/slide travel → near-instant snap. */
+  .mode-ind,
+  .toggle .thumb,
+  .stream-thumb,
+  .nav-indicator {
+    transition-duration: 0.01ms;
   }
 }
 
@@ -1513,11 +1667,17 @@ select:hover {
   padding: 5px 12px;
   font-size: 12px;
   cursor: pointer;
-  transition: border-color 0.18s, color 0.18s;
+  transition: border-color 0.18s var(--ease-out), color 0.18s var(--ease-out),
+    transform 0.12s var(--ease-out);
 }
-.help-chip:hover {
-  border-color: var(--accent);
-  color: var(--accent-bright);
+@media (hover: hover) and (pointer: fine) {
+  .help-chip:hover {
+    border-color: var(--accent);
+    color: var(--accent-bright);
+  }
+}
+.help-chip:active {
+  transform: scale(0.96);
 }
 .help-answer {
   margin-top: 14px;

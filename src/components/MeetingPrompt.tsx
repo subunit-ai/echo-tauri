@@ -111,6 +111,7 @@ export function MeetingPrompt() {
           <button
             onClick={stop}
             disabled={busy}
+            className="meeting-cta"
             style={{
               border: "none",
               background: "#f87171",
@@ -130,6 +131,7 @@ export function MeetingPrompt() {
             <button
               onClick={accept}
               disabled={busy}
+              className="meeting-cta"
               style={{
                 border: "none",
                 background: "#22d3ee",
@@ -146,6 +148,7 @@ export function MeetingPrompt() {
             </button>
             <button
               onClick={() => setApp(null)}
+              className="meeting-cta"
               style={{
                 border: "1px solid rgba(255,255,255,0.18)",
                 background: "transparent",

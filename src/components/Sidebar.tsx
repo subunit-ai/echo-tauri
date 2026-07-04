@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 export type Section =
@@ -67,11 +67,33 @@ export function Sidebar({
   onSelect: (s: Section) => void;
 }) {
   const { t } = useTranslation();
+  // A single filled pill slides between items instead of the fill hard-cutting
+  // from button to button. We MEASURE the active button (offsetTop/Height) rather
+  // than hardcoding row geometry, so the pill stays exact regardless of font
+  // metrics, i18n label heights or padding tweaks. useLayoutEffect positions it
+  // before paint (no first-frame flash); the CSS transition on transform slides it.
+  const btnRefs = useRef<Partial<Record<Section, HTMLButtonElement | null>>>({});
+  const [ind, setInd] = useState<{ top: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const btn = btnRefs.current[active];
+    if (btn) setInd({ top: btn.offsetTop, height: btn.offsetHeight });
+  }, [active, t]);
+
   return (
     <nav className="sidebar">
+      {ind && (
+        <span
+          className="nav-indicator"
+          aria-hidden
+          style={{ transform: `translateY(${ind.top}px)`, height: ind.height }}
+        />
+      )}
       {ITEMS.map((it) => (
         <button
           key={it.key}
+          ref={(el) => {
+            btnRefs.current[it.key] = el;
+          }}
           className={`nav-btn ${it.key === active ? "active" : ""}`}
           onClick={() => onSelect(it.key)}
         >

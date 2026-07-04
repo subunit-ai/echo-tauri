@@ -155,7 +155,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 .intro-btn:active {
-  transform: translateY(0) scale(0.99);
+  transform: translateY(0) scale(0.97);
 }
 .intro-btn:disabled {
   opacity: 0.55;
@@ -176,12 +176,16 @@
   transition:
     color 0.15s ease,
     border-color 0.15s ease,
-    background 0.15s ease;
+    background 0.15s ease,
+    transform 0.12s ease;
 }
 .intro-ghost:hover {
   color: var(--ink);
   border-color: var(--glass-edge2);
   background: var(--fill-ghost-hover);
+}
+.intro-ghost:active {
+  transform: scale(0.97);
 }
 .intro-nav {
   display: flex;
@@ -545,6 +549,8 @@
   .intro-scene.is-leaving,
   .intro-brand,
   .intro-fade-late,
+  .intro-rec.is-rec,
+  .intro-rec.is-rec::after,
   .vk.is-sweeping .vk-key,
   .vk-key.is-lit,
   .intro-caret::after {

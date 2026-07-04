@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Header } from "./components/Header";
 import { Sidebar, type Section } from "./components/Sidebar";
@@ -28,6 +28,17 @@ function Shell() {
     setSection("meetings");
   };
 
+  // Section switching must feel INSTANT. We deliberately do NOT key <main> on the
+  // section: a key forces React to tear down + rebuild the whole content subtree
+  // (incl. re-rasterizing its backdrop-filter glass layer) and replays the
+  // fade-in-up entrance on every click — which reads as a delay. Instead the
+  // wrapper persists (entrance plays once, on first load) and only the inner
+  // section swaps. We just reset scroll so a freshly opened section starts at top.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [section]);
+
   if (!config) {
     return <div className="empty" style={{ paddingTop: 90 }}>{t("common.loading")}</div>;
   }
@@ -43,7 +54,7 @@ function Shell() {
       {/* Offline- and Live-Meeting now live under the single "Meeting" section (its own
           sub-tab switcher); the sidebar just navigates to it. */}
       <Sidebar active={section} onSelect={setSection} />
-      <main className="content" key={section}>
+      <main className="content" ref={mainRef}>
         <div className="page-animate">
           {section === "home" && <Home onStartMeeting={() => openMeeting("live")} />}
           {section === "history" && <History />}
