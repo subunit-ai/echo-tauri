@@ -1512,13 +1512,14 @@ fn await_final(
                 let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
                 match v.get("type").and_then(|t| t.as_str()) {
                     Some("final") => {
-                        // Vocab post-replace is a CLIENT concern on every engine path
-                        // (the batch path does the same in cloud.rs). Applying it here —
-                        // before live_reconcile types/reconciles — is what makes
-                        // "Sky" → "SCAI" work in streaming mode independently of
-                        // cleanup; the server only ever gets the bias prompt.
+                        // The deterministic client pass (vocab replace → comma
+                        // de-spam → optional filler strip) belongs on EVERY engine
+                        // path. Running it here — before live_reconcile types/
+                        // reconciles — is what makes "Sky" → "SCAI" and the
+                        // filler/comma cleanups work in streaming mode independently
+                        // of the AI cleanup; the server only gets the bias prompt.
                         let cfg = app.state::<AppState>().config.lock().clone();
-                        let text = vocab::apply_vocab_replace(
+                        let text = vocab::post_process(
                             v.get("text").and_then(|t| t.as_str()).unwrap_or_default().trim(),
                             &cfg,
                         );
@@ -1527,7 +1528,7 @@ fn await_final(
                             .get("cleaned_text")
                             .and_then(|t| t.as_str())
                             .filter(|s| !s.trim().is_empty())
-                            .map(|s| vocab::apply_vocab_replace(s.trim(), &cfg));
+                            .map(|s| vocab::post_process(s.trim(), &cfg));
                         let quality_mode = v
                             .get("quality_mode")
                             .and_then(|t| t.as_str())

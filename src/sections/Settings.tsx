@@ -930,7 +930,10 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             <Row name={t("settings.dachFormat")} hint={t("settings.dachFormatHint")}>
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />
             </Row>
-            <Row name={t("settings.aiCleanup")}>
+            <Row name={t("settings.fillerRemoval")} hint={t("settings.fillerRemovalHint")}>
+              <Toggle checked={c.filler_removal_enabled} onChange={(v) => set("filler_removal_enabled", v)} />
+            </Row>
+            <Row name={t("settings.aiCleanup")} hint={t("settings.aiCleanupHint")}>
               <Toggle checked={c.cleanup_enabled} onChange={(v) => set("cleanup_enabled", v)} />
             </Row>
             <Row name={t("settings.cleanupStyle")}>
