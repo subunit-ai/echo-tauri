@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.85",
+    date: "2026-07-07",
+    title: { de: "Euro, Prozent & Einheiten automatisch als Symbol", en: "Euro, percent & units as symbols automatically" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die DACH-Formatierung ist jetzt standardmäßig an: „50 Euro“ → „50 €“, „fünfzig Prozent“ → „50 %“, „zehn Kilometer“ → „10 km“ (auch km/cm/mm/kg/g/l), dazu „z.B.“ → „z. B.“ und deutsche Anführungszeichen. Deterministisch, ohne zusätzliche Latenz. Mehrdeutiges bleibt unangetastet. Abschaltbar unter Einstellungen → Cleanup → „DACH-Formatierung“.",
+        en: "DACH formatting is now on by default: „50 Euro“ → „50 €“, „fifty percent“ → „50 %“, „ten kilometers“ → „10 km“ (also km/cm/mm/kg/g/l), plus „z.B.“ → „z. B.“ and German quotation marks. Deterministic, no added latency. Ambiguous cases are left alone. Turn it off under Settings → Cleanup → „DACH formatting“.",
+      },
+    ],
+  },
+  {
     version: "0.5.84",
     date: "2026-07-07",
     title: { de: "Füllwörter fliegen automatisch raus", en: "Filler words are removed automatically" },
