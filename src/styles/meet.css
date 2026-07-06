@@ -1,0 +1,1242 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Native Cloud-Meeting UI — Echo "Liquid Glass".
+
+   Rebuilds meet-ui's MOBILE screens (Landing / HostLogin / Host / Join / Waiting
+   / Guest / Enroll / Ended) as a DESKTOP single centered column. The LOGIC layer
+   (meet-ui/store.tsx + lib/*) is reused verbatim; only the presentation lives here.
+
+   RULES honoured:
+   • EVERY selector is scoped under `.meetc` → zero collision with app.css
+     (the frozen deep-dive/transcript classes dd-*/tr-*/spkassign are re-provided
+     here under `.meetc` because the markdown renderer emits them and they exist
+     nowhere else in the native app).
+   • EVERY colour is an Echo token from tokens.css, or a color-mix() over one, so
+     the whole surface auto-themes across dark / light / liquid / black. The only
+     literals are the QR plate white (scanner contrast, `var(--qr-bg,#fff)`) and
+     the selected-tile icon white (over the cyan disc, matches the signed-off
+     meet.css `.tile.sel .ic{color:#fff}`).
+   • Frosted glass matches src/styles/app.css `.card`
+     (var(--glass) + var(--blur-glass) + var(--glass-edge) + var(--shadow)+rim).
+   • The mc-* class inventory below is FROZEN — the 8 screen ports bind to it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── keyframes (mc- prefixed → never clash with app.css) ─────────────────────── */
+@keyframes mc-recpulse { 50% { opacity: 0.4; } }
+@keyframes mc-spin { to { transform: rotate(360deg); } }
+@keyframes mc-wave { 0%, 100% { height: 14px; opacity: 0.5; } 50% { height: 46px; opacity: 1; } }
+@keyframes mc-enrpop { from { opacity: 0; transform: translateY(12px) scale(0.8); } to { opacity: 1; transform: none; } }
+@keyframes mc-enrpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+@keyframes mc-enrlisten { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.3); } }
+@keyframes mc-enrring { from { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.08); } to { transform: scale(1); opacity: 1; } }
+@keyframes mc-enrdraw { to { stroke-dashoffset: 0; } }
+@keyframes mc-sheetup { from { transform: translateY(16px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes mc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mc-pop { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes mc-clin { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes mc-infobar { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ════════════ ROOT / LAYOUT ════════════ */
+/* Container root — mounts inside .content-meet (which has padding:0). Owns its own
+   padding + vertical scroll; every rule below is scoped under it. */
+.meetc {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px 30px 40px;
+  font-family: var(--font);
+  color: var(--ink);
+  animation: mc-fade 0.18s var(--ease-out);
+}
+.meetc *,
+.meetc *::before,
+.meetc *::after { box-sizing: border-box; }
+
+/* Centered single desktop column (NOT phone width). */
+.meetc .mc-wrap {
+  width: 100%;
+  max-width: 620px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Back-button + heading header row (HostLogin / Join). */
+.meetc .mc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 2px 0 6px;
+}
+.meetc .mc-head-tx { min-width: 0; }
+.meetc .mc-head-tx .section-title { margin: 0; }
+.meetc .mc-head-tx .section-sub { margin: 2px 0 0; }
+
+/* Uppercase section label (meet.css `.sect`). */
+.meetc .mc-sect {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 24px 2px 0;
+}
+.meetc .mc-sect.mc-tight { margin-top: 18px; }
+/* "· optional" softener inside a section label. */
+.meetc .mc-opt {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--ink3);
+}
+
+/* Muted helper line. */
+.meetc .mc-hint {
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.55;
+  margin-top: 12px;
+}
+.meetc .mc-hint.mc-center { text-align: center; }
+.meetc .mc-hint.mc-pod {
+  border-left: 2px solid var(--cyan);
+  padding-left: 11px;
+  color: var(--ink);
+  text-align: left;
+}
+
+/* Button row. */
+.meetc .mc-cta {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+/* Error text — themed danger (falls back to the --red token, never a raw hex). */
+.meetc .mc-err {
+  color: var(--danger, var(--red));
+  font-size: 13px;
+  margin-top: 12px;
+  min-height: 18px;
+}
+.meetc .mc-err.mc-center { text-align: center; }
+
+/* Round glass back button (chevron svg inside). */
+.meetc .mc-back {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-btn);
+  flex: none;
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.16s var(--ease-out), transform 0.14s var(--ease-out);
+}
+.meetc .mc-back:hover { border-color: var(--line2); }
+.meetc .mc-back:active { transform: scale(0.94); }
+.meetc .mc-back svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ════════════ LANDING ════════════ */
+.meetc .mc-hero {
+  text-align: center;
+  margin: 6px 4px 22px;
+}
+.meetc .mc-hero .section-title { font-size: 30px; letter-spacing: -0.03em; }
+.meetc .mc-hero .section-sub {
+  font-size: 15px;
+  max-width: 46ch;
+  margin: 12px auto 0;
+  line-height: 1.55;
+}
+/* DSGVO trust eyebrow (replaces the mobile PNG pill; use a stroke ShieldCheck). */
+.meetc .mc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyan) 9%, transparent);
+  border: 1px solid var(--line2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cyan-ink);
+  margin-bottom: 16px;
+  letter-spacing: 0.02em;
+}
+.meetc .mc-eyebrow svg { width: 15px; height: 15px; stroke: var(--cyan); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+.meetc .mc-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* Glass action card: 40px accent icon-disc + title + desc + trailing chevron. */
+.meetc .mc-choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  width: 100%;
+  background: var(--glass);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+  padding: 20px 22px;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: transform 0.26s var(--ease-glass), box-shadow 0.26s var(--ease-glass), border-color 0.2s var(--ease-out);
+}
+.meetc .mc-choice:hover {
+  transform: translateY(-2px);
+  border-color: var(--glass-edge2);
+  box-shadow: var(--shadow), 0 34px 70px -28px rgba(0, 0, 0, 0.4), inset 0 1px 0 var(--rim);
+}
+.meetc .mc-choice:active { transform: translateY(0) scale(0.99); }
+.meetc .mc-choice-ic {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-btn);
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cyan) 20%, transparent), color-mix(in srgb, var(--cyan) 6%, transparent));
+  color: var(--cyan-ink);
+  box-shadow: inset 0 1px 0 var(--rim-soft);
+}
+/* the "join" card reads as neutral (secondary action). */
+.meetc .mc-choice.mc-alt .mc-choice-ic {
+  background: linear-gradient(160deg, var(--fill-mid), var(--fill-weak));
+  color: var(--ink);
+}
+.meetc .mc-choice-ic svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-choice-tx { flex: 1; min-width: 0; }
+.meetc .mc-choice-tt { font-size: 16.5px; font-weight: 650; letter-spacing: -0.015em; }
+.meetc .mc-choice-ds { font-size: 13px; color: var(--ink2); margin-top: 3px; line-height: 1.4; }
+.meetc .mc-choice-chev { color: var(--ink3); flex: none; }
+.meetc .mc-choice-chev svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ════════════ SETUP — device tiles ════════════ */
+.meetc .mc-tiles {
+  display: flex;
+  gap: 11px;
+  margin-top: 12px;
+}
+.meetc .mc-tile {
+  flex: 1;
+  position: relative;
+  background: var(--glass2);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 16px 14px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s var(--ease-glass), border-color 0.2s var(--ease-out), background 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+.meetc .mc-tile:hover { transform: translateY(-2px); }
+.meetc .mc-tile.sel {
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 9%, transparent);
+  box-shadow: 0 14px 30px -14px color-mix(in srgb, var(--cyan) 42%, transparent);
+}
+/* 40px rounded icon disc. */
+.meetc .mc-tico-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-btn);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--cyan) 11%, transparent);
+  color: var(--cyan-ink);
+  margin-bottom: 11px;
+  transition: background 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+}
+.meetc .mc-tile.sel .mc-tico-wrap {
+  background: linear-gradient(160deg, var(--cyan-ink), var(--cyan));
+  box-shadow: 0 8px 18px -7px color-mix(in srgb, var(--cyan) 60%, transparent);
+  color: #fff; /* white glyph over the cyan disc — matches signed-off meet.css .tile.sel .ic */
+}
+/* Tinted PNG device icons (mask-image) — reused ONLY here. */
+.meetc .mc-tico {
+  width: 30px;
+  height: 30px;
+  background: currentColor;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.meetc .mc-tico.pod { -webkit-mask-image: url(/pod-mic-icon.png); mask-image: url(/pod-mic-icon.png); }
+.meetc .mc-tico.single { -webkit-mask-image: url(/single-icon.png); mask-image: url(/single-icon.png); }
+.meetc .mc-tico.multi { -webkit-mask-image: url(/dev-multi-icon.png); mask-image: url(/dev-multi-icon.png); }
+.meetc .mc-tt { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+.meetc .mc-ds { font-size: 11.5px; color: var(--ink2); margin-top: 3px; line-height: 1.3; }
+/* "?" help badge, top-right of a tile. */
+.meetc .mc-thelp {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink3);
+  background: var(--fill-mid);
+  cursor: help;
+  z-index: 5;
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+.meetc .mc-thelp:hover { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.meetc .mc-tile.sel .mc-thelp { border-color: var(--cyan); color: var(--cyan-ink); }
+/* Expandable info bar under the tiles (cyan bold lead-in). */
+.meetc .mc-infobar {
+  margin-top: 11px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+  box-shadow: var(--shadow-sm);
+  animation: mc-infobar 0.2s var(--ease-out);
+}
+.meetc .mc-infobar b { color: var(--cyan-ink); font-weight: 650; }
+
+/* ════════════ SETUP — option rows / number picker / sheet ════════════ */
+/* Glass row: leading mic disc + label + trailing chevron; may host an overlaid
+   transparent <select> (mic picker). */
+.meetc .mc-optrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--fill-strong);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+  font-size: 14.5px;
+  text-align: left;
+  transition: border-color 0.18s var(--ease-out), background 0.18s var(--ease-out);
+}
+.meetc .mc-optrow:hover { border-color: var(--line2); }
+.meetc .mc-optrow.mc-static { cursor: default; }
+.meetc .mc-optrow.mc-static:hover { border-color: var(--line); }
+.meetc .mc-optrow-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-chip);
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--cyan) 11%, transparent);
+  color: var(--cyan-ink);
+}
+.meetc .mc-optrow-ic svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-optrow-tx { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.meetc .mc-optrow-chev { flex: none; color: var(--ink3); display: inline-flex; }
+.meetc .mc-optrow-chev svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* transparent native <select> laid over the whole row (opens the OS picker). */
+.meetc .mc-optrow-native { position: relative; }
+.meetc .mc-optrow-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+}
+
+/* Number picker (2..6+ pill buttons). */
+.meetc .mc-numpick {
+  display: flex;
+  gap: 9px;
+  margin-top: 12px;
+}
+.meetc .mc-numpick button {
+  flex: 1;
+  padding: 13px 0;
+  border: 1.5px solid var(--line);
+  background: var(--glass2);
+  color: var(--ink2);
+  border-radius: var(--r-sm);
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.16s var(--ease-glass), border-color 0.18s var(--ease-out), background 0.18s var(--ease-out), color 0.18s var(--ease-out);
+}
+.meetc .mc-numpick button.sel {
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  color: var(--cyan-ink);
+}
+.meetc .mc-numpick button:active { transform: scale(0.94); }
+
+/* Bottom-sheet → CENTERED MODAL on desktop. */
+.meetc .mc-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: var(--scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  animation: mc-fade 0.2s var(--ease-out);
+}
+.meetc .mc-sheet {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--menu-bg);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge2);
+  border-radius: var(--r);
+  padding: 22px 22px 24px;
+  box-shadow: var(--shadow);
+  animation: mc-pop 0.32s var(--ease-glass);
+}
+.meetc .mc-sheet .mc-sect:first-of-type { margin-top: 0; }
+/* grip (kept as a subtle top handle — vestigial on desktop but harmless). */
+.meetc .mc-sheet-grip {
+  width: 42px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--line2);
+  margin: 0 auto 12px;
+}
+
+/* ════════════ ROOM — code / QR / share / rec / mute ════════════ */
+.meetc .mc-codebox {
+  text-align: center;
+  margin: 20px 0 16px;
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 24%, transparent);
+  border-radius: var(--r-sm);
+  padding: 20px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.meetc .mc-codelbl {
+  color: var(--ink2);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  font-weight: 650;
+}
+.meetc .mc-codelbl.ok { color: var(--ok); }
+.meetc .mc-codelbl.mc-center { text-align: center; }
+.meetc .mc-codebig {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cyan-ink);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  padding-left: 0.14em;
+  transition: transform 0.14s var(--ease-out), color 0.2s var(--ease-out);
+}
+.meetc .mc-codebig:active { transform: scale(0.97); }
+/* White QR plate — kept light for scanner contrast, in every theme. */
+.meetc .mc-qr {
+  display: grid;
+  place-items: center;
+  margin: 16px auto;
+  padding: 14px;
+  background: var(--qr-bg, #fff);
+  border-radius: var(--r-sm);
+  width: fit-content;
+  box-shadow: var(--shadow);
+}
+.meetc .mc-qr canvas,
+.meetc .mc-qr img { display: block; border-radius: 6px; }
+.meetc .mc-share {
+  display: flex;
+  gap: 9px;
+  margin-top: 10px;
+}
+.meetc .mc-share input { flex: 1; min-width: 0; font-size: 13.5px; }
+
+/* app.css's global field style only targets text/search/password/no-type inputs.
+   Give the cloud UI's other field types (join e-mail, the "Meeting planen" date/time)
+   the same glass treatment so no field renders as a raw browser box. */
+.meetc input[type="email"],
+.meetc input[type="tel"],
+.meetc input[type="url"],
+.meetc input[type="number"],
+.meetc input[type="date"],
+.meetc input[type="time"] {
+  background: var(--fill-strong);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  padding: 8px 11px;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out),
+    background 0.18s var(--ease-out);
+}
+
+/* Rec status pill line. */
+.meetc .mc-rec {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 14px auto 0;
+  color: var(--ink2);
+  background: var(--fill-soft);
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  padding: 9px 17px;
+  box-shadow: var(--shadow-sm);
+}
+.meetc .mc-recdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: none;
+}
+.meetc .mc-recdot.live {
+  background: var(--red);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 18%, transparent);
+  animation: mc-recpulse 1.3s infinite;
+}
+.meetc .mc-recdot.off { background: var(--ink3); box-shadow: none; animation: none; }
+.meetc .mc-timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--cyan-ink);
+  letter-spacing: 0.02em;
+}
+
+/* Single-device host hint card. */
+.meetc .mc-onehint {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cyan) 10%, transparent), color-mix(in srgb, var(--cyan) 3%, transparent));
+  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent);
+  border-radius: var(--r-sm);
+  padding: 16px 18px;
+  margin: 18px 0 0;
+  box-shadow: var(--shadow-sm);
+}
+.meetc .mc-onehint svg { width: 24px; height: 24px; stroke: var(--cyan-ink); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; margin-top: 1px; }
+.meetc .mc-onehint b { display: block; color: var(--ink); font-size: 15px; font-weight: 650; margin-bottom: 3px; }
+.meetc .mc-onehint span { font-size: 13.5px; color: var(--ink2); line-height: 1.5; }
+
+/* Amber caution card (don't-lock warning) with a lock stroke icon. */
+.meetc .mc-lockwarn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px auto 0;
+  max-width: 420px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+  border-radius: var(--r-sm);
+  padding: 11px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.meetc .mc-lockwarn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* Mic mute toggle pill (.on = accent, .muted look via inline mic-off svg). */
+.meetc .mc-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: fit-content;
+  margin: 18px auto 0;
+  padding: 12px 22px;
+  border-radius: 30px;
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent);
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  color: var(--cyan-ink);
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.16s var(--ease-glass), background 0.2s var(--ease-out), border-color 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+.meetc .mc-mute svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-mute:hover { background: color-mix(in srgb, var(--cyan) 16%, transparent); }
+.meetc .mc-mute:active { transform: scale(0.95); }
+/* muted state → red-tinted. */
+.meetc .mc-mute.on {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-color: color-mix(in srgb, var(--red) 32%, transparent);
+  color: var(--red);
+}
+.meetc .mc-mute.on:hover { background: color-mix(in srgb, var(--red) 16%, transparent); }
+
+/* ════════════ PARTICIPANTS ════════════ */
+.meetc .mc-plist {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.meetc .mc-prow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 14.5px;
+  background: var(--fill-weak);
+  box-shadow: var(--shadow-sm);
+}
+.meetc .mc-prow .mc-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.meetc .mc-prow.mc-empty { color: var(--ink3); border-style: dashed; background: transparent; box-shadow: none; justify-content: center; }
+.meetc .mc-pmail { color: var(--ink3); font-size: 0.78em; margin-left: 8px; opacity: 0.85; }
+.meetc .mc-pmail.none { opacity: 0.55; font-style: italic; }
+/* status pills. */
+.meetc .mc-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 30px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.meetc .mc-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.meetc .mc-pill.live { background: var(--ok-bg); color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok-line); }
+.meetc .mc-pill.wait { background: var(--amber-bg); color: var(--amber); }
+.meetc .mc-pill.gone { background: color-mix(in srgb, var(--ink2) 14%, transparent); color: var(--ink2); }
+.meetc .mc-pill.gone::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.meetc .mc-pill.pending { background: color-mix(in srgb, var(--cyan) 14%, transparent); color: var(--cyan-ink); }
+
+/* ════════════ ENROLL (pod voice check-in) ════════════ */
+.meetc .mc-enr { margin-top: 4px; }
+.meetc .mc-enr.mc-center { text-align: center; }
+.meetc .mc-enr-head { font-size: 16.5px; font-weight: 650; margin: 4px 0 2px; }
+/* host's own turn highlight. */
+.meetc .mc-enr-me {
+  margin: 8px 0;
+  padding: 4px 0;
+}
+.meetc .mc-enr-me.mc-active .mc-enr-code,
+.meetc .mc-enr.mc-active .mc-enr-code { animation: mc-enrpulse 1.7s ease-in-out infinite; }
+/* big spaced code digits. */
+.meetc .mc-enr-code {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin: 20px 0 10px;
+}
+.meetc .mc-enr-digit {
+  width: 46px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 700;
+  color: #fff; /* white glyph over the cyan digit tile — matches meet.css .enr-digit */
+  border-radius: var(--r-sm);
+  background: linear-gradient(160deg, var(--cyan-ink), var(--cyan));
+  box-shadow: 0 12px 28px -8px color-mix(in srgb, var(--cyan) 55%, transparent);
+  animation: mc-enrpop 0.42s var(--ease-glass) both;
+}
+.meetc .mc-enr-digit:nth-child(2) { animation-delay: 0.05s; }
+.meetc .mc-enr-digit:nth-child(3) { animation-delay: 0.1s; }
+.meetc .mc-enr-digit:nth-child(4) { animation-delay: 0.15s; }
+.meetc .mc-enr-digit:nth-child(5) { animation-delay: 0.2s; }
+.meetc .mc-enr-digit:nth-child(6) { animation-delay: 0.25s; }
+/* host roster list. */
+.meetc .mc-enr-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.meetc .mc-enr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--fill-weak);
+  box-shadow: var(--shadow-sm);
+}
+.meetc .mc-enr-row.cur { border-color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); }
+.meetc .mc-enr-name { flex: 1; min-width: 0; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.meetc .mc-enr-num { font-family: ui-monospace, monospace; letter-spacing: 0.14em; color: var(--cyan-ink); font-weight: 700; font-size: 15px; }
+/* "Pod hört zu" pulsing listen indicator. */
+.meetc .mc-enr-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--cyan-ink);
+  font-weight: 650;
+}
+.meetc .mc-enr-listen .mc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  flex: none;
+  animation: mc-enrlisten 1s ease-in-out infinite;
+}
+/* per-row status chips. */
+.meetc .mc-enr-done { color: var(--ok); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+.meetc .mc-enr-done svg { width: 15px; height: 15px; stroke: var(--ok); fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-enr-wait {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 30px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--ink2) 14%, transparent);
+  color: var(--ink2);
+}
+.meetc .mc-enr-fin {
+  color: var(--ok);
+  justify-content: center;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px 0;
+}
+/* guest "done" success block. */
+.meetc .mc-enr-donebox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+}
+.meetc .mc-enr-ring {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, var(--ok-bg), transparent 70%);
+  animation: mc-enrring 0.55s var(--ease-glass) both;
+}
+.meetc .mc-enr-ring svg {
+  width: 64px;
+  height: 64px;
+  stroke: var(--ok);
+  stroke-width: 3;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: mc-enrdraw 0.45s 0.18s ease forwards;
+}
+.meetc .mc-enr-doneh { font-size: 21px; font-weight: 650; color: var(--ok); }
+.meetc .mc-enr-dones { font-size: 14px; color: var(--ink2); }
+.meetc .mc-enr-spk { color: var(--cyan-ink); font-weight: 700; }
+.meetc .mc-enr-prompt { font-size: 16.5px; font-weight: 650; margin: 22px 0 2px; }
+.meetc .mc-enr-mic { font-size: 12.5px; color: var(--ink2); margin-top: 2px; }
+
+/* ════════════ BUTTONS (add-ons; primary = "sub-tab onb-primary") ════════════ */
+/* red-tinted danger button ("Meeting beenden"). */
+.meetc .mc-danger {
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s var(--ease-out), background 0.16s var(--ease-out), border-color 0.16s var(--ease-out);
+}
+.meetc .mc-danger:hover { background: color-mix(in srgb, var(--red) 18%, transparent); border-color: color-mix(in srgb, var(--red) 60%, transparent); }
+.meetc .mc-danger:active { transform: scale(0.97); }
+/* compact pill for approve / reject / erkannt / skip. */
+.meetc .mc-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--glass-edge);
+  background: var(--glass2);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s var(--ease-out), background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+.meetc .mc-mini:active { transform: scale(0.95); }
+.meetc .mc-mini svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+/* accent-affirmative (approve / erkannt). */
+.meetc .mc-mini.ok { border-color: var(--cyan); background: color-mix(in srgb, var(--cyan) 14%, transparent); color: var(--cyan-ink); }
+.meetc .mc-mini.ok:hover { background: color-mix(in srgb, var(--cyan) 20%, transparent); }
+/* reject / skip. */
+.meetc .mc-mini.rej { border-color: color-mix(in srgb, var(--red) 28%, transparent); background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
+
+/* ════════════ ENDED / RESULTS ════════════ */
+/* Processing block (wave / spinner) + rotating stage text. */
+.meetc .mc-proc { text-align: center; }
+.meetc .mc-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 58px;
+  margin: 28px auto 14px;
+}
+.meetc .mc-wave span {
+  width: 5px;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--cyan-ink), var(--cyan));
+  box-shadow: 0 4px 10px -4px color-mix(in srgb, var(--cyan) 50%, transparent);
+  animation: mc-wave 1.9s ease-in-out infinite;
+}
+.meetc .mc-wave span:nth-child(1) { animation-delay: 0s; }
+.meetc .mc-wave span:nth-child(2) { animation-delay: 0.18s; }
+.meetc .mc-wave span:nth-child(3) { animation-delay: 0.36s; }
+.meetc .mc-wave span:nth-child(4) { animation-delay: 0.54s; }
+.meetc .mc-wave span:nth-child(5) { animation-delay: 0.36s; }
+.meetc .mc-wave span:nth-child(6) { animation-delay: 0.18s; }
+.meetc .mc-wave span:nth-child(7) { animation-delay: 0s; }
+/* spinner (Waiting room + any single-ring wait state). */
+.meetc .mc-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--line);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: mc-spin 1s linear infinite;
+  margin: 24px auto;
+}
+.meetc .mc-stage {
+  text-align: center;
+  font-size: 14px;
+  color: var(--cyan-ink);
+  font-weight: 600;
+  min-height: 20px;
+  letter-spacing: 0.01em;
+  transition: opacity 0.25s var(--ease-out);
+}
+/* Zusammenfassung ↔ Transkript segmented row (reuse .sub-tabs / .sub-tab). */
+.meetc .mc-seg {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 16px;
+}
+/* Protocol-language selector row. */
+.meetc .mc-protolang {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 6px 0 14px;
+  flex-wrap: wrap;
+}
+.meetc .mc-protolang-lb { font-size: 12px; color: var(--ink2); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.meetc .mc-protolang-lb svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-protolang select { font-size: 13px; }
+.meetc .mc-protolang-spin { font-size: 12px; color: var(--cyan-ink); font-weight: 600; }
+
+/* Action bar (icon buttons: copy / download / transcript / pdf / recap / intel). */
+.meetc .mc-actionbar {
+  display: flex;
+  gap: 16px;
+  margin-top: 28px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.meetc .mc-actionbar button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.meetc .mc-actionbar button .mc-ab-ic {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--fill-mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out), background 0.2s var(--ease-out);
+}
+.meetc .mc-actionbar button:hover .mc-ab-ic {
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 26px -10px color-mix(in srgb, var(--cyan) 50%, transparent);
+}
+.meetc .mc-actionbar button:active .mc-ab-ic { transform: scale(0.92); }
+.meetc .mc-actionbar button .mc-ab-ic svg { width: 22px; height: 22px; stroke: var(--ink); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.meetc .mc-actionbar button:hover .mc-ab-ic svg { stroke: var(--cyan); }
+.meetc .mc-actionbar button .mc-ab-ic img { height: 22px; display: block; }
+.meetc .mc-actionbar button .mc-ab-cap { font-size: 11px; color: var(--ink2); font-weight: 600; }
+.meetc .mc-actionbar button.done .mc-ab-ic { border-color: var(--ok); background: var(--ok-bg); }
+.meetc .mc-actionbar button.done .mc-ab-ic svg { stroke: var(--ok); }
+.meetc .mc-actionbar button.done .mc-ab-cap { color: var(--ok); }
+
+/* ── Recap modal (recipient picker) ── */
+.meetc .mc-recap-ov {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 18px;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: mc-fade 0.2s var(--ease-out);
+}
+.meetc .mc-recap {
+  background: var(--recap-bg);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge2);
+  border-radius: var(--r);
+  padding: 24px;
+  max-width: 460px;
+  width: 100%;
+  max-height: 86vh;
+  overflow: auto;
+  box-shadow: var(--shadow);
+  animation: mc-pop 0.3s var(--ease-glass);
+}
+.meetc .mc-recap-h { margin: 0 0 4px; font-size: 19px; color: var(--ink); font-weight: 650; letter-spacing: -0.02em; }
+.meetc .mc-recap-sub { margin: 0 0 16px; color: var(--ink2); font-size: 13px; line-height: 1.45; }
+.meetc .mc-recap-list { display: flex; flex-direction: column; }
+.meetc .mc-recap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.meetc .mc-recap-row:first-child { border-top: none; }
+.meetc .mc-recap-who { flex: 1; min-width: 0; }
+.meetc .mc-recap-nm { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+.meetc .mc-recap-badge {
+  font-size: 10px;
+  background: color-mix(in srgb, var(--cyan) 14%, transparent);
+  color: var(--cyan-ink);
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+}
+.meetc .mc-recap-row input,
+.meetc .mc-recap-row select { width: 100%; font-size: 13px; }
+.meetc .mc-recap-row select { margin-top: 7px; }
+/* toggle switch (include recipient). */
+.meetc .mc-recap-tog { position: relative; display: inline-block; width: 40px; height: 23px; flex: none; cursor: pointer; }
+.meetc .mc-recap-tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+.meetc .mc-recap-slider { position: absolute; inset: 0; background: var(--fill-strong); border: 1px solid var(--line); border-radius: 999px; transition: background 0.16s var(--ease-out); }
+.meetc .mc-recap-slider::before {
+  content: "";
+  position: absolute;
+  width: 17px;
+  height: 17px;
+  left: 3px;
+  top: 2px;
+  background: var(--ink2);
+  border-radius: 50%;
+  transition: transform 0.16s var(--ease-out), background 0.16s var(--ease-out);
+}
+.meetc .mc-recap-tog input:checked + .mc-recap-slider { background: color-mix(in srgb, var(--cyan) 55%, transparent); border-color: var(--cyan); }
+.meetc .mc-recap-tog input:checked + .mc-recap-slider::before { transform: translateX(17px); background: var(--cyan-ink); }
+.meetc .mc-recap-actions { display: flex; gap: 10px; margin-top: 20px; }
+.meetc .mc-recap-actions button { flex: 1; }
+.meetc .mc-recap-err { color: var(--danger, var(--red)); font-size: 12px; margin-top: 10px; min-height: 1em; }
+.meetc .mc-recap-empty { color: var(--ink3); font-size: 13px; padding: 14px 0; text-align: center; }
+
+/* ── Drill-down modal (deep-dive explanation) ── */
+.meetc .mc-ddm-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: var(--scrim);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: mc-fade 0.22s var(--ease-out);
+}
+.meetc .mc-ddm {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--menu-bg);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge2);
+  border-radius: var(--r);
+  padding: 26px 24px;
+  box-shadow: var(--shadow);
+  animation: mc-pop 0.32s var(--ease-glass);
+}
+.meetc .mc-ddm-x {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--fill-soft);
+  color: var(--ink2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.meetc .mc-ddm-x svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; }
+.meetc .mc-ddm-title { font-size: 19px; font-weight: 650; color: var(--ink); line-height: 1.32; margin: 2px 42px 18px 0; letter-spacing: -0.015em; }
+.meetc .mc-ddm-sec { margin-bottom: 18px; }
+.meetc .mc-ddm-sec:last-child { margin-bottom: 0; }
+.meetc .mc-ddm-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--cyan-ink); margin-bottom: 10px; }
+.meetc .mc-ddm-excerpt { margin: 0; padding: 13px 16px; background: color-mix(in srgb, var(--cyan) 7%, transparent); border-left: 3px solid var(--cyan); border-radius: 0 12px 12px 0; font-size: 15px; line-height: 1.6; color: var(--prose); font-style: italic; }
+.meetc .mc-ddm-explanation { font-size: 15.5px; line-height: 1.7; color: var(--prose); }
+
+/* Connection-lost sticky banner. */
+.meetc .mc-connlost {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: -28px -30px 18px;
+  background: var(--amber-bg);
+  border-bottom: 1px solid var(--amber-line);
+  color: var(--amber);
+  text-align: center;
+  padding: 11px 16px;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  animation: mc-clin 0.22s var(--ease-glass);
+}
+.meetc .mc-connlost svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   PROSE — the deep-dive / transcript / speaker-assign body.
+
+   The Ended screen injects HTML from meet-ui/lib/markdown.ts (frozen logic layer)
+   whose class names (dd-sect / dd-h / dd-hi / dd-topic / dd-list / dd-p / dd-owner
+   / dd-empty / spkassign* / tr-turn / tr-spk / tr-dot / tr-lines / tr-l / tr-ts /
+   tr-plain) exist NOWHERE ELSE in the native app. They are re-provided here,
+   scoped under `.meetc`, re-tokenised for auto-theming. The port wraps the inject
+   in `.mc-prose`.
+   NOTE: the renderer bakes EMOJI into the `.dd-hi` badge (📄🗂️✅📋🧠) and the
+   `.spkassign-h` label (🎙️). `.dd-hi` is display:none'd here; the port strips the
+   remaining emoji from the HTML string before injecting (see port contract).
+   ════════════════════════════════════════════════════════════════════════════ */
+.meetc .mc-prose { margin-top: 2px; }
+
+.meetc .dd-empty { color: var(--ink3); font-size: 14px; padding: 24px 0; text-align: center; }
+.meetc .dd-sect {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 18px 20px;
+  margin: 0 0 14px;
+  background: var(--fill-soft);
+  box-shadow: var(--shadow-sm);
+  animation: mc-enrpop 0.42s var(--ease-glass) both;
+}
+.meetc .dd-sect.themen { border-color: color-mix(in srgb, var(--cyan) 24%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--cyan) 6%, transparent), var(--grad-fade)); }
+.meetc .dd-sect.entsch { border-color: var(--ok-line); background: linear-gradient(180deg, color-mix(in srgb, var(--ok) 6%, transparent), var(--grad-fade)); }
+.meetc .dd-sect.aufg { border-color: color-mix(in srgb, var(--violet) 26%, transparent); background: linear-gradient(180deg, color-mix(in srgb, var(--violet) 6%, transparent), var(--grad-fade)); }
+.meetc .dd-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 13px;
+  color: var(--cyan-ink);
+}
+.meetc .dd-sect.entsch .dd-h { color: var(--ok); }
+.meetc .dd-sect.aufg .dd-h { color: var(--violet); }
+.meetc .dd-hi { display: none; } /* the badge only holds an emoji → hidden (enterprise no-emoji) */
+.meetc .dd-p { font-size: 15.5px; line-height: 1.7; color: var(--prose); margin: 0; }
+.meetc .dd-topic {
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--ink);
+  margin: 16px 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.meetc .dd-topic:first-of-type { margin-top: 0; }
+.meetc .dd-topic::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--cyan); transform: rotate(45deg); flex: none; }
+.meetc .dd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.meetc .dd-topic + .dd-list { margin-bottom: 4px; }
+.meetc .dd-list li { position: relative; padding-left: 22px; font-size: 15px; line-height: 1.55; color: var(--prose2); }
+.meetc .dd-list li::before { content: ""; position: absolute; left: 5px; top: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }
+.meetc .dd-sect.entsch .dd-list li::before { background: var(--ok); }
+.meetc .dd-sect.aufg .dd-list li::before { background: var(--violet); }
+.meetc .dd-owner { display: inline-block; background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--violet); font-weight: 650; font-size: 12.5px; padding: 1px 9px; border-radius: 20px; margin-right: 6px; }
+/* drill-down clickable rows. */
+.meetc .dd-click { cursor: pointer; position: relative; transition: color 0.16s var(--ease-out); }
+.meetc .dd-list li.dd-click { padding-right: 22px; }
+.meetc .dd-list li.dd-click::after { content: "›"; position: absolute; right: 5px; top: 4px; color: var(--cyan-ink); font-weight: 800; opacity: 0.5; transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out); }
+.meetc .dd-topic.dd-click::after { content: "›"; color: var(--cyan-ink); font-weight: 800; opacity: 0.5; margin-left: auto; transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out); }
+.meetc .dd-click:hover { color: var(--ink); }
+.meetc .dd-click:hover::after { opacity: 1; transform: translateX(3px); }
+
+/* transcript turns (per-speaker; --spk carries the speaker colour inline). */
+.meetc .tr-turn { margin: 0 0 17px; padding-left: 14px; border-left: 2px solid var(--spk, var(--cyan)); }
+.meetc .tr-turn:last-child { margin-bottom: 0; }
+.meetc .tr-spk { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--spk, var(--cyan-ink)); letter-spacing: 0.01em; margin-bottom: 7px; }
+.meetc .tr-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--spk, var(--cyan)); flex: none; }
+.meetc .tr-lines { display: flex; flex-direction: column; gap: 5px; }
+.meetc .tr-l { font-size: 15px; line-height: 1.55; color: var(--prose2); margin: 0; display: flex; gap: 10px; }
+.meetc .tr-ts { flex: none; min-width: 38px; font-variant-numeric: tabular-nums; font-size: 11.5px; font-weight: 600; color: var(--ink3); padding-top: 3px; }
+.meetc .tr-plain { font-size: 14px; color: var(--ink2); margin: 10px 2px; }
+
+/* single-device speaker-assignment card (inside the transcript). */
+.meetc .spkassign {
+  background: var(--fill-soft);
+  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent);
+  border-radius: var(--r-sm);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.meetc .spkassign-h { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--cyan-ink); margin-bottom: 13px; }
+.meetc .spkassign-grid { display: flex; flex-direction: column; gap: 10px; }
+.meetc .spkassign-row { display: flex; align-items: center; gap: 12px; }
+.meetc .spkassign-orig { font-size: 13px; font-weight: 650; color: var(--ink2); min-width: 84px; flex: none; }
+.meetc .spkassign select { flex: 1; min-width: 0; font-size: 14.5px; }
+
+/* internal "Bezug" context block. */
+.meetc .bezug {
+  margin-top: 6px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cyan) 8%, transparent), var(--grad-fade));
+  border: 1px solid color-mix(in srgb, var(--cyan) 22%, transparent);
+  border-radius: var(--r-sm);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+}
+.meetc .bezug-h { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--cyan-ink); margin-bottom: 12px; }
+.meetc .bezug-h svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ════════════ RESPONSIVE ════════════ */
+@media (max-width: 560px) {
+  .meetc { padding: 20px 16px 32px; }
+  .meetc .mc-connlost { margin: -20px -16px 16px; }
+  .meetc .mc-tiles { flex-direction: column; }
+  .meetc .mc-codebig { font-size: 38px; }
+}
+
+/* ════════════ REDUCED MOTION — kill pulses / transforms ════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .meetc *,
+  .meetc *::before,
+  .meetc *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.09s !important;
+  }
+  .meetc .mc-recdot.live,
+  .meetc .mc-enr-listen .mc-dot,
+  .meetc .mc-enr-me.mc-active .mc-enr-code,
+  .meetc .mc-enr.mc-active .mc-enr-code,
+  .meetc .mc-wave span,
+  .meetc .mc-spinner { animation: none !important; }
+}

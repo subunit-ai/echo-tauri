@@ -293,7 +293,9 @@
     "actionRecapEmail": "Rückblick-E-Mail",
     "processError": "Fehler: {{error}}",
     "tabOffline": "Offline-Meeting",
-    "tabLive": "Live-Meeting"
+    "tabLive": "Live-Meeting",
+    "tabCloud": "Cloud-Meeting",
+    "tabLocal": "Lokales Meeting"
   },
   "vocab": {
     "title": "Vokabular",

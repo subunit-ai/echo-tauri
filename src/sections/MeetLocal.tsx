@@ -70,6 +70,51 @@ function PersonIcon() {
   );
 }
 
+/** Getönte Custom-Geräte-Glyphe (die GLEICHEN PNGs wie die Cloud-Setup-Kacheln),
+ *  hier als cyan-Maske gerendert → visuelle Klammer zwischen Lokal- und Cloud-Modus. */
+function DevMask({ png, size = 26 }: { png: string; size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        flex: "none",
+        background: "var(--cyan-d)",
+        WebkitMaskImage: `url(/${png})`,
+        maskImage: `url(/${png})`,
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+    />
+  );
+}
+
+/** 44px cyan-getönte Icon-Scheibe wie CloudSetups `.mc-tico-wrap` — trägt eine DevMask. */
+function DevDisc({ png }: { png: string }) {
+  return (
+    <span
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: "var(--r-btn)",
+        display: "grid",
+        placeItems: "center",
+        flex: "none",
+        background: "color-mix(in srgb, var(--cyan) 11%, transparent)",
+        border: "1px solid var(--line)",
+        boxShadow: "inset 0 1px 0 var(--rim-soft)",
+      }}
+    >
+      <DevMask png={png} />
+    </span>
+  );
+}
+
 export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; embedded?: boolean }) {
   const { t } = useTranslation();
   const [avail, setAvail] = useState<MeetLocalAvailability | null>(null);
@@ -206,8 +251,15 @@ export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; 
     return (
       <div>
         {!embedded && <h1 className="section-title">{t("meetLocal.title")}</h1>}
-        <p className="section-sub" style={{ maxWidth: 560 }}>{t("meetLocal.pitch")}</p>
-        <div className="card" style={{ maxWidth: 560 }}>
+        <p className="section-sub" style={{ maxWidth: 580 }}>{t("meetLocal.pitch")}</p>
+        <div className="card" style={{ maxWidth: 580 }}>
+          {/* Geräte-Emblem: die drei Custom-Icons wie in CloudSetup, als cyan-Masken —
+              bindet den Lokal-Scan optisch an die Cloud-Einrichtung. */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 12, margin: "2px 0 18px", filter: "drop-shadow(0 0 8px rgba(34,211,238,0.28))" }}>
+            <DevDisc png="pod-mic-icon.png" />
+            <DevDisc png="single-icon.png" />
+            <DevDisc png="dev-multi-icon.png" />
+          </div>
           <div className="ml-scan-head">
             <span className="ml-scan-title">{t("meetLocal.scanTitle")}</span>
             <span className={`ml-scan-sub ${scanStep < 3 ? "scanning" : ""}`}>
@@ -313,7 +365,7 @@ export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; 
         </h1>
       )}
 
-      <div className="card" style={{ maxWidth: 640 }}>
+      <div className="card" style={{ maxWidth: 600 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
           {snap.phase === "recording" && (
             <span
@@ -322,7 +374,8 @@ export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; 
                 width: 12,
                 height: 12,
                 borderRadius: "50%",
-                background: "#f55",
+                background: "var(--red)",
+                boxShadow: "0 0 0 4px color-mix(in srgb, var(--red) 18%, transparent)",
                 transform: `scale(${1 + Math.min(snap.level, 1) * 0.9})`,
                 transition: "transform 120ms ease-out",
               }}
@@ -349,7 +402,7 @@ export function MeetLocal({ onClose, embedded = false }: { onClose: () => void; 
             {snap.participants.map((p) => (
               <div
                 key={p.name}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid var(--border, rgba(255,255,255,0.06))" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid var(--line)" }}
               >
                 <span style={{ display: "grid", placeItems: "center", width: 18 }}>
                   {p.enrolled ? <GateIcon ok /> : <PersonIcon />}

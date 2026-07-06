@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.80",
+    date: "2026-07-06",
+    title: { de: "Meetings neu — nativ & aufgeräumt", en: "Meetings, rebuilt — native & tidy" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Der Meeting-Bereich wurde komplett neu gebaut und fügt sich jetzt nahtlos in Echo ein — dasselbe ruhige Glas-Design wie im Rest der App statt der bisherigen aufgesetzten Ansicht.",
+        en: "The meeting area has been rebuilt from the ground up and now blends seamlessly into Echo — the same calm glass design as the rest of the app instead of the previous bolted-on look.",
+      },
+      {
+        kind: "feature",
+        de: "Cloud-Meeting und lokales Meeting liegen jetzt auf einer Seite mit einem Umschalter — Beitritts-Code, QR, Teilnehmer, Timer und Stimm-Check-In alle im gewohnten Look.",
+        en: "Cloud meeting and local meeting now share one page with a single switch — join code, QR, participants, timer and voice check-in all in the familiar look.",
+      },
+    ],
+  },
+  {
     version: "0.5.79",
     date: "2026-07-06",
     title: { de: "Notizen — synchron mit deinem iPhone", en: "Notes — in sync with your iPhone" },
