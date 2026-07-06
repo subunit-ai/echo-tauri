@@ -22,12 +22,21 @@ function Shell() {
   const { t } = useTranslation();
   const { config } = useConfig();
   const [section, setSection] = useState<Section>("home");
-  // Meeting is now ONE tab with two modes: "offline" (local Pro flow) and "live"
-  // (native cloud meet). The former separate Live-Meeting sidebar entry folds in here.
-  const [meetingTab, setMeetingTab] = useState<"offline" | "live">("offline");
-  const openMeeting = (tab: "offline" | "live") => {
+  // Meeting is now ONE section with two native modes: "cloud" (the Liquid-Glass
+  // cloud meet) and "local" (the on-device Pro flow). The former separate
+  // Live-Meeting sidebar entry folds in here.
+  const [meetingTab, setMeetingTab] = useState<"cloud" | "local">("cloud");
+  // Signals that the cloud tab was opened via Home's "Meeting starten" → land on
+  // host setup. Cleared whenever the user manually switches the sub-tab.
+  const [meetingAutostart, setMeetingAutostart] = useState(false);
+  const openMeeting = (tab: "cloud" | "local", autostart = false) => {
     setMeetingTab(tab);
+    setMeetingAutostart(autostart);
     setSection("meetings");
+  };
+  const onMeetingTab = (tab: "cloud" | "local") => {
+    setMeetingTab(tab);
+    setMeetingAutostart(false);
   };
   // Settings' active tab is lifted here so the bottom-left account card can deep-
   // link straight into the Account tab (and the greeting's "edit name" too).
@@ -67,11 +76,11 @@ function Shell() {
       <Sidebar active={section} onSelect={setSection} onAccount={() => openSettings("account")} />
       <main className="content" ref={mainRef}>
         <div className="page-animate">
-          {section === "home" && <Home onStartMeeting={() => openMeeting("live")} onOpenAccount={() => openSettings("account")} />}
+          {section === "home" && <Home onStartMeeting={() => openMeeting("cloud", true)} onOpenAccount={() => openSettings("account")} />}
           {section === "notes" && <Notes />}
           {section === "history" && <History />}
           {section === "settings" && <Settings tab={settingsTab} onTab={setSettingsTab} />}
-          {section === "meetings" && <Meetings tab={meetingTab} onTab={setMeetingTab} />}
+          {section === "meetings" && <Meetings tab={meetingTab} onTab={onMeetingTab} autostart={meetingAutostart} />}
           {section === "vocabulary" && <Vocabulary />}
           {section === "help" && <Help />}
         </div>

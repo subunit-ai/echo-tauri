@@ -5,6 +5,7 @@ import App from "./App";
 import i18n from "./i18n"; // initialize translations before first render (sync)
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/meet.css";
 
 // Crash reporting. No-op unless VITE_SENTRY_DSN is set at build time.
 // We never send audio or transcript content.
