@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.81",
+    date: "2026-07-06",
+    title: { de: "Postfach — Benachrichtigungen oben rechts", en: "Inbox — notifications, top-right" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neu: ein Postfach oben rechts (die Glocke). Es bündelt verfügbare Updates und „Was ist neu“ an einer Stelle — mit einem Punkt, sobald es etwas Neues gibt.",
+        en: "New: an inbox top-right (the bell). It gathers available updates and “what’s new” in one place — with a dot whenever something’s new.",
+      },
+    ],
+  },
+  {
     version: "0.5.80",
     date: "2026-07-06",
     title: { de: "Meetings neu — nativ & aufgeräumt", en: "Meetings, rebuilt — native & tidy" },

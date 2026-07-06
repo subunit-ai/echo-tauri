@@ -768,5 +768,11 @@
     "title": "Was ist neu",
     "seeAll": "Alle Änderungen ansehen",
     "dismiss": "Los geht’s"
+  },
+  "postfach": {
+    "title": "Postfach",
+    "updateTitle": "Update auf v{{version}} verfügbar",
+    "updateSub": "Lädt herunter, installiert und startet neu.",
+    "whatsNew": "Neu in v{{version}}"
   }
 }
