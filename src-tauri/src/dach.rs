@@ -6,6 +6,9 @@
 //!     "zweihundert Euro" → "200 €", "drei tausend Euro" → "3000 €",
 //!     "20 Euro" → "20 €", "50 Cent" → "50 ct". Running prose like
 //!     "der Euro fällt" or a bare "tausend Euro" is left untouched.
+//!   - Percent + common units, same conservative number rule:
+//!     "fünfzig Prozent" → "50 %", "zehn Kilometer" → "10 km",
+//!     "500 Gramm" → "500 g" (km/cm/mm/m/kg/g/l).
 //!   - Abbreviation spacing: "z.B." → "z. B.".
 //!   - Punctuation spacing: "Hallo  ,  Welt" → "Hallo, Welt".
 //!   - German curly quotes: "Hallo" → „Hallo".
@@ -138,6 +141,17 @@ static CURRENCY: Lazy<Regex> = Lazy::new(|| {
 });
 static DIGIT_ONLY: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d+(?:[.,]\d+)?$").expect("invalid DIGIT_ONLY regex pattern"));
 
+// Same number-capture as CURRENCY, but before a percent/unit word. Longer unit
+// words come first in the alternation so "Kilometer" never loses to "Meter"
+// (belt — the `\s+` already anchors the unit at the word start). Inflected dative
+// plurals (…metern) included since dictation often produces them.
+static MEASURE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)\b(\d+(?:[.,]\d+)?|[a-zäöüß]+(?:\s+[a-zäöüß]+){0,3})\s+(Prozent|Kilometern|Kilometer|Zentimetern|Zentimeter|Millimetern|Millimeter|Kilogramm|Metern|Meter|Kilo|Gramm|Litern|Liter)\b",
+    )
+    .expect("invalid MEASURE regex pattern")
+});
+
 /// Scale words that must never stand alone as "the number" — "tausend Euro" is
 /// too ambiguous (e.g. "Aktien für tausend Euro") so we leave it untouched.
 fn is_scale_only(w: &str) -> bool {
@@ -147,40 +161,82 @@ fn is_scale_only(w: &str) -> bool {
     )
 }
 
+/// Resolve the number capture (a digit literal or 1–4 German number words) to a
+/// digit string. `None` = ambiguous or a bare scale word ("tausend") → the caller
+/// leaves the original text untouched. Shared by currency AND measure formatting.
+/// Returns `(prefix, digits)` where `prefix` is any leading words kept verbatim
+/// (with a trailing space) and `digits` is the parsed amount. `None` = nothing
+/// parseable, so the caller leaves the original text untouched.
+fn resolve_amount(raw: &str) -> Option<(String, String)> {
+    if DIGIT_ONLY.is_match(raw) {
+        return Some((String::new(), raw.to_string()));
+    }
+    let words: Vec<&str> = raw.split_whitespace().collect();
+    // The regex greedily captures up to 4 words, so a leading NON-number word can
+    // ride along ("in zwei Metern", "für zweihundert Euro"). Take the longest
+    // TRAILING sub-phrase that parses and keep the skipped leader verbatim, so the
+    // replacement is "in 2 m", never "2 m" (which would eat the "in").
+    for start in 0..words.len() {
+        let sub = &words[start..];
+        // A bare scale word ("tausend") is too ambiguous to stand as the amount.
+        if sub.len() == 1 && is_scale_only(sub[0]) {
+            continue;
+        }
+        let joined: String = sub.concat();
+        let parsed = parse_german_compound(&joined)
+            .or_else(|| if sub.len() >= 2 { multiply_phrase(sub) } else { None });
+        if let Some(p) = parsed {
+            let prefix = if start == 0 {
+                String::new()
+            } else {
+                format!("{} ", words[..start].join(" "))
+            };
+            return Some((prefix, p.to_string()));
+        }
+    }
+    None
+}
+
 fn format_currency(caps: &Captures) -> String {
     let whole = caps[0].to_string();
-    let raw = caps[1].trim();
-    let unit = &caps[2];
-    let unit_lower = unit.to_lowercase();
-
-    let n_str = if DIGIT_ONLY.is_match(raw) {
-        raw.to_string()
-    } else {
-        let words: Vec<&str> = raw.split_whitespace().collect();
-        if words.len() == 1 && is_scale_only(words[0]) {
-            return whole;
-        }
-        let joined: String = words.concat();
-        let parsed = parse_german_compound(&joined).or_else(|| {
-            if words.len() >= 2 {
-                multiply_phrase(&words)
-            } else {
-                None
-            }
-        });
-        match parsed {
-            Some(p) => p.to_string(),
-            None => return whole,
-        }
+    let (prefix, n_str) = match resolve_amount(caps[1].trim()) {
+        Some(x) => x,
+        None => return whole,
     };
-
-    let suffix = match unit_lower.as_str() {
-        "euro" => " €".to_string(),
-        "cent" => " ct".to_string(),
-        "chf" | "franken" => " CHF".to_string(),
-        _ => format!(" {unit}"),
+    let suffix = match caps[2].to_lowercase().as_str() {
+        "euro" => " €",
+        "cent" => " ct",
+        "chf" | "franken" => " CHF",
+        _ => return whole,
     };
-    format!("{n_str}{suffix}")
+    format!("{prefix}{n_str}{suffix}")
+}
+
+/// SI-symbol suffix for a spoken percent/unit word (base + dative-plural forms).
+fn unit_suffix(unit_lower: &str) -> Option<&'static str> {
+    Some(match unit_lower {
+        "prozent" => " %",
+        "kilometer" | "kilometern" => " km",
+        "zentimeter" | "zentimetern" => " cm",
+        "millimeter" | "millimetern" => " mm",
+        "meter" | "metern" => " m",
+        "kilogramm" | "kilo" => " kg",
+        "gramm" => " g",
+        "liter" | "litern" => " l",
+        _ => return None,
+    })
+}
+
+fn format_measure(caps: &Captures) -> String {
+    let whole = caps[0].to_string();
+    let suffix = match unit_suffix(&caps[2].to_lowercase()) {
+        Some(s) => s,
+        None => return whole,
+    };
+    match resolve_amount(caps[1].trim()) {
+        Some((prefix, n)) => format!("{prefix}{n}{suffix}"),
+        None => whole,
+    }
 }
 
 static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
@@ -218,6 +274,7 @@ pub fn dach_format(text: &str) -> String {
         return String::new();
     }
     let mut s = CURRENCY.replace_all(text, format_currency).into_owned();
+    s = MEASURE.replace_all(&s, format_measure).into_owned();
     for (re, repl) in ABBREVIATIONS.iter() {
         s = re.replace_all(&s, *repl).into_owned();
     }
@@ -245,6 +302,8 @@ mod tests {
         assert_eq!(dach_format("dreitausend Euro"), "3000 €");
         assert_eq!(dach_format("drei tausend Euro"), "3000 €");
         assert_eq!(dach_format("einundzwanzig Euro"), "21 €");
+        // Leading non-number word is kept verbatim, not eaten.
+        assert_eq!(dach_format("für zweihundert Euro"), "für 200 €");
     }
 
     #[test]
@@ -252,6 +311,28 @@ mod tests {
         // bare scale word + running prose must be left alone
         assert_eq!(dach_format("der Euro fällt"), "der Euro fällt");
         assert_eq!(dach_format("Aktien für tausend Euro"), "Aktien für tausend Euro");
+    }
+
+    #[test]
+    fn percent_and_units() {
+        assert_eq!(dach_format("fünfzig Prozent"), "50 %");
+        assert_eq!(dach_format("das sind 20 Prozent"), "das sind 20 %");
+        assert_eq!(dach_format("zehn Kilometer"), "10 km");
+        assert_eq!(dach_format("fünf Kilometer"), "5 km"); // not mangled via "Kilo"+"meter"
+        assert_eq!(dach_format("500 Gramm Mehl"), "500 g Mehl");
+        assert_eq!(dach_format("drei Kilo"), "3 kg");
+        assert_eq!(dach_format("zwei Meter Stoff"), "2 m Stoff");
+        assert_eq!(dach_format("hundertfünfzig Zentimeter"), "150 cm");
+        assert_eq!(dach_format("in zwei Metern Höhe"), "in 2 m Höhe");
+    }
+
+    #[test]
+    fn units_stay_conservative() {
+        // Bare scale word before a unit is ambiguous → left alone (like currency).
+        assert_eq!(dach_format("tausend Meter"), "tausend Meter");
+        // No number → untouched (the unit word alone must never trigger).
+        assert_eq!(dach_format("der Meter ist eine Einheit"), "der Meter ist eine Einheit");
+        assert_eq!(dach_format("viele Kilometer entfernt"), "viele Kilometer entfernt");
     }
 
     #[test]

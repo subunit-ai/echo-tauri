@@ -319,7 +319,15 @@ pub struct Config {
     #[serde(default)]
     pub vocab_seed_version: u32,
 
+    /// DACH text formatting (currency/percent/units → symbols, abbreviations,
+    /// German quotes). Deterministic + zero-latency. ON by default (v0.5.85);
+    /// existing configs are flipped once via `dach_format_migrated`.
+    #[serde(default = "default_true")]
     pub dach_format_enabled: bool,
+    /// One-time guard flipping `dach_format_enabled` ON for configs that predate
+    /// the default change; a later opt-out is then respected forever.
+    #[serde(default)]
+    pub dach_format_migrated: bool,
 
     pub history_size: i32,
     /// Lossless passthrough of history entries (shape owned by the transcription path).
@@ -451,7 +459,8 @@ impl Default for Config {
             vocabulary_default_seeded: false,
             vocab_seed_version: 0,
 
-            dach_format_enabled: false,
+            dach_format_enabled: true,
+            dach_format_migrated: false,
 
             history_size: 50,
             history: Vec::new(),
@@ -524,6 +533,7 @@ impl Config {
         c.orb_idle_migrated = true; // fresh installs default to the "normal" idle mode
         c.sound_split_migrated = true; // fresh installs already have the split toggles
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
+        c.dach_format_migrated = true; // fresh installs already default DACH formatting on
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -627,6 +637,13 @@ impl Config {
         if !self.filler_removal_migrated {
             self.filler_removal_enabled = true;
             self.filler_removal_migrated = true;
+        }
+        // v0.5.85: DACH formatting (Euro→€, percent/units, German quotes) is now
+        // on by default — deterministic, zero-latency, precision-safe. Flip existing
+        // configs (saved false) on exactly once; a later opt-out is respected forever.
+        if !self.dach_format_migrated {
+            self.dach_format_enabled = true;
+            self.dach_format_migrated = true;
         }
         // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
         // of its top-left ("custom-x-y"), so size changes scale the orb in place
@@ -831,5 +848,21 @@ mod tests {
         optout.filler_removal_migrated = true;
         optout.migrate();
         assert!(!optout.filler_removal_enabled, "explicit opt-out must survive migrate");
+    }
+
+    #[test]
+    fn dach_format_migrates_on_once_then_respects_optout() {
+        let mut old = Config::default();
+        old.dach_format_enabled = false;
+        old.dach_format_migrated = false;
+        old.migrate();
+        assert!(old.dach_format_enabled, "old config must be flipped on once");
+        assert!(old.dach_format_migrated, "guard must trip so it never re-runs");
+
+        let mut optout = Config::default();
+        optout.dach_format_enabled = false;
+        optout.dach_format_migrated = true;
+        optout.migrate();
+        assert!(!optout.dach_format_enabled, "explicit opt-out must survive migrate");
     }
 }
