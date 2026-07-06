@@ -24,8 +24,24 @@ export interface ChangelogEntry {
   changes: ChangeItem[];
 }
 
+// localStorage key holding the last version the user acknowledged (shared by
+// WhatsNew + the onboarding pre-seed so a fresh install skips the popup).
+export const LAST_SEEN_KEY = "echo:lastSeenVersion";
+
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "0.5.77",
+    date: "2026-07-06",
+    title: { de: "„Was ist neu“ erscheint zuverlässig", en: "“What’s new” shows reliably" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Der „Was ist neu“-Hinweis erscheint jetzt zuverlässig nach einem Update — auch wenn du von einer älteren Version kommst.",
+        en: "The “What’s new” note now appears reliably after an update — including when you come from an older version.",
+      },
+    ],
+  },
   {
     version: "0.5.76",
     date: "2026-07-06",
