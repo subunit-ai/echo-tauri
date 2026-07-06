@@ -374,11 +374,11 @@ mod tests {
     #[test]
     fn post_process_filler_gated_by_toggle() {
         let mut cfg = Config::default();
-        assert!(!cfg.filler_removal_enabled); // opt-in, off by default
-        // Off: fillers survive the deterministic pass.
-        assert_eq!(post_process("Ähm das ist gut", &cfg), "Ähm das ist gut");
+        assert!(cfg.filler_removal_enabled); // on by default as of v0.5.84
         // On: fillers stripped, still zero-latency (no network).
-        cfg.filler_removal_enabled = true;
         assert_eq!(post_process("Ähm das ist gut", &cfg), "Das ist gut");
+        // Explicit opt-out: fillers survive the deterministic pass untouched.
+        cfg.filler_removal_enabled = false;
+        assert_eq!(post_process("Ähm das ist gut", &cfg), "Ähm das ist gut");
     }
 }

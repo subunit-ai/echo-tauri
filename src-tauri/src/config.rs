@@ -200,10 +200,16 @@ pub struct Config {
 
     /// Deterministic, zero-latency filler-word strip ("äh"/"ähm"/"hmm" → gone).
     /// A local text pass (no `/v1/cleanup` round trip), so it's the "light
-    /// cleanup" for users who keep the AI cleanup off to stay fast. Off by
-    /// default (changes output); old configs default off via serde.
-    #[serde(default)]
+    /// cleanup" that costs nothing even with the AI cleanup off. ON by default
+    /// (v0.5.84): universally wanted and precision-safe (never cuts real words).
+    #[serde(default = "default_true")]
     pub filler_removal_enabled: bool,
+    /// One-time guard that flips `filler_removal_enabled` ON for configs that
+    /// predate the default flip. Old configs saved `false`, so changing the
+    /// default alone would never reach them — this migrates them exactly once,
+    /// then respects a later opt-out forever.
+    #[serde(default)]
+    pub filler_removal_migrated: bool,
 
     pub long_form_threshold_seconds: i32,
     pub long_form_cleanup_style: String,
@@ -389,7 +395,8 @@ impl Default for Config {
             cleanup_style: "prompt".to_string(),
             cleanup_auto_mode: false,
             auto_mode_overrides: HashMap::new(),
-            filler_removal_enabled: false,
+            filler_removal_enabled: true,
+            filler_removal_migrated: false,
 
             long_form_threshold_seconds: 240,
             long_form_cleanup_style: "raw".to_string(),
@@ -516,6 +523,7 @@ impl Config {
         c.orb_colors_migrated = true; // fresh installs already use the per-state color defaults
         c.orb_idle_migrated = true; // fresh installs default to the "normal" idle mode
         c.sound_split_migrated = true; // fresh installs already have the split toggles
+        c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -611,6 +619,14 @@ impl Config {
             self.sound_start_enabled = self.sound_enabled;
             self.sound_paste_enabled = self.sound_enabled;
             self.sound_split_migrated = true;
+        }
+        // v0.5.84: filler-word removal ("äh"/"ähm"/"hmm") is now on by default —
+        // universally wanted, precision-safe, zero-latency. Existing configs saved
+        // it as false (the old opt-in default), so flip it ON exactly once; a later
+        // deliberate opt-out is then respected forever (the guard never re-runs).
+        if !self.filler_removal_migrated {
+            self.filler_removal_enabled = true;
+            self.filler_removal_migrated = true;
         }
         // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
         // of its top-left ("custom-x-y"), so size changes scale the orb in place
@@ -792,5 +808,28 @@ impl Config {
             return Err(e.into());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filler_removal_migrates_on_once_then_respects_optout() {
+        // A config that predates the v0.5.84 default flip: saved off, never migrated.
+        let mut old = Config::default();
+        old.filler_removal_enabled = false;
+        old.filler_removal_migrated = false;
+        old.migrate();
+        assert!(old.filler_removal_enabled, "old config must be flipped on once");
+        assert!(old.filler_removal_migrated, "guard must trip so it never re-runs");
+
+        // A user who deliberately opts out AFTER the migration stays opted out.
+        let mut optout = Config::default();
+        optout.filler_removal_enabled = false;
+        optout.filler_removal_migrated = true;
+        optout.migrate();
+        assert!(!optout.filler_removal_enabled, "explicit opt-out must survive migrate");
     }
 }
