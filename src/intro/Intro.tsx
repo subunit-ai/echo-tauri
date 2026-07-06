@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useConfig } from "../state/ConfigContext";
+import { LAST_SEEN_KEY, latestVersion } from "../lib/changelog";
 import { useReducedMotion } from "./useReducedMotion";
 import { Opening } from "./scenes/Opening";
 import { Account } from "./scenes/Account";
@@ -71,6 +72,14 @@ export function Intro() {
       await invoke("hotkey_set_suspended", { suspended: false });
     } catch {
       /* re-register also happens on unmount + next launch */
+    }
+    // Pre-seed the changelog "last seen" so a genuinely fresh install doesn't
+    // get a redundant "what's new" popup right after onboarding. Existing users
+    // updating into the feature have no key → they DO get it (see WhatsNew).
+    try {
+      localStorage.setItem(LAST_SEEN_KEY, latestVersion());
+    } catch {
+      /* localStorage unavailable → popup will just show once; harmless */
     }
     await patch({ has_seen_onboarding: true });
   }, [patch]);

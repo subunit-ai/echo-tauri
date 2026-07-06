@@ -7,19 +7,25 @@ import {
   entriesSince,
   latestVersion,
   localizeEntry,
+  LAST_SEEN_KEY,
   type ChangelogEntry,
   type LocalizedEntry,
 } from "../lib/changelog";
 import { CHANGELOG } from "../lib/changelog";
 import { ChangelogList } from "./Changelog";
 
-const SEEN_KEY = "echo:lastSeenVersion";
+const SEEN_KEY = LAST_SEEN_KEY;
 
 /**
  * One-shot "What's new" popup, shown the first time the app runs on a newer
  * version than last acknowledged. The last-seen version lives in localStorage
- * (persists in the webview, no backend/config change needed). A fresh install
- * (no key yet) is recorded silently — we never nag someone who just onboarded.
+ * (persists in the webview, no backend/config change needed).
+ *
+ * A GENUINE fresh install is pre-seeded at onboarding completion (Intro), so it
+ * skips this popup. If there is no key here, it means an EXISTING user just
+ * updated INTO the first version that carries this feature → we welcome them
+ * with what's new in the version they landed on (this is the case TJ hit: the
+ * feature-introducing update showed nothing).
  *
  * `onSeeAll` navigates to the full changelog (Help section).
  */
@@ -36,18 +42,21 @@ export function WhatsNew({ onSeeAll }: { onSeeAll: () => void }) {
       const current = await appVersion().catch(() => latestVersion());
       if (cancelled) return;
       const seen = localStorage.getItem(SEEN_KEY);
-
-      // First run ever (or localStorage cleared): record, don't surface.
-      if (!seen) {
-        localStorage.setItem(SEEN_KEY, current);
-        return;
-      }
-      if (cmpVersion(seen, current) >= 0) return; // already up to date
-
-      const fresh: ChangelogEntry[] = entriesSince(seen, current);
-      // Mark acknowledged now so it never re-nags, even if they don't click.
+      // Acknowledge now so it never re-nags, even if they don't click.
       localStorage.setItem(SEEN_KEY, current);
-      if (fresh.length === 0) return; // version bumped but nothing documented
+
+      // No key = existing user updating INTO the feature (fresh installs are
+      // pre-seeded at onboarding) → show what's new in the version they landed
+      // on (the newest documented entry at or below the running version).
+      let fresh: ChangelogEntry[];
+      if (!seen) {
+        const entry = CHANGELOG.find((e) => cmpVersion(e.version, current) <= 0);
+        fresh = entry ? [entry] : [];
+      } else {
+        if (cmpVersion(seen, current) >= 0) return; // already up to date
+        fresh = entriesSince(seen, current);
+      }
+      if (fresh.length === 0) return; // nothing documented for this jump
 
       setVersion(current);
       setEntries(fresh.map((e) => localizeEntry(e, i18n.language)));
