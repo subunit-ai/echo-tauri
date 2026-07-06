@@ -12,6 +12,7 @@ import { Settings, type SettingsTab } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
+import { WhatsNew } from "./components/WhatsNew";
 import { onState, onNeedsAccessibility } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
@@ -57,6 +58,8 @@ function Shell() {
       <SoundFx />
       <MeetingPrompt />
       <SessionBanner />
+      {/* One-shot "what's new" popup after an update; jumps to the full changelog in Help. */}
+      <WhatsNew onSeeAll={() => setSection("help")} />
       <Header />
       {/* Offline- and Live-Meeting now live under the single "Meeting" section (its own
           sub-tab switcher); the sidebar just navigates to it. */}
