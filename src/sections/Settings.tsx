@@ -9,6 +9,7 @@ import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
 import { useSessionExpired } from "../components/SessionBanner";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ChangelogModal } from "../components/Changelog";
 import {
   appVersion,
   checkForUpdates,
@@ -518,6 +519,7 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
   const [updating, setUpdating] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [ver, setVer] = useState("");
+  const [showChangelog, setShowChangelog] = useState(false);
   // Auto-Mode overrides edited as an ordered [substring, style] list (null = not loaded yet).
   const [ovr, setOvr] = useState<[string, string][] | null>(null);
 
@@ -726,6 +728,11 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             <Group title={t("settings.secAbout")}>
               <Row name={t("settings.version")} hint={ver ? t("settings.versionHint", { version: ver }) : ""}>
                 <span style={{ fontWeight: 700 }}>{ver ? `v${ver}` : "…"}</span>
+              </Row>
+              <Row name={t("settings.changelog")} hint={t("settings.changelogHint")}>
+                <button className="sub-tab" onClick={() => setShowChangelog(true)}>
+                  {t("settings.changelogBtn")}
+                </button>
               </Row>
               <Row name={t("settings.dataFolder")} hint={t("settings.dataFolderHint")}>
                 <button className="sub-tab" onClick={() => openConfigDir()}>
@@ -1266,6 +1273,7 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
         }}
         onCancel={() => setConfirmLogout(false)}
       />
+      <ChangelogModal open={showChangelog} onClose={() => setShowChangelog(false)} />
     </div>
   );
 }

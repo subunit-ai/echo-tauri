@@ -515,7 +515,10 @@
     "promptHotkey": "Prompt Terminal Hotkey",
     "promptHotkeyHint": "Globale Tastenkombi, die das schwebende Prompt Terminal öffnet/versteckt",
     "promptAsTarget": "Terminal als Diktat-Ziel",
-    "promptAsTargetHint": "Jede Transkription landet im Prompt Terminal statt in der aktiven App"
+    "promptAsTargetHint": "Jede Transkription landet im Prompt Terminal statt in der aktiven App",
+    "changelog": "Änderungsprotokoll",
+    "changelogHint": "Was in jeder Version neu dazugekommen ist.",
+    "changelogBtn": "Ansehen"
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",
@@ -697,5 +700,20 @@
         "constraints": "Vermeide: … · Achte auf:"
       }
     }
+  },
+  "changelog": {
+    "title": "Änderungsprotokoll",
+    "subtitle": "Was in jeder Version neu dazugekommen ist.",
+    "kind": {
+      "feature": "Neu",
+      "improvement": "Verbessert",
+      "fix": "Behoben"
+    }
+  },
+  "whatsnew": {
+    "eyebrow": "Update installiert",
+    "title": "Was ist neu",
+    "seeAll": "Alle Änderungen ansehen",
+    "dismiss": "Los geht’s"
   }
 }

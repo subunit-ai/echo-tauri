@@ -515,7 +515,10 @@
     "promptHotkey": "Prompt Terminal hotkey",
     "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Terminal",
     "promptAsTarget": "Terminal as dictation target",
-    "promptAsTargetHint": "Every transcription lands in the Prompt Terminal instead of the active app"
+    "promptAsTargetHint": "Every transcription lands in the Prompt Terminal instead of the active app",
+    "changelog": "Changelog",
+    "changelogHint": "What arrived in each version.",
+    "changelogBtn": "View"
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
@@ -697,5 +700,20 @@
         "constraints": "Avoid: … · Pay attention to:"
       }
     }
+  },
+  "changelog": {
+    "title": "Changelog",
+    "subtitle": "What arrived in each version.",
+    "kind": {
+      "feature": "New",
+      "improvement": "Improved",
+      "fix": "Fixed"
+    }
+  },
+  "whatsnew": {
+    "eyebrow": "Update installed",
+    "title": "What’s new",
+    "seeAll": "See all changes",
+    "dismiss": "Let’s go"
   }
 }

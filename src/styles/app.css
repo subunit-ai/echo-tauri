@@ -365,6 +365,260 @@ button {
   }
 }
 
+/* ============================================================
+   Changelog + "What's new" — shared list (.cl-*) rendered inline in Help,
+   in a modal from Settings, and inside the post-update popup (.wn-*).
+   ============================================================ */
+.cl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.cl-entry {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.cl-entry:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.cl-entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.cl-version {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--accent-bright);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.cl-entry.is-latest .cl-version {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cl-date {
+  font-size: 12px;
+  color: var(--ink3, var(--muted));
+}
+.cl-entry-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.cl-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.cl-change {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+}
+.cl-change-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* kind pill: colored dot + short label */
+.cl-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  padding: 2px 8px 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid var(--line2);
+  color: var(--ink2, var(--muted));
+  background: var(--fill-weak);
+}
+.cl-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.cl-tag--feature {
+  color: var(--accent-bright);
+  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cl-tag--improvement {
+  color: var(--violet, #a78bfa);
+  border-color: color-mix(in srgb, var(--violet, #a78bfa) 32%, transparent);
+  background: color-mix(in srgb, var(--violet, #a78bfa) 12%, transparent);
+}
+.cl-tag--fix {
+  color: var(--ok, #34d399);
+  border-color: color-mix(in srgb, var(--ok, #34d399) 32%, transparent);
+  background: color-mix(in srgb, var(--ok, #34d399) 12%, transparent);
+}
+
+/* Changelog modal (Settings → About) — glass card, scrollable body. */
+.cl-modal {
+  width: min(560px, calc(100vw - 40px));
+  max-height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: var(--glass2, rgba(20, 28, 46, 0.92));
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 var(--rim);
+  -webkit-backdrop-filter: var(--blur-glass);
+  backdrop-filter: var(--blur-glass);
+  animation: confirm-pop 0.2s var(--ease-out);
+}
+.cl-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.cl-modal-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.cl-modal-close,
+.wn-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.cl-modal-close:hover,
+.wn-close:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
+.cl-modal-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+}
+
+/* "What's new" popup — richer header (version badge + eyebrow + title),
+   scrollable highlights, primary/ghost actions. */
+.wn-card {
+  width: min(480px, calc(100vw - 40px));
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: var(--glass2, rgba(20, 28, 46, 0.92));
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 30px 70px -14px rgba(0, 0, 0, 0.65), inset 0 1px 0 var(--rim);
+  -webkit-backdrop-filter: var(--blur-glass);
+  backdrop-filter: var(--blur-glass);
+  animation: confirm-pop 0.22s var(--ease-out);
+  overflow: hidden;
+}
+.wn-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--line);
+  /* soft accent wash at the top so the update reads as a moment */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent);
+}
+.wn-badge {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  padding: 6px 12px;
+  border-radius: 12px;
+  color: var(--bg);
+  background: var(--accent);
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.wn-heading {
+  flex: 1;
+  min-width: 0;
+}
+.wn-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+.wn-title {
+  margin: 1px 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.wn-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+.wn-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line);
+}
+.wn-btn {
+  padding: 9px 18px;
+  border-radius: 11px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 700;
+  transition: background 0.15s ease, transform 0.08s ease, border-color 0.15s ease;
+}
+.wn-btn:active {
+  transform: scale(0.97);
+}
+.wn-btn.ghost:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+.wn-btn.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.wn-btn.primary:hover {
+  filter: brightness(1.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cl-modal,
+  .wn-card {
+    animation-duration: 0.01ms;
+  }
+}
+
 .plan-badge {
   font-size: 11px;
   font-weight: 700;
