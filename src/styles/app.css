@@ -190,6 +190,173 @@ button {
   font-weight: 800;
 }
 
+/* ── Postfach / notifications inbox (top-right, components/Postfach.tsx) ──────
+   A bell with an unread dot opens a floating glass panel. Folds in the app
+   update + "what's new"; built to grow (sync/team/meeting notices). */
+.postfach {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pf-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pf-bell:hover {
+    background: var(--glass2);
+    border-color: var(--glass-edge);
+    color: var(--text);
+  }
+}
+.pf-bell.is-open {
+  background: var(--glass2);
+  border-color: var(--glass-edge);
+  color: var(--text);
+}
+.pf-bell.has-unread {
+  color: var(--accent-bright);
+}
+.pf-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  border: 2px solid var(--glass);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.pf-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(340px, calc(100vw - 32px));
+  z-index: 300;
+  border-radius: 16px;
+  background: var(--menu-bg, var(--glass));
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 24px 60px -14px rgba(0, 0, 0, 0.62), inset 0 1px 0 var(--rim);
+  -webkit-backdrop-filter: var(--blur-glass);
+  backdrop-filter: var(--blur-glass);
+  overflow: hidden;
+  animation: pf-pop 0.16s var(--ease-out);
+}
+@keyframes pf-pop {
+  from { transform: translateY(-6px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.pf-head {
+  padding: 13px 15px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+.pf-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pf-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 11px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  transition: background 0.14s var(--ease-out), border-color 0.14s var(--ease-out);
+}
+.pf-link {
+  cursor: pointer;
+  align-items: center;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pf-link:hover {
+    background: var(--glass2);
+    border-color: var(--glass-edge);
+  }
+}
+.pf-update {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  align-items: flex-start;
+}
+.pf-kind {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+}
+.pf-kind--update { background: var(--amber, #fbbf24); }
+.pf-kind--news { background: var(--accent); }
+.pf-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.pf-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.pf-item-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pf-cta {
+  position: relative;
+  margin-top: 9px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow: hidden;
+  transition: filter 0.15s var(--ease-out);
+}
+.pf-cta:hover:not(:disabled) { filter: brightness(1.06); }
+.pf-cta:disabled { opacity: 0.9; }
+.pf-cta.err { border-color: var(--red, #fb5d7e); background: transparent; color: var(--red, #fb5d7e); }
+.pf-cta-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, #ffffff 26%, transparent);
+}
+.pf-cta-label { position: relative; z-index: 1; }
+.pf-chevron {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--ink3, var(--muted));
+  font-size: 18px;
+  line-height: 1;
+}
+.pf-quiet {
+  padding: 10px 11px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 /* "Sitzung abgelaufen" alert bar (components/SessionBanner.tsx). Pinned just under
    the 56px header, full width, amber so a dead cloud session is unmissable instead
    of silently failing. position:fixed keeps it out of the .app grid flow, so it

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { appVersion } from "../lib/ipc";
 import { BrandMark } from "./BrandMark";
-import { HeaderUpdate } from "./HeaderUpdate";
+import { Postfach } from "./Postfach";
 
 export function Header() {
   const [version, setVersion] = useState("");
@@ -19,9 +19,8 @@ export function Header() {
       <span className="beta-badge">Beta</span>
       {version && <span className="version">v{version}</span>}
       <div className="spacer" />
-      {/* Plan (Free/Pro) moved to the account card (bottom-left). Top-right keeps
-          the update pill; a notifications/inbox affordance can slot in here. */}
-      <HeaderUpdate />
+      {/* Notifications inbox (top-right): folds in the app update + "what's new". */}
+      <Postfach />
     </header>
   );
 }

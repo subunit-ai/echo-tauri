@@ -766,5 +766,11 @@
     "title": "What’s new",
     "seeAll": "See all changes",
     "dismiss": "Let’s go"
+  },
+  "postfach": {
+    "title": "Inbox",
+    "updateTitle": "Update to v{{version}} available",
+    "updateSub": "Downloads, installs and restarts.",
+    "whatsNew": "New in v{{version}}"
   }
 }
