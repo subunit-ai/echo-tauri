@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.78",
+    date: "2026-07-06",
+    title: { de: "Aufgeräumtes Konto & Änderungsprotokoll", en: "Tidied account & changelog" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Konto-Karte unten links zeigt jetzt deinen Plan (z. B. „Pro“) statt der abgeschnittenen E-Mail.",
+        en: "The account card (bottom-left) now shows your plan (e.g. “Pro”) instead of the truncated email.",
+      },
+      {
+        kind: "improvement",
+        de: "Das Änderungsprotokoll liegt jetzt gebündelt an einer Stelle: „Einstellungen → Über Echo“.",
+        en: "The changelog now lives in one place: Settings → About.",
+      },
+    ],
+  },
+  {
     version: "0.5.77",
     date: "2026-07-06",
     title: { de: "„Was ist neu“ erscheint zuverlässig", en: "“What’s new” shows reliably" },
@@ -49,8 +66,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       {
         kind: "feature",
-        de: "Neu: ein Änderungsprotokoll direkt in der App — sieh jederzeit, was in jeder Version dazugekommen ist (in Hilfe und in den Einstellungen unter „Über Echo“).",
-        en: "New: an in-app changelog — see what arrived in every version any time (in Help and under Settings → About).",
+        de: "Neu: ein Änderungsprotokoll direkt in der App — sieh jederzeit unter „Einstellungen → Über Echo“, was in jeder Version dazugekommen ist.",
+        en: "New: an in-app changelog — see what arrived in every version any time under Settings → About.",
       },
       {
         kind: "feature",
