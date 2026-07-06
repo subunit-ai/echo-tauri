@@ -27,6 +27,8 @@ mod models;
 mod prompt_console;
 mod presets; // per-account orb profiles (local-first)
 mod presets_sync; // /v1/presets cloud sync
+mod notes; // voice notes + folders (local-first, cross-device with Echo iOS)
+mod notes_sync; // /v1/notes cloud sync (byte-compatible with the iPhone)
 mod synapse;
 mod overlay;
 mod recorder;
@@ -185,6 +187,17 @@ pub fn run() {
             presets::rename_orb_profile,
             presets::delete_orb_profile,
             presets::duplicate_orb_profile,
+            notes::list_notes,
+            notes::save_note,
+            notes::delete_note,
+            notes::notes_sync_now,
+            notes::list_note_folders,
+            notes::save_note_folder,
+            notes::delete_note_folder,
+            notes::note_record_start,
+            notes::note_record_level,
+            notes::note_record_stop,
+            notes::note_record_cancel,
         ])
         .setup(|app| {
             // Version/platform banner — first line in every log, mirrors the old
@@ -263,6 +276,10 @@ pub fn run() {
                 crate::recorder::set_reactivity(c.orb_noise_floor, c.orb_gain, c.orb_gamma);
             }
             crate::presets_sync::kick(app.handle());
+            // Pull this account's notes in the background too (voice notes made on
+            // the iPhone appear here, and vice-versa). Best-effort; the Notes UI
+            // also syncs on mount + on window focus + after login.
+            crate::notes_sync::kick(app.handle());
 
             // macOS: the paste-back path must reach the main thread (enigo crashes
             // off-thread). Stash the handle for inject::macos_inject, then trigger the

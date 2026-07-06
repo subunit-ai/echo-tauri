@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.79",
+    date: "2026-07-06",
+    title: { de: "Notizen — synchron mit deinem iPhone", en: "Notes — in sync with your iPhone" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neu: der Bereich „Notizen“ in der Seitenleiste. Sprich Notizen ein oder tippe sie, ordne sie in Ordner/Projekte (z. B. „Prompts“) und kopiere jeden Text mit einem Klick.",
+        en: "New: a “Notes” section in the sidebar. Speak notes or type them, sort them into folders/projects (e.g. “Prompts”), and copy any note's text with a single click.",
+      },
+      {
+        kind: "feature",
+        de: "Deine Notizen sind dauerhaft mit der Echo-iPhone-App synchron: Was du unterwegs aufs iPhone sprichst, liegt hier am PC bereit — und umgekehrt.",
+        en: "Your notes stay permanently in sync with the Echo iPhone app: what you dictate on your phone while out is ready here on your PC — and vice-versa.",
+      },
+    ],
+  },
+  {
     version: "0.5.78",
     date: "2026-07-06",
     title: { de: "Aufgeräumtes Konto & Änderungsprotokoll", en: "Tidied account & changelog" },
