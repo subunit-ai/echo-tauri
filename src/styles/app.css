@@ -398,20 +398,136 @@ button {
   gap: 2px;
 }
 
-/* The active fill lives on ONE element that slides between items (measured +
-   positioned in Sidebar.tsx), so navigation reads as a single moving pill
-   rather than a hard-cut. transform-only → GPU, interruptible mid-slide. */
-.nav-indicator {
+/* Nav rows live in a relative wrapper: it is the offset-parent the sliding pill
+   is measured against and positioned within. The account card stays a direct
+   child of .sidebar (pinned to the bottom via margin-top:auto), so only the
+   navigation rows sit inside here. */
+.nav-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ============================================================
+   Sidebar Liquid-Glass-Slider (Apple-Prinzip, aus SCAI portiert).
+   EINE Glas-Pille liegt auf dem aktiven Eintrag, fährt beim Wechsel
+   smooth und lässt sich GREIFEN + ZIEHEN (.is-drag). Innen sitzt die
+   LINSE: eine geclippte, leicht skalierte Kopie der Nav, die
+   gegenläufig synchron mitfährt — der Inhalt unterm Glas erscheint
+   vergrößert (echte Refraktion; funktioniert auch in WKWebView, wo
+   SVG-backdrop-filter nicht existieren). Pille und Linsen-Kopie
+   MÜSSEN identische transform-Transitions haben, sonst schwimmt der
+   Ausschnitt beim Gleiten.
+   ============================================================ */
+.snav-ind {
   position: absolute;
-  left: 10px;
-  right: 10px;
+  left: 0;
+  right: 0;
   top: 0;
+  z-index: 2; /* über den echten Zeilen — die Linse ersetzt sie optisch */
   border-radius: var(--r-btn);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  transition: transform 0.2s var(--ease-out);
+  /* DECKENDER Boden: der echte Text darunter darf NIE durchscheinen — sonst
+     Doppelbild neben der Linsen-Kopie (TJ-Feedback 2026-07-06). Solides
+     --menu-bg (theme-aware) über opakem --bg garantiert 0 Durchscheinen und
+     trifft optisch die Effektiv-Farbe der Glass-Sidebar; der Akzent-Verlauf
+     obendrauf färbt zur Auswahl. Der Glas-Eindruck kommt aus Linse + Ring. */
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 22%, transparent),
+      color-mix(in srgb, var(--accent) 10%, transparent)
+    ),
+    linear-gradient(0deg, var(--menu-bg), var(--menu-bg)),
+    var(--bg);
+  /* Ring als inset-Shadow statt border: hält die Linsen-Kopie pixelgenau
+     deckungsgleich (border würde die Innenbox um 1px verschieben). */
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 14%, transparent),
+    inset 0 -8px 14px color-mix(in srgb, var(--accent) 8%, transparent),
+    0 2px 10px rgba(0, 0, 0, 0.28);
+  transition:
+    transform 300ms var(--ease-drawer),
+    height 300ms var(--ease-drawer),
+    opacity 200ms ease,
+    box-shadow 200ms ease;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+/* Akzent-Balken gleitet MIT der Pille */
+.snav-ind::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 18px;
+  width: 3px;
+  transform: translateY(-50%);
+  border-radius: 0 9999px 9999px 0;
+  background: var(--accent);
+  z-index: 1; /* über der Linsen-Kopie */
+}
+/* Gegriffen: KEIN Lift (das Glas bleibt flach auf der Fläche). Nur:
+   transform-Transitions aus, damit Pille + Linse dem Zeiger 1:1 folgen. */
+.snav-ind.is-drag {
+  transition:
+    height 300ms var(--ease-drawer),
+    opacity 200ms ease;
+  cursor: grabbing;
+}
+.snav-ind.is-drag .snav-lens-copy {
+  transition: none;
+}
+/* Linse: clippt die Kopie auf die Pillenform; zarte Feder an den Kanten, damit
+   Glyphen am Glasrand weich auslaufen (Licht bricht an der Kante). */
+.snav-lens {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
   pointer-events: none;
-  z-index: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 3px, #000 calc(100% - 3px), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 3px, #000 calc(100% - 3px), transparent 100%);
+}
+/* Dome-Linse (gewölbtes Glas): 3 horizontale Bänder approximieren die
+   Linsenkrümmung. Die Mitte vergrößert am stärksten (scaleY 1.08), die
+   10px-Randbänder komprimieren zur Glaskante hin (scaleY 0.97) — Schrift
+   „biegt" sich sichtbar, wenn sie beim Ziehen unter der Kante durchläuft.
+   Horizontal überall gleich (scaleX 1.06, Anker am Icon via inline
+   transform-origin). Der Clip liegt auf dem ÄUSSEREN, unskalierten Element
+   (fensterfest) — clip-path auf dem transformierten Element würde mitskalieren
+   und die Bandgrenzen verschieben. */
+.snav-lens-clip {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.snav-lens-clip--top { clip-path: inset(0 0 calc(100% - 10px) 0); }
+.snav-lens-clip--mid { clip-path: inset(10px 0 10px 0); }
+.snav-lens-clip--bot { clip-path: inset(calc(100% - 10px) 0 0 0); }
+.snav-lens-band {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.snav-lens-band--top { transform: translateY(calc(1.1px - 4%)) scaleX(1.06) scaleY(0.97); }
+.snav-lens-band--mid { transform: translateY(-4%) scaleX(1.06) scaleY(1.08); }
+.snav-lens-band--bot { transform: translateY(calc(7% - 1.1px)) scaleX(1.06) scaleY(0.97); }
+/* Deckungsgleiche Nav-Kopie: fährt exakt gegenläufig zur Pille (gleiche Dauer +
+   Kurve wie .snav-ind → hebt sich zu „stehendem" Inhalt auf). Das innere
+   .nav-list darin reproduziert die exakte Zeilen-Geometrie (gleiches gap). */
+.snav-lens-copy {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  transition: transform 300ms var(--ease-drawer);
   will-change: transform;
 }
 
@@ -1351,7 +1467,8 @@ select:hover {
   .mode-ind,
   .toggle .thumb,
   .stream-thumb,
-  .nav-indicator {
+  .snav-ind,
+  .snav-lens-copy {
     transition-duration: 0.01ms;
   }
 }

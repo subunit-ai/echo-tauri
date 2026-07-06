@@ -1,4 +1,10 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "./Avatar";
 import { useConfig } from "../state/ConfigContext";
@@ -61,6 +67,10 @@ const ITEMS: { key: Section; labelKey: string; pro?: boolean }[] = [
   { key: "help", labelKey: "nav.help" },
 ];
 
+// Horizontaler Zoom-Anker der Linse = Icon-Zentrum einer Zeile: nav-btn hat
+// padding-left 12px + Glyph-Breite 18/2 = 9 → 21px vom Zeilenanfang.
+const LENS_ORIGIN_X = "21px";
+
 export function Sidebar({
   active,
   onSelect,
@@ -73,43 +83,181 @@ export function Sidebar({
 }) {
   const { t } = useTranslation();
   const { config } = useConfig();
-  // A single filled pill slides between items instead of the fill hard-cutting
-  // from button to button. We MEASURE the active button (offsetTop/Height) rather
-  // than hardcoding row geometry, so the pill stays exact regardless of font
-  // metrics, i18n label heights or padding tweaks. useLayoutEffect positions it
-  // before paint (no first-frame flash); the CSS transition on transform slides it.
+
+  // --- Gleitender Liquid-Glass-Slider (Apple-Prinzip, aus SCAI portiert): EINE
+  // Glas-Pille liegt auf dem aktiven Eintrag und FÄHRT beim Wechsel smooth zur
+  // neuen Position. Gemessen wird der echte Button (offsetTop/Height relativ zum
+  // .nav-list-Wrapper) statt Zeilengeometrie zu raten; useLayoutEffect
+  // positioniert vor dem Paint (kein First-Frame-Flash).
   const btnRefs = useRef<Partial<Record<Section, HTMLButtonElement | null>>>({});
-  const [ind, setInd] = useState<{ top: number; height: number } | null>(null);
-  useLayoutEffect(() => {
+  const [ind, setInd] = useState<{ top: number; h: number; on: boolean }>({ top: 0, h: 0, on: false });
+  const measure = () => {
     const btn = btnRefs.current[active];
-    if (btn) setInd({ top: btn.offsetTop, height: btn.offsetHeight });
-  }, [active, t]);
+    setInd((p) => (btn ? { top: btn.offsetTop, h: btn.offsetHeight, on: true } : { ...p, on: false }));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(measure, [active, t]);
+
+  // --- Drag (Apple-Liquid-Glass-Verhalten): die Pille lässt sich greifen und
+  // ziehen; sie folgt dem Zeiger 1:1 (Rubber-Band jenseits der Liste, Magnet
+  // nahe Zeilenmitten) und rastet beim Loslassen auf dem nächstgelegenen Eintrag
+  // ein. Während des Drags KEIN React-Re-Render: Pille + Linsen-Kopien werden
+  // direkt per style mutiert (dragRef), erst der Drop committet via setInd/onSelect.
+  const indRef = useRef<HTMLSpanElement | null>(null);
+  const dragRef = useRef<{ startY: number; startTop: number; lastTop: number; moved: boolean } | null>(null);
+  // Beim Ziehen verliert die URSPRUNGSZEILE ihr Aktiv-Styling (active bleibt bis
+  // zum Drop unverändert — ohne das bliebe sie akzentfarben, obwohl das Glas
+  // längst woanders ist). Aktiv-Look lebt im Drag NUR in der Linse. Genau EIN
+  // Re-Render bei Drag-Start/-Ende, keins pro Frame.
+  const [dragging, setDragging] = useState(false);
+
+  const rows = () => Object.values(btnRefs.current).filter(Boolean) as HTMLButtonElement[];
+
+  // Pille und Linsen-Kopien fahren IMMER gegenläufig synchron — nur so bleibt der
+  // Glas-Ausschnitt deckungsgleich mit dem echten Inhalt darunter (alle 3 Dome-Bänder).
+  const setPillY = (top: number) => {
+    if (!indRef.current) return;
+    indRef.current.style.transform = `translateY(${top}px)`;
+    indRef.current.querySelectorAll<HTMLElement>(".snav-lens-copy").forEach((el) => {
+      el.style.transform = `translateY(${-top}px)`;
+    });
+  };
+  const onPillDown = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (!ind.on || e.button !== 0) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { startY: e.clientY, startTop: ind.top, lastTop: ind.top, moved: false };
+  };
+  const onPillMove = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dy = e.clientY - d.startY;
+    if (!d.moved && Math.abs(dy) < 3) return; // Klick-Toleranz
+    if (!d.moved) {
+      d.moved = true;
+      indRef.current?.classList.add("is-drag");
+      setDragging(true); // ind unverändert → React lässt den gedraggten Inline-Style stehen
+    }
+    let top = d.startTop + dy;
+    const btns = rows();
+    if (btns.length > 0) {
+      const min = Math.min(...btns.map((b) => b.offsetTop));
+      const max = Math.max(...btns.map((b) => b.offsetTop + b.offsetHeight)) - ind.h;
+      if (top < min) top = min - (min - top) / 3; // Rubber-Band oben
+      if (top > max) top = max + (top - max) / 3; // Rubber-Band unten
+      // Magnet: nahe einer Zeilenmitte zieht die Pille sanft dorthin.
+      const center = top + ind.h / 2;
+      for (const b of btns) {
+        const c = b.offsetTop + b.offsetHeight / 2;
+        if (Math.abs(c - center) < 6) {
+          top = top + (b.offsetTop - top) * 0.5;
+          break;
+        }
+      }
+    }
+    d.lastTop = top;
+    setPillY(top);
+  };
+  const onPillUp = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    indRef.current?.classList.remove("is-drag");
+    setDragging(false);
+    if (!d?.moved) return;
+    // Nächstgelegene Zeile (Mitte zu Mitte) — dorthin springen und committen.
+    const center = d.lastTop + ind.h / 2;
+    let best: { key: Section; top: number; h: number; dist: number } | null = null;
+    for (const [key, el] of Object.entries(btnRefs.current) as [Section, HTMLButtonElement | null][]) {
+      if (!el) continue;
+      const dist = Math.abs(el.offsetTop + el.offsetHeight / 2 - center);
+      if (!best || dist < best.dist) best = { key, top: el.offsetTop, h: el.offsetHeight, dist };
+    }
+    if (!best) return setPillY(ind.top);
+    // Direkt-Style setzen (nicht nur State): landet der Drag auf derselben Zeile,
+    // ändert sich das VDOM nicht und React würde den gedraggten Style nie zurücksetzen.
+    setPillY(best.top);
+    setInd({ top: best.top, h: best.h, on: true });
+    if (best.key !== active) onSelect(best.key);
+  };
+  const onPillCancel = () => {
+    dragRef.current = null;
+    indRef.current?.classList.remove("is-drag");
+    setDragging(false);
+    setPillY(ind.top); // zurück zum aktiven Eintrag
+  };
+
+  // lens=true rendert die identische Zeile als NICHT-interaktive Kopie für die
+  // Glas-Linse: immer im Aktiv-Look, keine Refs (btnRefs darf nur echte Buttons
+  // halten), kein onClick, aus dem Tab-Fluss. Als plain-Funktion (kein
+  // React-Komponenten-Boundary) → die echten Buttons remounten nicht pro Render,
+  // Refs bleiben stabil.
+  const renderRow = (it: (typeof ITEMS)[number], lens: boolean) => {
+    // Im Drag ist KEINE echte Zeile aktiv gestylt — der Aktiv-Look scheint nur
+    // durch die Linse (nur was hinterm Glas liegt, trägt Akzent).
+    const isActive = lens || (!dragging && it.key === active);
+    return (
+      <button
+        key={it.key}
+        ref={lens ? undefined : (el) => { btnRefs.current[it.key] = el; }}
+        className={`nav-btn ${isActive ? "active" : ""}`}
+        onClick={lens ? undefined : () => onSelect(it.key)}
+        tabIndex={lens ? -1 : undefined}
+      >
+        <span className="glyph" aria-hidden>
+          {ICONS[it.key]}
+        </span>
+        {t(it.labelKey)}
+        {it.pro && <span className="tier-badge nav-pro">Pro</span>}
+      </button>
+    );
+  };
 
   return (
     <nav className="sidebar">
-      {ind && (
+      {/* relativer Wrapper: Mess-Bezug für die Pille; der Konto-Fuß bleibt direktes
+          .sidebar-Kind (unten fixiert) und liegt außerhalb. */}
+      <div className="nav-list">
+        {ITEMS.map((it) => renderRow(it, false))}
+
+        {/* Liquid-Glass-Pille: liegt ÜBER den Zeilen (z-index), ist greif- und
+            ziehbar; innen die Linse = geclippte, leicht vergrößerte Kopie der
+            Nav, die gegenläufig mitfährt → Inhalt „zoomt durchs Glas". WICHTIG:
+            im DOM NACH den echten Buttons — Text-Queries treffen so zuerst die
+            echten Zeilen. */}
         <span
-          className="nav-indicator"
+          ref={indRef}
+          className="snav-ind"
           aria-hidden
-          style={{ transform: `translateY(${ind.top}px)`, height: ind.height }}
-        />
-      )}
-      {ITEMS.map((it) => (
-        <button
-          key={it.key}
-          ref={(el) => {
-            btnRefs.current[it.key] = el;
+          style={{
+            transform: `translateY(${ind.top}px)`,
+            height: ind.h,
+            opacity: ind.on ? 1 : 0,
+            pointerEvents: ind.on ? undefined : "none",
           }}
-          className={`nav-btn ${it.key === active ? "active" : ""}`}
-          onClick={() => onSelect(it.key)}
+          onPointerDown={onPillDown}
+          onPointerMove={onPillMove}
+          onPointerUp={onPillUp}
+          onPointerCancel={onPillCancel}
         >
-          <span className="glyph" aria-hidden>
-            {ICONS[it.key]}
+          <span className="snav-lens">
+            {/* Dome-Linse: 3 stetig ineinander übergehende Bänder — Mitte
+                vergrößert am stärksten, Randbänder komprimieren zur Glaskante
+                (Schrift „biegt" sich beim Durchgleiten). Zoom-Anker horizontal
+                am Icon (Zeilen-Fluchtpunkt). */}
+            {(["top", "mid", "bot"] as const).map((band) => (
+              <span key={band} className={`snav-lens-clip snav-lens-clip--${band}`}>
+                <span className={`snav-lens-band snav-lens-band--${band}`} style={{ transformOrigin: `${LENS_ORIGIN_X} 0` }}>
+                  <div className="snav-lens-copy" style={{ transform: `translateY(${-ind.top}px)` }}>
+                    <div className="nav-list">
+                      {ITEMS.map((it) => renderRow(it, true))}
+                    </div>
+                  </div>
+                </span>
+              </span>
+            ))}
           </span>
-          {t(it.labelKey)}
-          {it.pro && <span className="tier-badge nav-pro">Pro</span>}
-        </button>
-      ))}
+        </span>
+      </div>
 
       <AccountCard config={config} onClick={onAccount} />
     </nav>
