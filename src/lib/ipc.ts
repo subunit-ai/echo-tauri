@@ -55,6 +55,7 @@ export interface Config {
   cleanup_auto_mode: boolean;
   auto_mode_overrides: Record<string, string>;
   filler_removal_enabled: boolean;
+  filler_removal_migrated: boolean;
 
   long_form_threshold_seconds: number;
   long_form_cleanup_style: string;

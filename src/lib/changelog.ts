@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.84",
+    date: "2026-07-07",
+    title: { de: "Füllwörter fliegen automatisch raus", en: "Filler words are removed automatically" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "„äh“, „ähm“, „hmm“ und ähnliche Verzögerungslaute werden jetzt standardmäßig aus deinem Diktat entfernt — deterministisch und ohne zusätzliche Latenz, auch ohne KI-Cleanup. Echte Wörter bleiben unberührt. Abschaltbar unter Einstellungen → Cleanup → „Füllwörter entfernen“.",
+        en: "„äh“, „ähm“, „hmm“ and similar hesitation sounds are now removed from your dictation by default — deterministic and with no added latency, even without AI cleanup. Real words stay untouched. Turn it off under Settings → Cleanup → „Remove filler words“.",
+      },
+    ],
+  },
+  {
     version: "0.5.83",
     date: "2026-07-06",
     title: { de: "Meetings passen jetzt aufs Fenster — kein Scrollen", en: "Meetings now fit the window — no scrolling" },
