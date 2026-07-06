@@ -12,7 +12,7 @@ import {
   type LocalizedEntry,
 } from "../lib/changelog";
 import { CHANGELOG } from "../lib/changelog";
-import { ChangelogList } from "./Changelog";
+import { ChangelogList, ChangelogModal } from "./Changelog";
 
 const SEEN_KEY = LAST_SEEN_KEY;
 
@@ -27,12 +27,14 @@ const SEEN_KEY = LAST_SEEN_KEY;
  * with what's new in the version they landed on (this is the case TJ hit: the
  * feature-introducing update showed nothing).
  *
- * `onSeeAll` navigates to the full changelog (Help section).
+ * "See all changes" opens the full changelog modal in place (self-contained) —
+ * the full log lives in Settings → About, not in a section we'd navigate to.
  */
-export function WhatsNew({ onSeeAll }: { onSeeAll: () => void }) {
+export function WhatsNew() {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<LocalizedEntry[] | null>(null);
   const [version, setVersion] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,43 +68,47 @@ export function WhatsNew({ onSeeAll }: { onSeeAll: () => void }) {
     };
   }, []);
 
-  if (!entries) return null;
+  const seeAll = () => {
+    setEntries(null);
+    setShowAll(true);
+  };
 
   // Header shows the version the user just landed on (prefer the documented
   // entry that matches, else the raw app version).
-  const headVersion =
-    CHANGELOG.find((e) => e.version === version)?.version ?? entries[0]?.version ?? version;
-
-  const seeAll = () => {
-    setEntries(null);
-    onSeeAll();
-  };
+  const headVersion = entries
+    ? CHANGELOG.find((e) => e.version === version)?.version ?? entries[0]?.version ?? version
+    : "";
 
   return (
-    <div className="confirm-backdrop" onClick={() => setEntries(null)}>
-      <div className="wn-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <div className="wn-head">
-          <span className="wn-badge">v{headVersion}</span>
-          <div className="wn-heading">
-            <div className="wn-eyebrow">{t("whatsnew.eyebrow")}</div>
-            <h3 className="wn-title">{t("whatsnew.title")}</h3>
+    <>
+      {entries && (
+        <div className="confirm-backdrop" onClick={() => setEntries(null)}>
+          <div className="wn-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="wn-head">
+              <span className="wn-badge">v{headVersion}</span>
+              <div className="wn-heading">
+                <div className="wn-eyebrow">{t("whatsnew.eyebrow")}</div>
+                <h3 className="wn-title">{t("whatsnew.title")}</h3>
+              </div>
+              <button className="wn-close" onClick={() => setEntries(null)} aria-label={t("common.close")}>
+                ×
+              </button>
+            </div>
+            <div className="wn-body">
+              <ChangelogList entries={entries} />
+            </div>
+            <div className="wn-actions">
+              <button className="wn-btn ghost" onClick={seeAll}>
+                {t("whatsnew.seeAll")}
+              </button>
+              <button className="wn-btn primary" onClick={() => setEntries(null)}>
+                {t("whatsnew.dismiss")}
+              </button>
+            </div>
           </div>
-          <button className="wn-close" onClick={() => setEntries(null)} aria-label={t("common.close")}>
-            ×
-          </button>
         </div>
-        <div className="wn-body">
-          <ChangelogList entries={entries} />
-        </div>
-        <div className="wn-actions">
-          <button className="wn-btn ghost" onClick={seeAll}>
-            {t("whatsnew.seeAll")}
-          </button>
-          <button className="wn-btn primary" onClick={() => setEntries(null)}>
-            {t("whatsnew.dismiss")}
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+      <ChangelogModal open={showAll} onClose={() => setShowAll(false)} />
+    </>
   );
 }

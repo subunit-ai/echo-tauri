@@ -16,7 +16,6 @@ import {
 } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 import { useToast } from "../state/ToastContext";
-import { ChangelogList } from "../components/Changelog";
 
 const SUPPORT_EMAIL = "support@subunit.ai";
 
@@ -219,19 +218,6 @@ function Diagnostics() {
   );
 }
 
-/* In-app changelog: what arrived in each version, newest first. Single source
-   of truth in lib/changelog.ts (also feeds the post-update "What's new" popup). */
-function ChangelogCard() {
-  const { t } = useTranslation();
-  return (
-    <div className="card">
-      <div className="name" style={{ opacity: 0.7, marginBottom: 8 }}>{t("changelog.title")}</div>
-      <p className="section-sub" style={{ marginTop: 0 }}>{t("changelog.subtitle")}</p>
-      <ChangelogList />
-    </div>
-  );
-}
-
 export function Help() {
   const { t } = useTranslation();
   return (
@@ -239,7 +225,6 @@ export function Help() {
       <h1 className="section-title">{t("nav.help")}</h1>
       <p className="section-sub">{t("help.subtitle")}</p>
       <AskEcho />
-      <ChangelogCard />
       <Faq />
       <Diagnostics />
     </div>

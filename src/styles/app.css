@@ -2290,6 +2290,29 @@ select:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 2px;
+}
+/* Plan pill under the account name (replaces the old truncated email). */
+.sa-plan {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+}
+.sa-plan--pro {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.sa-plan--trial {
+  border-color: var(--accent);
+  color: var(--accent-bright);
 }
 .sa-gear {
   flex-shrink: 0;

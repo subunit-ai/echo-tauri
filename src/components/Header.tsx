@@ -1,21 +1,14 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { appVersion } from "../lib/ipc";
-import { useConfig } from "../state/ConfigContext";
 import { BrandMark } from "./BrandMark";
 import { HeaderUpdate } from "./HeaderUpdate";
 
 export function Header() {
-  const { t } = useTranslation();
-  const { config } = useConfig();
   const [version, setVersion] = useState("");
 
   useEffect(() => {
     appVersion().then((v) => setVersion(v)).catch(() => {});
   }, []);
-
-  const plan = config?.plan ?? "free";
-  const planClass = plan === "pro" ? "pro" : plan === "trial" ? "trial" : "";
 
   return (
     <header className="header">
@@ -26,10 +19,9 @@ export function Header() {
       <span className="beta-badge">Beta</span>
       {version && <span className="version">v{version}</span>}
       <div className="spacer" />
+      {/* Plan (Free/Pro) moved to the account card (bottom-left). Top-right keeps
+          the update pill; a notifications/inbox affordance can slot in here. */}
       <HeaderUpdate />
-      <span className={`plan-badge ${planClass}`} title={t("header.planBadgeTitle")}>
-        {t(`header.plan.${plan}`)}
-      </span>
     </header>
   );
 }

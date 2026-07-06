@@ -58,8 +58,8 @@ function Shell() {
       <SoundFx />
       <MeetingPrompt />
       <SessionBanner />
-      {/* One-shot "what's new" popup after an update; jumps to the full changelog in Help. */}
-      <WhatsNew onSeeAll={() => setSection("help")} />
+      {/* One-shot "what's new" popup after an update; "see all" opens the full changelog modal. */}
+      <WhatsNew />
       <Header />
       {/* Offline- and Live-Meeting now live under the single "Meeting" section (its own
           sub-tab switcher); the sidebar just navigates to it. */}

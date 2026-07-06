@@ -265,9 +265,10 @@ export function Sidebar({
 }
 
 /** Bottom-left account card: initials avatar + nickname (falls back to name, then
- *  the email local part), secondary line shows the email or a sign-in hint. The
- *  whole card is one button that jumps into Settings → Account. Pinned to the
- *  sidebar's bottom via `margin-top:auto` (see .side-account). */
+ *  the email local part). The secondary line shows the PLAN (Free/Test/Pro) when
+ *  signed in — the email lived here before but was usually truncated and noisy
+ *  (it's still in Settings → Account). The whole card is one button that jumps
+ *  into Settings → Account. Pinned to the sidebar's bottom (see .side-account). */
 function AccountCard({
   config,
   onClick,
@@ -280,16 +281,23 @@ function AccountCard({
   const name = config?.display_name?.trim() || "";
   const email = config?.account_email?.trim() || "";
   const emailLocal = email ? email.split("@")[0] : "";
+  const loggedIn = !!email;
+  const plan = config?.plan ?? "free";
 
   const primary = nickname || name || emailLocal || t("account.guest");
-  const secondary = email || t("account.notSignedIn");
 
   return (
     <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
       <Avatar name={nickname || name || email} size={40} />
       <span className="sa-meta">
         <span className="sa-name">{primary}</span>
-        <span className="sa-sub">{secondary}</span>
+        <span className="sa-sub">
+          {loggedIn ? (
+            <span className={`sa-plan sa-plan--${plan}`}>{t(`header.plan.${plan}`)}</span>
+          ) : (
+            t("account.notSignedIn")
+          )}
+        </span>
       </span>
       <svg className="sa-gear" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M9 18l6-6-6-6" />
