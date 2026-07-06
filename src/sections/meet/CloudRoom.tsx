@@ -122,50 +122,57 @@ export function CloudRoom() {
       )}
 
       {!single && (
-        <div>
-          <div className="mc-codebox">
-            <div className={"mc-codelbl" + (codeCopied ? " ok" : "")}>
-              {codeCopied ? (
-                <>
-                  <Check /> {t("meet.cloudroom.codeCopied", "Code kopiert")}
-                </>
-              ) : (
-                t("meet.cloudroom.joinCode", "Beitritts-Code")
-              )}
+        <div className="mc-room-grid">
+          {/* linke Spalte: Einladen — Code, QR, Link */}
+          <div className="mc-room-col">
+            <div className="mc-codebox">
+              <div className={"mc-codelbl" + (codeCopied ? " ok" : "")}>
+                {codeCopied ? (
+                  <>
+                    <Check /> {t("meet.cloudroom.codeCopied", "Code kopiert")}
+                  </>
+                ) : (
+                  t("meet.cloudroom.joinCode", "Beitritts-Code")
+                )}
+              </div>
+              <div
+                className="mc-codebig"
+                role="button"
+                tabIndex={0}
+                title={t("meet.cloudroom.copyCode", "Code kopieren")}
+                onClick={copyCode}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    copyCode();
+                  }
+                }}
+              >
+                {m.code || "––––––"}
+              </div>
             </div>
-            <div
-              className="mc-codebig"
-              role="button"
-              tabIndex={0}
-              title={t("meet.cloudroom.copyCode", "Code kopieren")}
-              onClick={copyCode}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  copyCode();
-                }
-              }}
-            >
-              {m.code || "––––––"}
+
+            <div className="mc-qr">
+              <QRCodeCanvas value={shareUrl} size={132} fgColor="#0b1b30" bgColor="#ffffff" />
+            </div>
+
+            <div className="mc-codelbl mc-center">{t("meet.cloudroom.orShareLink", "Oder Link teilen")}</div>
+            <div className="mc-share">
+              <input readOnly value={shareUrl} />
+              <button className="sub-tab" onClick={copyLink}>
+                {t("meet.cloudroom.copy", "Kopieren")}
+              </button>
             </div>
           </div>
 
-          <div className="mc-qr">
-            <QRCodeCanvas value={shareUrl} size={180} fgColor="#0b1b30" bgColor="#ffffff" />
+          {/* rechte Spalte: Teilnehmer (+ Pod-Stimm-Check-In) */}
+          <div className="mc-room-col">
+            <div className="mc-sect" style={{ marginTop: 0 }}>{t("meet.cloudroom.participants", "Teilnehmer")}</div>
+            <ul className="mc-plist">
+              <Participants />
+            </ul>
+            {m.deviceMode === "pod" && <HostEnroll />}
           </div>
-
-          <div className="mc-codelbl mc-center">{t("meet.cloudroom.orShareLink", "Oder Link teilen")}</div>
-          <div className="mc-share">
-            <input readOnly value={shareUrl} />
-            <button className="sub-tab" onClick={copyLink}>
-              {t("meet.cloudroom.copy", "Kopieren")}
-            </button>
-          </div>
-
-          <div className="mc-sect">{t("meet.cloudroom.participants", "Teilnehmer")}</div>
-          <ul className="mc-plist">
-            <Participants />
-          </ul>
         </div>
       )}
 
@@ -189,11 +196,9 @@ export function CloudRoom() {
         </div>
       )}
 
-      {m.deviceMode === "pod" && <HostEnroll />}
-
       {!m.recOn && !m.enrolling && (
         <button
-          className="sub-tab onb-primary"
+          className="sub-tab onb-primary mc-roomaction"
           style={{ padding: "10px 18px", fontSize: 14, display: "inline-flex", alignItems: "center", gap: 8 }}
           disabled={starting}
           onClick={start}
@@ -212,7 +217,7 @@ export function CloudRoom() {
       )}
 
       {m.recOn && (
-        <button className="mc-danger" onClick={m.hostEnd}>
+        <button className="mc-danger mc-roomaction" onClick={m.hostEnd}>
           {t("meet.cloudroom.endMeeting", "Meeting beenden & auswerten")}
         </button>
       )}

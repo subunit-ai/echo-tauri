@@ -40,9 +40,10 @@
    padding + vertical scroll; every rule below is scoped under it. */
 .meetc {
   width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  padding: 28px 30px 40px;
+  /* No own padding/scroll — .meetc renders INSIDE .content, which already provides
+     the section padding (26px 30px) and the scroll. Doubling it wasted the top space
+     and narrowed the 2-column room. Keep a little bottom breathing room only. */
+  padding: 0 0 20px;
   font-family: var(--font);
   color: var(--ink);
   animation: mc-fade 0.18s var(--ease-out);
@@ -78,9 +79,9 @@
   color: var(--ink2);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin: 24px 2px 0;
+  margin: 14px 2px 0;
 }
-.meetc .mc-sect.mc-tight { margin-top: 18px; }
+.meetc .mc-sect.mc-tight { margin-top: 10px; }
 /* "· optional" softener inside a section label. */
 .meetc .mc-opt {
   text-transform: none;
@@ -108,9 +109,11 @@
 .meetc .mc-cta {
   display: flex;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 14px;
   flex-wrap: wrap;
 }
+/* Full-width primary action at the bottom of the host room (start/end). */
+.meetc .mc-roomaction { margin-top: 14px; align-self: stretch; justify-content: center; }
 
 /* Error text — themed danger (falls back to the --red token, never a raw hex). */
 .meetc .mc-err {
@@ -447,13 +450,27 @@
 }
 
 /* ════════════ ROOM — code / QR / share / rec / mute ════════════ */
+/* Host-Raum: 2-Spalten-Grid (links einladen · rechts Teilnehmer) — hält den Raum
+   OHNE Scrollen im 800x600-Default-Fenster. Bricht bei schmalem Pane auf 1 Spalte um. */
+.meetc .mc-room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  margin-top: 12px;
+}
+.meetc .mc-room-col { min-width: 0; }
+@media (max-width: 540px) {
+  .meetc .mc-room-grid { grid-template-columns: 1fr; gap: 10px; }
+}
+
 .meetc .mc-codebox {
   text-align: center;
-  margin: 20px 0 16px;
+  margin: 0 0 10px;
   background: color-mix(in srgb, var(--cyan) 6%, transparent);
   border: 1px solid color-mix(in srgb, var(--cyan) 24%, transparent);
   border-radius: var(--r-sm);
-  padding: 20px 16px;
+  padding: 11px 14px;
   box-shadow: var(--shadow-sm);
 }
 .meetc .mc-codelbl {
@@ -467,13 +484,13 @@
 .meetc .mc-codelbl.ok { color: var(--ok); }
 .meetc .mc-codelbl.mc-center { text-align: center; }
 .meetc .mc-codebig {
-  font-size: 46px;
+  font-size: 34px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   color: var(--cyan-ink);
   cursor: pointer;
   font-variant-numeric: tabular-nums;
-  padding-left: 0.14em;
+  padding-left: 0.1em;
   transition: transform 0.14s var(--ease-out), color 0.2s var(--ease-out);
 }
 .meetc .mc-codebig:active { transform: scale(0.97); }
@@ -481,8 +498,8 @@
 .meetc .mc-qr {
   display: grid;
   place-items: center;
-  margin: 16px auto;
-  padding: 14px;
+  margin: 0 auto 8px;
+  padding: 10px;
   background: var(--qr-bg, #fff);
   border-radius: var(--r-sm);
   width: fit-content;
@@ -527,13 +544,13 @@
   justify-content: center;
   gap: 9px;
   font-weight: 600;
-  font-size: 14px;
-  margin: 14px auto 0;
+  font-size: 13.5px;
+  margin: 10px auto 0;
   color: var(--ink2);
   background: var(--fill-soft);
   border: 1px solid var(--line);
   border-radius: 30px;
-  padding: 9px 17px;
+  padding: 7px 15px;
   box-shadow: var(--shadow-sm);
 }
 .meetc .mc-recdot {

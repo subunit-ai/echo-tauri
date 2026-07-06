@@ -82,6 +82,12 @@ button {
   backdrop-filter: var(--blur-glass);
   -webkit-backdrop-filter: var(--blur-glass);
   box-shadow: inset 0 1px 0 var(--rim);
+  /* Lift the header's stacking context above .content (which has its own
+     backdrop-filter context, painted later in the grid). Without this the
+     Postfach dropdown, which overflows the header downward, was occluded by
+     .content and appeared "behind" the page. */
+  position: relative;
+  z-index: 50;
 }
 
 .header .brand {

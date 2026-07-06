@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.83",
+    date: "2026-07-06",
+    title: { de: "Meetings passen jetzt aufs Fenster — kein Scrollen", en: "Meetings now fit the window — no scrolling" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Der Meeting-Bereich ist auf ein ruhiges 2-Spalten-Layout umgestellt: Beitritts-Code, QR und Teilnehmer stehen nebeneinander und passen ohne Scrollen ins Fenster — statisch bedienbar wie die übrigen Menüpunkte.",
+        en: "The meeting area now uses a calm two-column layout: join code, QR and participants sit side by side and fit the window without scrolling — as static and tidy as the other menu items.",
+      },
+      {
+        kind: "fix",
+        de: "Das Postfach oben rechts öffnet sich jetzt zuverlässig VOR dem Inhalt statt dahinter zu verschwinden.",
+        en: "The notification inbox (top right) now reliably opens in front of the content instead of disappearing behind it.",
+      },
+    ],
+  },
+  {
     version: "0.5.82",
     date: "2026-07-06",
     title: { de: "Notiz-Ordner synchronisieren jetzt auch", en: "Note folders now sync too" },
