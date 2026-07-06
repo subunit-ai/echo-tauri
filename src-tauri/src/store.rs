@@ -80,6 +80,27 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             words          INTEGER NOT NULL DEFAULT 0,
             chars          INTEGER NOT NULL DEFAULT 0,
             updated_at     INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS notes (
+            id         TEXT    NOT NULL,
+            account    TEXT    NOT NULL,
+            name       TEXT    NOT NULL DEFAULT '',
+            payload    TEXT    NOT NULL DEFAULT '{}',
+            updated_at INTEGER NOT NULL,
+            deleted    INTEGER NOT NULL DEFAULT 0,
+            dirty      INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (account, id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_notes_account ON notes(account, updated_at);
+         CREATE TABLE IF NOT EXISTS note_folders (
+            id         TEXT    NOT NULL,
+            account    TEXT    NOT NULL,
+            name       TEXT    NOT NULL DEFAULT '',
+            icon       TEXT    NOT NULL DEFAULT 'folder',
+            color      TEXT    NOT NULL DEFAULT '#06b6d4',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account, id)
          );",
     )?;
     *DB.lock() = Some(conn);
@@ -542,6 +563,237 @@ pub fn apply_server_profiles(account: &str, server_rows: &[Value]) {
     }
 }
 
+// ---- Notes (per-account, local-first, cloud-synced — same shape as iOS) ----
+//
+// Byte-for-byte compatible with the Echo iOS notes sync (/v1/notes/sync): each
+// note is an opaque JSON `payload` (the iOS Note: id/createdAt/title/rawText/
+// cleanedText/duration/tags/folderId/folderName/…), `name` = the title, and
+// `updated_at` is Unix epoch SECONDS (NOT ms like preset_profiles) — the unit
+// iOS sends, so last-write-wins works across iPhone + Desktop. Folder membership
+// rides denormalized inside the payload (folderId/folderName); folder cosmetics
+// (icon/colour) are device-local in `note_folders` and never sync.
+
+/// All non-deleted notes for `account`, newest-first. `{id,name,payload,updated_at}`.
+pub fn list_notes(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, payload, updated_at FROM notes
+               WHERE account = ?1 AND deleted = 0 ORDER BY updated_at DESC, name ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        let payload: String = r.get(2)?;
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "payload": serde_json::from_str::<Value>(&payload).unwrap_or_else(|_| json!({})),
+            "updated_at": r.get::<_, i64>(3)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(e) => {
+            log::warn!("store: notes query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Insert or replace a note, marking it dirty (needs push). `payload` is a JSON
+/// string (the full iOS-compatible Note). `updated_at` = epoch SECONDS.
+pub fn upsert_note(account: &str, id: &str, name: &str, payload: &str, updated_at: i64, dirty: bool) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO notes (id, account, name, payload, updated_at, deleted, dirty)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
+         ON CONFLICT(account, id) DO UPDATE SET
+            name = excluded.name, payload = excluded.payload,
+            updated_at = excluded.updated_at, deleted = 0, dirty = excluded.dirty",
+        params![id, account, name, payload, updated_at, dirty as i64],
+    );
+}
+
+/// Tombstone a note (kept as a dirty deleted row so the delete syncs).
+pub fn soft_delete_note(account: &str, id: &str, updated_at: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "UPDATE notes SET deleted = 1, dirty = 1, updated_at = ?3
+         WHERE account = ?1 AND id = ?2",
+        params![account, id, updated_at],
+    );
+}
+
+/// Rows with un-pushed local changes (incl. tombstones) for the sync push.
+/// Tombstones carry an empty payload/name so the wire item matches iOS exactly.
+pub fn take_dirty_notes(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, payload, updated_at, deleted FROM notes
+               WHERE account = ?1 AND dirty = 1";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        let deleted = r.get::<_, i64>(4)? != 0;
+        let payload: String = r.get(2)?;
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": if deleted { String::new() } else { r.get::<_, String>(1)? },
+            "payload": if deleted { json!({}) }
+                       else { serde_json::from_str::<Value>(&payload).unwrap_or_else(|_| json!({})) },
+            "updated_at": r.get::<_, i64>(3)?,
+            "deleted": deleted,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Clear the dirty flag for the pushed `(id, updated_at)` pairs — only if the row
+/// hasn't been edited again since (its `updated_at` still matches), so an edit
+/// racing the push isn't dropped (it stays dirty, re-pushed).
+pub fn mark_notes_synced(account: &str, items: &[(String, i64)]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    for (id, updated_at) in items {
+        let _ = conn.execute(
+            "UPDATE notes SET dirty = 0
+             WHERE account = ?1 AND id = ?2 AND updated_at = ?3",
+            params![account, id, updated_at],
+        );
+    }
+}
+
+/// Reconcile the authoritative server set into the local store (same policy as
+/// [`apply_server_profiles`]): server rows overwrite local NON-dirty rows, local
+/// dirty rows are left for the next push, and local non-dirty rows the server no
+/// longer returns (deleted elsewhere) are removed.
+pub fn apply_server_notes(account: &str, server_rows: &[Value]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let mut server_ids: Vec<String> = Vec::with_capacity(server_rows.len());
+    for row in server_rows {
+        let Some(id) = row.get("id").and_then(Value::as_str) else { continue };
+        // Defensive: the server only ever returns non-deleted notes, but if a
+        // tombstone/empty-payload row ever arrived we must NOT insert it as a
+        // ghost note (empty payload → the UI's title/search would choke). Treat
+        // it as a deletion: skip it, so the "remove rows the server omitted" pass
+        // below drops any local copy.
+        if row.get("deleted").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
+        server_ids.push(id.to_string());
+        let dirty: i64 = conn
+            .query_row(
+                "SELECT dirty FROM notes WHERE account = ?1 AND id = ?2",
+                params![account, id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if dirty == 1 {
+            continue; // pending local push wins
+        }
+        let name = row.get("name").and_then(Value::as_str).unwrap_or("");
+        let payload = row
+            .get("payload")
+            .map(|p| if p.is_string() { p.as_str().unwrap_or("{}").to_string() } else { p.to_string() })
+            .unwrap_or_else(|| "{}".to_string());
+        let updated_at = row.get("updated_at").and_then(Value::as_i64).unwrap_or(0);
+        let _ = conn.execute(
+            "INSERT INTO notes (id, account, name, payload, updated_at, deleted, dirty)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, 0)
+             ON CONFLICT(account, id) DO UPDATE SET
+                name = excluded.name, payload = excluded.payload,
+                updated_at = excluded.updated_at, deleted = 0, dirty = 0",
+            params![id, account, name, payload, updated_at],
+        );
+    }
+    let keep: std::collections::HashSet<&str> = server_ids.iter().map(String::as_str).collect();
+    let existing: Vec<String> = {
+        let sql = "SELECT id FROM notes WHERE account = ?1 AND dirty = 0 AND deleted = 0";
+        match conn.prepare_cached(sql) {
+            Ok(mut stmt) => stmt
+                .query_map(params![account], |r| r.get::<_, String>(0))
+                .map(|it| it.filter_map(Result::ok).collect())
+                .unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    };
+    for id in existing {
+        if !keep.contains(id.as_str()) {
+            let _ = conn.execute(
+                "DELETE FROM notes WHERE account = ?1 AND id = ?2",
+                params![account, id],
+            );
+        }
+    }
+}
+
+// ---- Note folders (device-local cosmetics: icon + colour; NEVER synced) ----
+//
+// Membership + name travel denormalized on each note (folderId/folderName), so a
+// reinstall / a note synced from the iPhone rebuilds the folder list. These rows
+// only remember the per-device look (icon, colour) the note payload doesn't carry.
+
+/// All folder cosmetics for `account` (sort order, then name).
+pub fn list_note_folders(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, icon, color, sort_order, updated_at FROM note_folders
+               WHERE account = ?1 ORDER BY sort_order ASC, name ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": r.get::<_, String>(1)?,
+            "icon": r.get::<_, String>(2)?,
+            "color": r.get::<_, String>(3)?,
+            "sort_order": r.get::<_, i64>(4)?,
+            "updated_at": r.get::<_, i64>(5)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(e) => {
+            log::warn!("store: note_folders query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// Insert or update a folder's cosmetics.
+pub fn upsert_note_folder(
+    account: &str,
+    id: &str,
+    name: &str,
+    icon: &str,
+    color: &str,
+    sort_order: i64,
+    updated_at: i64,
+) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO note_folders (id, account, name, icon, color, sort_order, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(account, id) DO UPDATE SET
+            name = excluded.name, icon = excluded.icon, color = excluded.color,
+            sort_order = excluded.sort_order, updated_at = excluded.updated_at",
+        params![id, account, name, icon, color, sort_order, updated_at],
+    );
+}
+
+/// Forget a folder's cosmetics (the notes themselves are unfiled separately).
+pub fn delete_note_folder(account: &str, id: &str) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "DELETE FROM note_folders WHERE account = ?1 AND id = ?2",
+        params![account, id],
+    );
+}
+
 // ── Auto-vocab candidates (autovocab.rs detection → hybrid learn flow) ──────
 
 /// Current status of a candidate if seen before ("pending" | "added" | "ignored").
@@ -757,6 +1009,41 @@ mod tests {
         assert_eq!(rn, 2); // transcriptions untouched by repair
         assert!((raud - 12.5).abs() < 1e-9); // audio untouched
         assert_eq!(rw, (12.5 / 60.0 * 130.0f64).round() as i64); // words = est(existing audio) = 27
+
+        // Notes: per-account isolation, dirty tracking, iOS-parity tombstones,
+        // server reconcile. updated_at is epoch SECONDS here (matches the iPhone).
+        upsert_note("em:a", "n1", "Prompt A", r#"{"id":"n1","rawText":"hallo"}"#, 100, true);
+        upsert_note("em:a", "n2", "Prompt B", r#"{"id":"n2","rawText":"welt"}"#, 101, true);
+        upsert_note("em:b", "n1", "B only", r#"{"id":"n1"}"#, 100, true);
+        assert_eq!(list_notes("em:a").len(), 2);
+        assert_eq!(list_notes("em:b").len(), 1); // isolation
+        assert_eq!(list_notes("em:a")[0]["payload"]["rawText"], "welt"); // newest (ts 101) first
+        assert_eq!(take_dirty_notes("em:a").len(), 2);
+        // Tombstone hides the note but rides along as a dirty deleted push item,
+        // with name/payload blanked exactly like the iOS wire tombstone.
+        soft_delete_note("em:a", "n1", 200);
+        assert_eq!(list_notes("em:a").len(), 1);
+        let dirty = take_dirty_notes("em:a");
+        let tomb = dirty.iter().find(|d| d["id"] == "n1").unwrap();
+        assert_eq!(tomb["deleted"], true);
+        assert_eq!(tomb["name"], "");
+        assert_eq!(tomb["payload"], json!({}));
+        // Race-safe ack, then server reconcile overwrites the non-dirty note.
+        mark_notes_synced("em:a", &[("n2".into(), 101), ("n1".into(), 200)]);
+        assert_eq!(take_dirty_notes("em:a").len(), 0);
+        apply_server_notes(
+            "em:a",
+            &[json!({"id":"n2","name":"Prompt B2","payload":{"id":"n2","rawText":"welt2"},"updated_at":150})],
+        );
+        let n = list_notes("em:a");
+        assert_eq!(n.len(), 1); // n1 stays deleted, n2 survives
+        assert_eq!(n[0]["payload"]["rawText"], "welt2");
+        // Folder cosmetics (device-local, never synced).
+        upsert_note_folder("em:a", "f1", "Prompts", "sparkles", "#8b5cf6", 0, 500);
+        assert_eq!(list_note_folders("em:a").len(), 1);
+        assert_eq!(list_note_folders("em:a")[0]["icon"], "sparkles");
+        delete_note_folder("em:a", "f1");
+        assert_eq!(list_note_folders("em:a").len(), 0);
 
         let _ = std::fs::remove_file(&path);
     }

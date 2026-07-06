@@ -11,6 +11,7 @@ import { useConfig } from "../state/ConfigContext";
 
 export type Section =
   | "home"
+  | "notes"
   | "history"
   | "meetings"
   | "vocabulary"
@@ -40,6 +41,8 @@ function Icon({ d, extra }: { d: string; extra?: ReactNode }) {
 
 const ICONS: Record<Section, ReactNode> = {
   home: <Icon d="M3 11.2 12 3l9 8.2M5.3 9.8V21h13.4V9.8" />,
+  // Notizen: Dokument mit Eselsohr + Textzeilen (voice-first Notiz-Ablage)
+  notes: <Icon d="M7 3h7l4 4v12.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5V4.5A1.5 1.5 0 0 1 7.5 3ZM14 3v4h4M9 12.5h6M9 16h4" />,
   history: <Icon d="M12 7v5l3 2" extra={<circle cx="12" cy="12" r="9" />} />,
   // Meeting = Offline- + Live-Meeting unter einem Tab (Broadcast-Wellen um einen Punkt)
   meetings: (
@@ -60,6 +63,7 @@ const ICONS: Record<Section, ReactNode> = {
 
 const ITEMS: { key: Section; labelKey: string; pro?: boolean }[] = [
   { key: "home", labelKey: "nav.home" },
+  { key: "notes", labelKey: "nav.notes" },
   { key: "history", labelKey: "nav.history" },
   { key: "meetings", labelKey: "nav.meetings" },
   { key: "vocabulary", labelKey: "nav.vocabulary" },

@@ -6,6 +6,7 @@ import { SoundFx } from "./components/SoundFx";
 import { Help } from "./sections/Help";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
+import { Notes } from "./sections/Notes";
 import { Meetings } from "./sections/Meetings";
 import { Intro } from "./intro/Intro";
 import { Settings, type SettingsTab } from "./sections/Settings";
@@ -67,6 +68,7 @@ function Shell() {
       <main className="content" ref={mainRef}>
         <div className="page-animate">
           {section === "home" && <Home onStartMeeting={() => openMeeting("live")} onOpenAccount={() => openSettings("account")} />}
+          {section === "notes" && <Notes />}
           {section === "history" && <History />}
           {section === "settings" && <Settings tab={settingsTab} onTab={setSettingsTab} />}
           {section === "meetings" && <Meetings tab={meetingTab} onTab={setMeetingTab} />}
