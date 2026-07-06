@@ -100,9 +100,15 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             color      TEXT    NOT NULL DEFAULT '#06b6d4',
             sort_order INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL DEFAULT 0,
+            deleted    INTEGER NOT NULL DEFAULT 0,
+            dirty      INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (account, id)
          );",
     )?;
+    // Migration (v0.5.80): note_folders became cloud-synced, gaining deleted +
+    // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
+    let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1", []);
     *DB.lock() = Some(conn);
     log::info!("store: opened {}", path.display());
     Ok(())
@@ -730,18 +736,21 @@ pub fn apply_server_notes(account: &str, server_rows: &[Value]) {
     }
 }
 
-// ---- Note folders (device-local cosmetics: icon + colour; NEVER synced) ----
+// ---- Note folders (first-class, per-account, cloud-synced objects) ----
 //
-// Membership + name travel denormalized on each note (folderId/folderName), so a
-// reinstall / a note synced from the iPhone rebuilds the folder list. These rows
-// only remember the per-device look (icon, colour) the note payload doesn't carry.
+// Folders sync as their OWN objects (via [`crate::notes_sync`] → /v1/note-folders/
+// sync), so a folder + its icon/colour appear on every device even when it has no
+// notes yet — the denormalized folderId/folderName on each note only ever carried
+// MEMBERSHIP. Wire payload is canonical + cross-platform: `{icon (key), color
+// ("#rrggbb"), sortOrder}`; `updated_at` = epoch SECONDS (iOS parity). Mirrors the
+// notes store: `dirty` = un-pushed local change, `deleted` = tombstone.
 
-/// All folder cosmetics for `account` (sort order, then name).
+/// All non-deleted folders for `account` (sort order, then name), incl. sync fields.
 pub fn list_note_folders(account: &str) -> Vec<Value> {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return Vec::new() };
     let sql = "SELECT id, name, icon, color, sort_order, updated_at FROM note_folders
-               WHERE account = ?1 ORDER BY sort_order ASC, name ASC";
+               WHERE account = ?1 AND deleted = 0 ORDER BY sort_order ASC, name ASC";
     let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
     let rows = stmt.query_map(params![account], |r| {
         Ok(json!({
@@ -762,7 +771,7 @@ pub fn list_note_folders(account: &str) -> Vec<Value> {
     }
 }
 
-/// Insert or update a folder's cosmetics.
+/// Insert or update a folder, marking it dirty (needs push). `updated_at` = SECONDS.
 pub fn upsert_note_folder(
     account: &str,
     id: &str,
@@ -771,27 +780,134 @@ pub fn upsert_note_folder(
     color: &str,
     sort_order: i64,
     updated_at: i64,
+    dirty: bool,
 ) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
     let _ = conn.execute(
-        "INSERT INTO note_folders (id, account, name, icon, color, sort_order, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "INSERT INTO note_folders (id, account, name, icon, color, sort_order, updated_at, deleted, dirty)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8)
          ON CONFLICT(account, id) DO UPDATE SET
             name = excluded.name, icon = excluded.icon, color = excluded.color,
-            sort_order = excluded.sort_order, updated_at = excluded.updated_at",
-        params![id, account, name, icon, color, sort_order, updated_at],
+            sort_order = excluded.sort_order, updated_at = excluded.updated_at,
+            deleted = 0, dirty = excluded.dirty",
+        params![id, account, name, icon, color, sort_order, updated_at, dirty as i64],
     );
 }
 
-/// Forget a folder's cosmetics (the notes themselves are unfiled separately).
-pub fn delete_note_folder(account: &str, id: &str) {
+/// Tombstone a folder (kept as a dirty deleted row so the delete syncs).
+pub fn soft_delete_note_folder(account: &str, id: &str, updated_at: i64) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
     let _ = conn.execute(
-        "DELETE FROM note_folders WHERE account = ?1 AND id = ?2",
-        params![account, id],
+        "UPDATE note_folders SET deleted = 1, dirty = 1, updated_at = ?3
+         WHERE account = ?1 AND id = ?2",
+        params![account, id, updated_at],
     );
+}
+
+/// Dirty folders (incl. tombstones) for the sync push, as the canonical wire item
+/// `{id, name, payload:{icon,color,sortOrder}, updated_at, deleted}`.
+pub fn take_dirty_folders(account: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT id, name, icon, color, sort_order, updated_at, deleted FROM note_folders
+               WHERE account = ?1 AND dirty = 1";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account], |r| {
+        let deleted = r.get::<_, i64>(6)? != 0;
+        Ok(json!({
+            "id": r.get::<_, String>(0)?,
+            "name": if deleted { String::new() } else { r.get::<_, String>(1)? },
+            "payload": if deleted { json!({}) } else {
+                json!({
+                    "icon": r.get::<_, String>(2)?,
+                    "color": r.get::<_, String>(3)?,
+                    "sortOrder": r.get::<_, i64>(4)?,
+                })
+            },
+            "updated_at": r.get::<_, i64>(5)?,
+            "deleted": deleted,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Clear dirty for pushed `(id, updated_at)` pairs — only if unchanged since.
+pub fn mark_folders_synced(account: &str, items: &[(String, i64)]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    for (id, updated_at) in items {
+        let _ = conn.execute(
+            "UPDATE note_folders SET dirty = 0
+             WHERE account = ?1 AND id = ?2 AND updated_at = ?3",
+            params![account, id, updated_at],
+        );
+    }
+}
+
+/// Reconcile the authoritative server folder set into the local store (same policy
+/// as [`apply_server_notes`]): server rows overwrite local non-dirty rows, local
+/// dirty rows survive, and local non-dirty rows the server omitted are removed.
+pub fn apply_server_folders(account: &str, server_rows: &[Value]) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let mut server_ids: Vec<String> = Vec::with_capacity(server_rows.len());
+    for row in server_rows {
+        let Some(id) = row.get("id").and_then(Value::as_str) else { continue };
+        // Defensive: never materialise a tombstone as a live folder.
+        if row.get("deleted").and_then(Value::as_bool) == Some(true) {
+            continue;
+        }
+        server_ids.push(id.to_string());
+        let dirty: i64 = conn
+            .query_row(
+                "SELECT dirty FROM note_folders WHERE account = ?1 AND id = ?2",
+                params![account, id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if dirty == 1 {
+            continue; // pending local push wins
+        }
+        let name = row.get("name").and_then(Value::as_str).unwrap_or("");
+        let p = row.get("payload");
+        let icon = p.and_then(|p| p.get("icon")).and_then(Value::as_str).unwrap_or("folder");
+        let color = p.and_then(|p| p.get("color")).and_then(Value::as_str).unwrap_or("#06b6d4");
+        let sort_order = p.and_then(|p| p.get("sortOrder")).and_then(Value::as_i64).unwrap_or(0);
+        let updated_at = row.get("updated_at").and_then(Value::as_i64).unwrap_or(0);
+        let _ = conn.execute(
+            "INSERT INTO note_folders (id, account, name, icon, color, sort_order, updated_at, deleted, dirty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0)
+             ON CONFLICT(account, id) DO UPDATE SET
+                name = excluded.name, icon = excluded.icon, color = excluded.color,
+                sort_order = excluded.sort_order, updated_at = excluded.updated_at,
+                deleted = 0, dirty = 0",
+            params![id, account, name, icon, color, sort_order, updated_at],
+        );
+    }
+    let keep: std::collections::HashSet<&str> = server_ids.iter().map(String::as_str).collect();
+    let existing: Vec<String> = {
+        let sql = "SELECT id FROM note_folders WHERE account = ?1 AND dirty = 0 AND deleted = 0";
+        match conn.prepare_cached(sql) {
+            Ok(mut stmt) => stmt
+                .query_map(params![account], |r| r.get::<_, String>(0))
+                .map(|it| it.filter_map(Result::ok).collect())
+                .unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    };
+    for id in existing {
+        if !keep.contains(id.as_str()) {
+            let _ = conn.execute(
+                "DELETE FROM note_folders WHERE account = ?1 AND id = ?2",
+                params![account, id],
+            );
+        }
+    }
 }
 
 // ── Auto-vocab candidates (autovocab.rs detection → hybrid learn flow) ──────
@@ -1038,12 +1154,34 @@ mod tests {
         let n = list_notes("em:a");
         assert_eq!(n.len(), 1); // n1 stays deleted, n2 survives
         assert_eq!(n[0]["payload"]["rawText"], "welt2");
-        // Folder cosmetics (device-local, never synced).
-        upsert_note_folder("em:a", "f1", "Prompts", "sparkles", "#8b5cf6", 0, 500);
+        // Folders now sync as first-class objects (dirty tracking, tombstone,
+        // canonical {icon,color,sortOrder} payload, server reconcile).
+        upsert_note_folder("em:a", "f1", "Prompts", "chat", "#8b5cf6", 0, 500, true);
         assert_eq!(list_note_folders("em:a").len(), 1);
-        assert_eq!(list_note_folders("em:a")[0]["icon"], "sparkles");
-        delete_note_folder("em:a", "f1");
+        assert_eq!(list_note_folders("em:a")[0]["icon"], "chat");
+        let df = take_dirty_folders("em:a");
+        assert_eq!(df.len(), 1);
+        assert_eq!(df[0]["payload"]["icon"], "chat");
+        assert_eq!(df[0]["payload"]["sortOrder"], 0);
+        mark_folders_synced("em:a", &[("f1".into(), 500)]);
+        assert_eq!(take_dirty_folders("em:a").len(), 0);
+        // Tombstone hides it but rides along as a dirty deleted push item.
+        soft_delete_note_folder("em:a", "f1", 600);
         assert_eq!(list_note_folders("em:a").len(), 0);
+        let dft = take_dirty_folders("em:a");
+        assert_eq!(dft.len(), 1);
+        assert_eq!(dft[0]["deleted"], true);
+        mark_folders_synced("em:a", &[("f1".into(), 600)]);
+        // Server reconcile: a folder made on another device is pulled in.
+        apply_server_folders(
+            "em:a",
+            &[json!({"id":"f2","name":"Ideen","payload":{"icon":"idea","color":"#16a34a","sortOrder":1},"updated_at":700})],
+        );
+        let fl = list_note_folders("em:a");
+        assert_eq!(fl.len(), 1);
+        assert_eq!(fl[0]["id"], "f2");
+        assert_eq!(fl[0]["icon"], "idea");
+        assert_eq!(fl[0]["color"], "#16a34a");
 
         let _ = std::fs::remove_file(&path);
     }

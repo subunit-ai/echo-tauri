@@ -29,9 +29,14 @@ pub fn kick(app: &AppHandle) {
     });
 }
 
-fn endpoint(cfg: &Config) -> String {
+fn endpoint_notes(cfg: &Config) -> String {
     cfg.subunit_endpoint
         .replace("/v1/transcribe", "/v1/notes/sync")
+}
+
+fn endpoint_folders(cfg: &Config) -> String {
+    cfg.subunit_endpoint
+        .replace("/v1/transcribe", "/v1/note-folders/sync")
 }
 
 fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
@@ -57,7 +62,7 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(8))
         .build()?;
-    let mut req = client.post(endpoint(&cfg)).json(&body);
+    let mut req = client.post(endpoint_notes(&cfg)).json(&body);
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);
     } else {
@@ -88,7 +93,40 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
     crate::store::mark_notes_synced(&account, &pushed);
     crate::store::apply_server_notes(&account, &notes);
 
-    // Nudge any open Notes UI to reload its list.
+    // ── Folders (same round-trip, against /v1/note-folders/sync) — folders are
+    // first-class synced objects so they appear on every device even when empty.
+    // Reuses the same client + auth; a folder failure never undoes the note sync.
+    let dirty_f = crate::store::take_dirty_folders(&account);
+    let body_f = json!({ "folders": dirty_f });
+    let mut req_f = client.post(endpoint_folders(&cfg)).json(&body_f);
+    if !cfg.subunit_access_token.is_empty() {
+        req_f = req_f.bearer_auth(&cfg.subunit_access_token);
+    } else {
+        req_f = req_f.header("X-API-Key", cfg.subunit_api_key.clone());
+    }
+    let resp_f = req_f.send()?;
+    if !resp_f.status().is_success() {
+        anyhow::bail!("note-folders sync {}", resp_f.status());
+    }
+    let server_f: Value = resp_f.json()?;
+    let folders = server_f
+        .get("folders")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let pushed_f: Vec<(String, i64)> = dirty_f
+        .iter()
+        .filter_map(|p| {
+            Some((
+                p.get("id").and_then(Value::as_str)?.to_string(),
+                p.get("updated_at").and_then(Value::as_i64).unwrap_or(0),
+            ))
+        })
+        .collect();
+    crate::store::mark_folders_synced(&account, &pushed_f);
+    crate::store::apply_server_folders(&account, &folders);
+
+    // Nudge any open Notes UI to reload its list (notes AND folders).
     let _ = app.emit("echo://notes-changed", ());
     Ok(())
 }

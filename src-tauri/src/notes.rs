@@ -89,9 +89,11 @@ pub fn list_note_folders(state: State<'_, AppState>) -> Vec<Value> {
     crate::store::list_note_folders(&account)
 }
 
-/// Create or update a folder's cosmetics. Returns the id.
+/// Create or update a folder (name/icon/colour/sort). Stored dirty → the next sync
+/// pushes it to /v1/note-folders so it appears (even empty) on every device. Returns the id.
 #[tauri::command]
 pub fn save_note_folder(
+    app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     name: String,
@@ -111,16 +113,20 @@ pub fn save_note_folder(
         color.trim(),
         sort_order,
         now_secs(),
+        true,
     );
+    crate::notes_sync::kick(&app);
     Ok(id)
 }
 
-/// Forget a folder's cosmetics. The notes in it are unfiled separately (frontend
-/// re-saves each note without a folder), so no note data is lost.
+/// Delete a folder (soft-delete → the tombstone syncs so it drops on every device).
+/// The notes in it are unfiled separately (frontend re-saves each note without a
+/// folder), so no note data is lost.
 #[tauri::command]
-pub fn delete_note_folder(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub fn delete_note_folder(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
     let account = crate::presets::account_key(&state.config.lock());
-    crate::store::delete_note_folder(&account, &id);
+    crate::store::soft_delete_note_folder(&account, &id, now_secs());
+    crate::notes_sync::kick(&app);
     Ok(())
 }
 

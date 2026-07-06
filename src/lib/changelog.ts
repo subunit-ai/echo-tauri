@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.82",
+    date: "2026-07-06",
+    title: { de: "Notiz-Ordner synchronisieren jetzt auch", en: "Note folders now sync too" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Deine Notiz-Ordner (mit Symbol und Farbe) synchronisieren jetzt als eigene Objekte über alle Geräte — auch leere Ordner erscheinen auf iPhone und PC.",
+        en: "Your note folders (with icon and colour) now sync as first-class objects across every device — even empty folders show up on both iPhone and PC.",
+      },
+    ],
+  },
+  {
     version: "0.5.81",
     date: "2026-07-06",
     title: { de: "Postfach — Benachrichtigungen oben rechts", en: "Inbox — notifications, top-right" },
