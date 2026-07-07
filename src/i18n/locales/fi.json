@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Vain välitön-tila: kirjoita valmis tulos vähitellen sen sijaan, että liittäisit kaiken kerralla. Pois = välitön liittäminen (Ctrl+V, atominen, luotettava — suositeltu Windowsissa).",
     "dachFormat": "Saksankielisten maiden muotoilu",
     "dachFormatHint": "Lyhenteet, valuutta, „saksalaiset“ lainausmerkit",
+    "promptFallback": "Konsoli turvaverkkona",
+    "promptFallbackHint": "Ei tekstikenttää valittuna? Sanelusi päätyy automaattisesti konsoliin katoamisen sijaan",
     "deCommas": "Saksan pilkut",
     "deCommasHint": "Lisää puuttuvat pilkut saksan sivulauseiden eteen (dass, weil, wenn …) — sääntöpohjainen, ilman viivettä",
     "aiCleanup": "Tekoälysiistiminen",

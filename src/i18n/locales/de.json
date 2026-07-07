@@ -571,6 +571,8 @@
     "promptHotkeyHint": "Globale Tastenkombi, die das schwebende Prompt Terminal öffnet/versteckt",
     "promptAsTarget": "Terminal als Diktat-Ziel",
     "promptAsTargetHint": "Jede Transkription landet im Prompt Terminal statt in der aktiven App",
+    "promptFallback": "Konsole als Auffangnetz",
+    "promptFallbackHint": "Kein Textfeld fokussiert? Dein Diktat landet automatisch in der Prompt-Konsole statt zu verpuffen",
     "changelog": "Änderungsprotokoll",
     "changelogHint": "Was in jeder Version neu dazugekommen ist.",
     "changelogBtn": "Ansehen"

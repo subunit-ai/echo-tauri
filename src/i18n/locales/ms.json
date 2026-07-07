@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Mod serta-merta sahaja: taip hasil siap secara berperingkat dan bukan tampal sekali gus. Mati = tampal serta-merta (Ctrl+V, atomik, boleh dipercayai — disyorkan pada Windows).",
     "dachFormat": "Pemformatan DACH",
     "dachFormatHint": "Singkatan, mata wang, tanda petik „Jerman“",
+    "promptFallback": "Konsol sebagai jaring keselamatan",
+    "promptFallbackHint": "Tiada medan teks difokuskan? Imlak anda mendarat secara automatik dalam konsol dan tidak hilang",
     "deCommas": "Koma bahasa Jerman",
     "deCommasHint": "Menambah koma yang tertinggal sebelum klausa bawahan Jerman (dass, weil, wenn …) — berasaskan peraturan, tanpa kependaman",
     "aiCleanup": "Pembersihan AI",

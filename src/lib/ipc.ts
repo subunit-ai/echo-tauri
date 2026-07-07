@@ -65,6 +65,8 @@ export interface Config {
   prompt_console_hotkey: string;
   /** "Konsole als Ziel": transcripts go into the Prompt Console, not the app. */
   prompt_console_as_target: boolean;
+  /** Fallback: no editable field focused → dictation lands in the Prompt Console. */
+  prompt_fallback_enabled: boolean;
   /** Glass intensity of the Prompt Console: "clear" | "regular" | "rich". */
   prompt_console_glass: string;
   recording_mode: string; // toggle | hold

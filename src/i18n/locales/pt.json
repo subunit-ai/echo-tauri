@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Apenas no modo instantâneo: escreve o resultado final progressivamente em vez de colar tudo de uma vez. Desativado = colagem instantânea (Ctrl+V, atómica, fiável — recomendado no Windows).",
     "dachFormat": "Formatação alemã",
     "dachFormatHint": "Abreviaturas, moeda, aspas „alemãs“",
+    "promptFallback": "Consola como rede de segurança",
+    "promptFallbackHint": "Nenhum campo de texto selecionado? O ditado aterra automaticamente na consola em vez de se perder",
     "deCommas": "Vírgulas alemãs",
     "deCommasHint": "Insere vírgulas em falta antes de orações subordinadas alemãs (dass, weil, wenn …) — baseado em regras, sem latência",
     "aiCleanup": "Limpeza por IA",

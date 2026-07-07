@@ -508,6 +508,18 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             log::warn!("clipboard failed: {e}");
         }
         crate::prompt_console::receive_transcript(app, &result.text);
+    } else if cfg.prompt_fallback_enabled
+        && crate::inject::focused_editable() == Some(false)
+    {
+        // No editable field has focus — a ⌘V would vanish into the void and the
+        // dictation would only survive on the clipboard. Catch it in the Prompt
+        // Console instead (shows without stealing focus). Only on a CONFIDENT
+        // "no field" probe; anything ambiguous pastes normally.
+        log::info!("paste: no editable field focused — routing to prompt console (fallback)");
+        if let Err(e) = crate::inject::set_clipboard(&result.text) {
+            log::warn!("clipboard failed: {e}");
+        }
+        crate::prompt_console::receive_transcript(app, &result.text);
     } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
         log::warn!("inject failed: {e}");
     }

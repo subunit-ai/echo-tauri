@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Només en mode instantani: escriu el resultat acabat de manera progressiva en lloc d'enganxar-ho tot de cop. Desactivat = enganxat instantani (Ctrl+V, atòmic, fiable — recomanat a Windows).",
     "dachFormat": "Format de l'àrea germànica",
     "dachFormatHint": "Abreviatures, moneda i cometes «alemanyes»",
+    "promptFallback": "Consola com a xarxa de seguretat",
+    "promptFallbackHint": "Cap camp de text seleccionat? El dictat va automàticament a la consola en lloc de perdre's",
     "deCommas": "Comes alemanyes",
     "deCommasHint": "Insereix comes que falten abans de subordinades alemanyes (dass, weil, wenn …) — basat en regles, sense latència",
     "aiCleanup": "Neteja amb IA",

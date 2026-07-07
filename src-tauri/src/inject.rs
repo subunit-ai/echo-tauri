@@ -63,6 +63,19 @@ pub fn prime_accessibility() {
     }
 }
 
+/// Is an editable text element focused right now? Some(false) ONLY when we are
+/// confident nothing can receive a paste (drives the Prompt-Console fallback);
+/// None = unknown → callers must paste normally. macOS-only signal for now —
+/// Windows/Linux return None, so the fallback simply never triggers there.
+pub fn focused_editable() -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        return mac::focused_element_editable();
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
 /// macOS Accessibility (AX) trust check + optional system prompt. The symbols live in
 /// the ApplicationServices umbrella framework (HIServices); we bind them directly so we
 /// don't depend on a crate exposing them. `kAXTrustedCheckOptionPrompt`=true shows the
@@ -180,6 +193,108 @@ mod mac {
             up.post(CGEventTapLocation::HID);
         }
         Ok(())
+    }
+
+    // ── Focused-element probe (Prompt-Console fallback) ─────────────────────
+    use core_foundation::base::CFTypeRef;
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateSystemWide() -> CFTypeRef;
+        fn AXUIElementCopyAttributeValue(
+            element: CFTypeRef,
+            attribute: CFStringRef,
+            value: *mut CFTypeRef,
+        ) -> i32;
+        fn CFRelease(cf: CFTypeRef);
+        fn CFGetTypeID(cf: CFTypeRef) -> usize;
+        fn CFStringGetTypeID() -> usize;
+    }
+
+    /// `kAXErrorNoValue` — the attribute exists but currently has no value
+    /// (here: genuinely nothing has keyboard focus).
+    const AX_ERROR_NO_VALUE: i32 = -25212;
+
+    /// Focused-element roles where a synthetic ⌘V can NEVER land in a text
+    /// field — the ONLY cases the fallback is allowed to claim "no field".
+    /// Deliberately absent: AXWindow / AXGroup / AXSplitGroup / AXWebArea /
+    /// unknown roles — terminals with minimal AX support (Alacritty & Co.)
+    /// and lazily-built browser AX trees surface those while a real text
+    /// target IS focused; misrouting a dictation there would break the main
+    /// flow, so anything ambiguous means "assume editable".
+    const NON_EDITABLE_ROLES: &[&str] = &[
+        "AXButton", "AXRadioButton", "AXCheckBox", "AXPopUpButton", "AXImage",
+        "AXStaticText", "AXMenuItem", "AXMenuBar", "AXDockItem", "AXList",
+        "AXTable", "AXOutline", "AXRow", "AXCell", "AXScrollArea", "AXLink",
+        "AXDisclosureTriangle", "AXTabGroup",
+    ];
+
+    /// Probe whether an editable text element currently has keyboard focus.
+    /// Some(false) ONLY on confident "no" (nothing focused at all, or a
+    /// hard non-editable control without a text cursor); anything uncertain
+    /// returns None/Some(true) so the normal paste path runs. A few cheap AX
+    /// calls (~1 ms) — AXUIElement queries are callable off the main thread.
+    pub fn focused_element_editable() -> Option<bool> {
+        unsafe {
+            let sys = AXUIElementCreateSystemWide();
+            if sys.is_null() {
+                return None;
+            }
+            let attr_focused = CFString::new("AXFocusedUIElement");
+            let mut focused: CFTypeRef = std::ptr::null();
+            let err = AXUIElementCopyAttributeValue(
+                sys,
+                attr_focused.as_concrete_TypeRef(),
+                &mut focused,
+            );
+            CFRelease(sys);
+            if err != 0 || focused.is_null() {
+                // Truly nothing focused = the classic "einfach eingesprochen"
+                // case. Any OTHER error (no permission, timeout) = unknown.
+                return if err == AX_ERROR_NO_VALUE { Some(false) } else { None };
+            }
+
+            // A text cursor (AXSelectedTextRange) is the strongest "editable"
+            // signal — native fields, terminals and web inputs all expose it.
+            let attr_range = CFString::new("AXSelectedTextRange");
+            let mut range: CFTypeRef = std::ptr::null();
+            let range_err = AXUIElementCopyAttributeValue(
+                focused,
+                attr_range.as_concrete_TypeRef(),
+                &mut range,
+            );
+            if !range.is_null() {
+                CFRelease(range);
+            }
+            if range_err == 0 {
+                CFRelease(focused);
+                return Some(true);
+            }
+
+            let attr_role = CFString::new("AXRole");
+            let mut role_ref: CFTypeRef = std::ptr::null();
+            let role_err = AXUIElementCopyAttributeValue(
+                focused,
+                attr_role.as_concrete_TypeRef(),
+                &mut role_ref,
+            );
+            CFRelease(focused);
+            if role_err != 0 || role_ref.is_null() {
+                return None;
+            }
+            if CFGetTypeID(role_ref) != CFStringGetTypeID() {
+                CFRelease(role_ref);
+                return None;
+            }
+            let role = CFString::wrap_under_create_rule(role_ref as CFStringRef).to_string();
+            if NON_EDITABLE_ROLES.contains(&role.as_str()) {
+                log::debug!("focus probe: non-editable role {role} — fallback eligible");
+                Some(false)
+            } else {
+                log::debug!("focus probe: ambiguous role {role} — assuming editable");
+                None
+            }
+        }
     }
 }
 

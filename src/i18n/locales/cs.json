@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Pouze okamžitý režim: hotový výsledek se postupně píše místo vložení najednou. Vyp. = okamžité vložení (Ctrl+V, atomické, spolehlivé — doporučeno na Windows).",
     "dachFormat": "Formátování pro DACH",
     "dachFormatHint": "Zkratky, měna, „německé“ uvozovky",
+    "promptFallback": "Konzole jako záchranná síť",
+    "promptFallbackHint": "Žádné textové pole nemá fokus? Diktát automaticky skončí v konzoli místo ztracení",
     "deCommas": "Německé čárky",
     "deCommasHint": "Doplňuje chybějící čárky před německými vedlejšími větami (dass, weil, wenn …) — pravidlové, bez latence",
     "aiCleanup": "Úprava pomocí AI",

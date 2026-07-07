@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "仅即时模式：逐字输入最终结果，而非一次性粘贴。关闭 = 即时粘贴（Ctrl+V，原子操作，可靠——Windows 上推荐）。",
     "dachFormat": "德语区格式",
     "dachFormatHint": "缩写、货币、德式引号",
+    "promptFallback": "控制台作为安全网",
+    "promptFallbackHint": "没有聚焦的文本框？你的听写会自动进入提示控制台，而不会丢失",
     "deCommas": "德语逗号补全",
     "deCommasHint": "在德语从句前自动补上缺失的逗号（dass、weil、wenn 等）— 基于规则，零延迟",
     "aiCleanup": "AI 清理",

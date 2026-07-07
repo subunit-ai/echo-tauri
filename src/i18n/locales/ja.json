@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "瞬時モードのみ: 完成した結果を一度に貼り付けるのではなく、順次入力します。オフ = 瞬時貼り付け（Ctrl+V、原子的かつ確実 — Windows ではおすすめ）。",
     "dachFormat": "ドイツ語圏フォーマット",
     "dachFormatHint": "略語、通貨、「ドイツ式」引用符",
+    "promptFallback": "コンソールをセーフティネットに",
+    "promptFallbackHint": "テキスト欄が未選択でも、音声入力は消えずに自動でプロンプトコンソールに届きます",
     "deCommas": "ドイツ語のコンマ挿入",
     "deCommasHint": "ドイツ語の従属節の前に欠けたコンマを挿入します（dass、weil、wenn など）— ルールベース、遅延なし",
     "aiCleanup": "AI 整形",
