@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Solo modalità istantanea: digita il risultato finito progressivamente invece di incollarlo tutto in una volta. Disattivo = incolla istantaneo (Ctrl+V, atomico, affidabile — consigliato su Windows).",
     "dachFormat": "Formattazione area tedesca",
     "dachFormatHint": "Abbreviazioni, valuta, virgolette «tedesche»",
+    "deCommas": "Virgole tedesche",
+    "deCommasHint": "Inserisce le virgole mancanti prima delle subordinate tedesche (dass, weil, wenn …) — a regole, senza latenza",
     "aiCleanup": "Pulizia AI",
     "cleanupStyle": "Stile di pulizia",
     "cleanupStylePrompt": "Prompt",

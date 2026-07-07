@@ -430,6 +430,8 @@
     "streamingLiveTapNote": "Tipp: Live-Tippen läuft am zuverlässigsten mit Umschalt-Aktivierung (Tippen zum Starten/Stoppen). Im Halten-Modus bleibt die Hotkey-Taste gedrückt — das kann das Live-Tippen in manchen Apps (v. a. Terminals/Editoren unter Windows) unterdrücken.",
     "dachFormat": "DACH-Formatierung",
     "dachFormatHint": "Abkürzungen, Währung, „deutsche“ Anführungszeichen",
+    "deCommas": "Deutsche Kommasetzung",
+    "deCommasHint": "Setzt fehlende Kommas vor Nebensätzen (dass, weil, wenn …) und fixt „gesagt das er“ → „gesagt, dass er“ — regelbasiert, ohne Latenz",
     "fillerRemoval": "Füllwörter entfernen",
     "fillerRemovalHint": "Streicht „äh/ähm/hmm“ automatisch — deterministisch, ohne zusätzliche Latenz (kein KI-Aufruf)",
     "aiCleanup": "KI-Cleanup",

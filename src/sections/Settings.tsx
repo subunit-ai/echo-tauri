@@ -937,6 +937,9 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             <Row name={t("settings.dachFormat")} hint={t("settings.dachFormatHint")}>
               <Toggle checked={c.dach_format_enabled} onChange={(v) => set("dach_format_enabled", v)} />
             </Row>
+            <Row name={t("settings.deCommas")} hint={t("settings.deCommasHint")}>
+              <Toggle checked={c.de_comma_enabled} onChange={(v) => set("de_comma_enabled", v)} />
+            </Row>
             <Row name={t("settings.fillerRemoval")} hint={t("settings.fillerRemovalHint")}>
               <Toggle checked={c.filler_removal_enabled} onChange={(v) => set("filler_removal_enabled", v)} />
             </Row>

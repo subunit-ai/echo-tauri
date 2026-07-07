@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Csak azonnali módban: a kész eredmény fokozatos begépelése a teljes egyben beillesztés helyett. Ki = azonnali beillesztés (Ctrl+V, atomi, megbízható — Windowson ajánlott).",
     "dachFormat": "Német nyelvű formázás",
     "dachFormatHint": "Rövidítések, pénznem, „német” idézőjelek",
+    "deCommas": "Német vesszők",
+    "deCommasHint": "Pótolja a hiányzó vesszőket a német mellékmondatok előtt (dass, weil, wenn …) — szabályalapú, késleltetés nélkül",
     "aiCleanup": "MI-tisztítás",
     "cleanupStyle": "Tisztítási stílus",
     "cleanupStylePrompt": "Prompt",

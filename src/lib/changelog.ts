@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.86",
+    date: "2026-07-07",
+    title: { de: "Deutsche Kommas sitzen jetzt automatisch", en: "German commas now land automatically" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Diktate bekommen fehlende Kommas jetzt automatisch gesetzt: vor Nebensätzen („das geht nicht weil …“ → „das geht nicht, weil …“), bei „um … zu“-Gruppen und vor „sondern“. Verhörtes „gesagt das er“ wird zu „gesagt, dass er“. Regelbasiert und ohne zusätzliche Latenz — Mehrdeutiges bleibt unangetastet. Abschaltbar unter Einstellungen → Cleanup → „Deutsche Kommasetzung“.",
+        en: "Dictation now gets missing German commas inserted automatically: before subordinate clauses (“das geht nicht weil …” → “das geht nicht, weil …”), around “um … zu” groups and before “sondern”. A misheard “gesagt das er” becomes “gesagt, dass er”. Rule-based with zero added latency — ambiguous cases are left alone. Turn it off under Settings → Cleanup → “German comma insertion”.",
+      },
+    ],
+  },
+  {
     version: "0.5.85",
     date: "2026-07-07",
     title: { de: "Euro, Prozent & Einheiten automatisch als Symbol", en: "Euro, percent & units as symbols automatically" },

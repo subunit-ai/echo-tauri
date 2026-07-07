@@ -329,6 +329,18 @@ pub struct Config {
     #[serde(default)]
     pub dach_format_migrated: bool,
 
+    /// Deterministic German comma insertion (comma before dass/weil/wenn/…,
+    /// "um … zu" groups, das→dass repair). Zero-latency rule pass, precision-
+    /// first — the comma half of what the AI cleanup would do, without the
+    /// round trip. ON by default (v0.5.86); existing configs flip once via
+    /// `de_comma_migrated`.
+    #[serde(default = "default_true")]
+    pub de_comma_enabled: bool,
+    /// One-time guard flipping `de_comma_enabled` ON for configs that predate
+    /// the default change; a later opt-out is then respected forever.
+    #[serde(default)]
+    pub de_comma_migrated: bool,
+
     pub history_size: i32,
     /// Lossless passthrough of history entries (shape owned by the transcription path).
     pub history: Vec<Value>,
@@ -462,6 +474,9 @@ impl Default for Config {
             dach_format_enabled: true,
             dach_format_migrated: false,
 
+            de_comma_enabled: true,
+            de_comma_migrated: false,
+
             history_size: 50,
             history: Vec::new(),
             history_enabled: true,
@@ -534,6 +549,7 @@ impl Config {
         c.sound_split_migrated = true; // fresh installs already have the split toggles
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.dach_format_migrated = true; // fresh installs already default DACH formatting on
+        c.de_comma_migrated = true; // fresh installs already default German commas on
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -644,6 +660,12 @@ impl Config {
         if !self.dach_format_migrated {
             self.dach_format_enabled = true;
             self.dach_format_migrated = true;
+        }
+        // v0.5.86: deterministic German comma insertion is now on by default —
+        // zero-latency rule pass, precision-first. Same one-time flip pattern.
+        if !self.de_comma_migrated {
+            self.de_comma_enabled = true;
+            self.de_comma_migrated = true;
         }
         // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
         // of its top-left ("custom-x-y"), so size changes scale the orb in place
@@ -864,5 +886,21 @@ mod tests {
         optout.dach_format_migrated = true;
         optout.migrate();
         assert!(!optout.dach_format_enabled, "explicit opt-out must survive migrate");
+    }
+
+    #[test]
+    fn de_comma_migrates_on_once_then_respects_optout() {
+        let mut old = Config::default();
+        old.de_comma_enabled = false;
+        old.de_comma_migrated = false;
+        old.migrate();
+        assert!(old.de_comma_enabled, "old config must be flipped on once");
+        assert!(old.de_comma_migrated, "guard must trip so it never re-runs");
+
+        let mut optout = Config::default();
+        optout.de_comma_enabled = false;
+        optout.de_comma_migrated = true;
+        optout.migrate();
+        assert!(!optout.de_comma_enabled, "explicit opt-out must survive migrate");
     }
 }

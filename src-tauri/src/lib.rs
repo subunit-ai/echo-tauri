@@ -7,6 +7,7 @@ mod cleanup;
 mod commands;
 mod config;
 mod dach;
+mod de_comma; // deterministic German comma insertion (zero-latency, sibling of dach)
 // Speaker diarization fed the old meeting store, retired 2026-07-03 (long recordings
 // now land in the normal history). Kept for a possible future meeting revival.
 #[allow(dead_code)]

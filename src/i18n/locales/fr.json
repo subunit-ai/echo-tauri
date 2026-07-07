@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Mode instantané uniquement : saisir progressivement le résultat finalisé au lieu de tout coller d'un coup. Désactivé = collage instantané (Ctrl+V, atomique, fiable — recommandé sous Windows).",
     "dachFormat": "Format germanophone",
     "dachFormatHint": "Abréviations, devise, guillemets « allemands »",
+    "deCommas": "Virgules allemandes",
+    "deCommasHint": "Insère les virgules manquantes devant les subordonnées allemandes (dass, weil, wenn …) — à base de règles, sans latence",
     "aiCleanup": "Nettoyage par IA",
     "cleanupStyle": "Style de nettoyage",
     "cleanupStylePrompt": "Prompt",

@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "במצב מיידי בלבד: הקלד את התוצאה המוכנה בהדרגה במקום להדביק הכל בבת אחת. כבוי = הדבקה מיידית (Ctrl+V, אטומית, אמינה — מומלץ ב-Windows).",
     "dachFormat": "עיצוב גרמני",
     "dachFormatHint": "קיצורים, מטבע, מרכאות „גרמניות“",
+    "deCommas": "פסיקים גרמניים",
+    "deCommasHint": "מוסיף פסיקים חסרים לפני פסוקיות משנה בגרמנית (dass, weil, wenn …) — מבוסס כללים, ללא השהיה",
     "aiCleanup": "ניקוי AI",
     "cleanupStyle": "סגנון ניקוי",
     "cleanupStylePrompt": "פרומפט",

@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Chỉ ở chế độ tức thì: gõ dần kết quả hoàn chỉnh thay vì dán một lần. Tắt = dán tức thì (Ctrl+V, nguyên khối, đáng tin cậy — khuyến nghị trên Windows).",
     "dachFormat": "Định dạng tiếng Đức",
     "dachFormatHint": "Viết tắt, tiền tệ, dấu ngoặc kép kiểu „Đức“",
+    "deCommas": "Dấu phẩy tiếng Đức",
+    "deCommasHint": "Chèn dấu phẩy còn thiếu trước mệnh đề phụ tiếng Đức (dass, weil, wenn …) — dựa trên quy tắc, không độ trễ",
     "aiCleanup": "Dọn dẹp bằng AI",
     "cleanupStyle": "Phong cách dọn dẹp",
     "cleanupStylePrompt": "Câu lệnh",

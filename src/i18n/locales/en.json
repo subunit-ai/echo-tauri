@@ -428,6 +428,8 @@
     "streamingLiveTapNote": "Tip: live typing is most reliable with toggle activation (tap to start/stop). In hold mode the hotkey stays pressed, which can suppress live typing in some apps (especially terminals/editors on Windows).",
     "dachFormat": "DACH formatting",
     "dachFormatHint": "Abbreviations, currency, „German“ quotation marks",
+    "deCommas": "German comma insertion",
+    "deCommasHint": "Inserts missing commas before German subordinate clauses (dass, weil, wenn …) and repairs “gesagt das er” → “gesagt, dass er” — rule-based, zero latency",
     "fillerRemoval": "Remove filler words",
     "fillerRemovalHint": "Strips „äh/ähm/hmm“ automatically — deterministic, no added latency (no AI call)",
     "aiCleanup": "AI cleanup",
