@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Doar mod Instant: tastează progresiv rezultatul finalizat în loc să-l lipești dintr-o dată. Dezactivat = lipire instantanee (Ctrl+V, atomică, fiabilă — recomandat pe Windows).",
     "dachFormat": "Formatare DACH",
     "dachFormatHint": "Abrevieri, monedă, ghilimele „germane“",
+    "promptFallback": "Consola ca plasă de siguranță",
+    "promptFallbackHint": "Niciun câmp de text focalizat? Dictarea ajunge automat în consolă în loc să se piardă",
     "deCommas": "Virgule germane",
     "deCommasHint": "Inserează virgulele lipsă înaintea subordonatelor germane (dass, weil, wenn …) — pe bază de reguli, fără latență",
     "aiCleanup": "Curățare AI",

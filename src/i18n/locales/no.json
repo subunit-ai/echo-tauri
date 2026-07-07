@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Kun umiddelbar modus: skriv inn det ferdige resultatet gradvis i stedet for å lime inn alt på én gang. Av = umiddelbar innliming (Ctrl+V, atomisk, pålitelig — anbefales på Windows).",
     "dachFormat": "Tyskspråklig formatering",
     "dachFormatHint": "Forkortelser, valuta, „tyske“ anførselstegn",
+    "promptFallback": "Konsoll som sikkerhetsnett",
+    "promptFallbackHint": "Ingen tekstfelt i fokus? Dikteringen lander automatisk i konsollen i stedet for å forsvinne",
     "deCommas": "Tyske kommaer",
     "deCommasHint": "Setter inn manglende kommaer før tyske leddsetninger (dass, weil, wenn …) — regelbasert, uten forsinkelse",
     "aiCleanup": "AI-opprydding",

@@ -794,6 +794,9 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
               <Row name={t("settings.promptAsTarget")} hint={t("settings.promptAsTargetHint")}>
                 <Toggle checked={c.prompt_console_as_target} onChange={(v) => set("prompt_console_as_target", v)} />
               </Row>
+              <Row name={t("settings.promptFallback")} hint={t("settings.promptFallbackHint")}>
+                <Toggle checked={c.prompt_fallback_enabled} onChange={(v) => set("prompt_fallback_enabled", v)} />
+              </Row>
             </Group>
 
             <Group title={t("settings.secFeedback")}>

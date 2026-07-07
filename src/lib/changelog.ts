@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.87",
+    date: "2026-07-08",
+    title: { de: "Kein Diktat geht mehr verloren", en: "No dictation gets lost anymore" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Einsprechen ohne aktives Textfeld? Dein Diktat landet jetzt automatisch in der Prompt-Konsole (öffnet sich dezent, ohne dir den Fokus zu klauen) statt ins Leere zu gehen — zusätzlich liegt es wie immer in der Zwischenablage. Abschaltbar unter Einstellungen → Prompt-Konsole → „Konsole als Auffangnetz“. (macOS)",
+        en: "Dictating with no active text field? Your dictation now automatically lands in the Prompt Console (opens quietly, without stealing focus) instead of going nowhere — and it’s on the clipboard as always. Turn it off under Settings → Prompt Console → “Console as safety net”. (macOS)",
+      },
+    ],
+  },
+  {
     version: "0.5.86",
     date: "2026-07-07",
     title: { de: "Deutsche Kommas sitzen jetzt automatisch", en: "German commas now land automatically" },

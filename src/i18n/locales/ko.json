@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "즉시 모드 전용: 완성된 결과를 한 번에 붙여넣는 대신 점진적으로 입력합니다. 끔 = 즉시 붙여넣기(Ctrl+V, 원자적이고 안정적 — Windows에서 권장).",
     "dachFormat": "독일어권 서식",
     "dachFormatHint": "약어, 통화, „독일식“ 따옴표",
+    "promptFallback": "콘솔을 안전망으로",
+    "promptFallbackHint": "포커스된 텍스트 필드가 없나요? 받아쓰기가 사라지지 않고 자동으로 콘솔에 저장됩니다",
     "deCommas": "독일어 쉼표 삽입",
     "deCommasHint": "독일어 종속절 앞에 누락된 쉼표를 삽입합니다 (dass, weil, wenn …) — 규칙 기반, 지연 없음",
     "aiCleanup": "AI 정리",

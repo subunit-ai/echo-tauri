@@ -222,6 +222,13 @@ pub struct Config {
     /// Console instead of pasting it into the app behind. Toggled from the
     /// console header and in Settings.
     pub prompt_console_as_target: bool,
+    /// Fallback: when NO editable text field has keyboard focus at paste time
+    /// (confident AX probe, macOS), route the dictation into the Prompt Console
+    /// instead of firing a ⌘V into the void. ON by default (v0.5.87) — the
+    /// dictation would otherwise only survive on the clipboard. New field, so
+    /// the serde default reaches every existing config (no migration guard).
+    #[serde(default = "default_true")]
+    pub prompt_fallback_enabled: bool,
     /// Glass intensity of the Prompt Console shell: "clear" (most transparent,
     /// default) | "regular" | "rich". Cycled from the console header.
     pub prompt_console_glass: String,
@@ -425,6 +432,7 @@ impl Default for Config {
 
             prompt_console_hotkey: "<ctrl>+<shift>+p".to_string(),
             prompt_console_as_target: false,
+            prompt_fallback_enabled: true,
             prompt_console_glass: "clear".to_string(),
 
             recording_mode: "hold".to_string(),

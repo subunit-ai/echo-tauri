@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Endast direktläge: skriv in det färdiga resultatet stegvis i stället för att klistra in allt på en gång. Av = direkt inklistring (Ctrl+V, atomisk, tillförlitlig — rekommenderas på Windows).",
     "dachFormat": "Tyskspråkig formatering",
     "dachFormatHint": "Förkortningar, valuta, „tyska“ citattecken",
+    "promptFallback": "Konsolen som skyddsnät",
+    "promptFallbackHint": "Inget textfält i fokus? Din diktering hamnar automatiskt i konsolen istället för att försvinna",
     "deCommas": "Tyska kommatecken",
     "deCommasHint": "Infogar saknade kommatecken före tyska bisatser (dass, weil, wenn …) — regelbaserat, utan fördröjning",
     "aiCleanup": "AI-rensning",

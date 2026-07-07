@@ -569,6 +569,8 @@
     "promptHotkeyHint": "Global shortcut that shows/hides the floating Prompt Terminal",
     "promptAsTarget": "Terminal as dictation target",
     "promptAsTargetHint": "Every transcription lands in the Prompt Terminal instead of the active app",
+    "promptFallback": "Console as safety net",
+    "promptFallbackHint": "No text field focused? Your dictation automatically lands in the Prompt Console instead of vanishing",
     "changelog": "Changelog",
     "changelogHint": "What arrived in each version.",
     "changelogBtn": "View"

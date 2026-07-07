@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Solo en modo instantáneo: escribe el resultado terminado de forma progresiva en lugar de pegarlo todo de una vez. Desactivado = pegado instantáneo (Ctrl+V, atómico, fiable; recomendado en Windows).",
     "dachFormat": "Formato para países germanoparlantes",
     "dachFormatHint": "Abreviaturas, moneda, comillas «alemanas»",
+    "promptFallback": "Consola como red de seguridad",
+    "promptFallbackHint": "¿Ningún campo de texto seleccionado? Tu dictado aterriza automáticamente en la consola en vez de perderse",
     "deCommas": "Comas alemanas",
     "deCommasHint": "Inserta comas que faltan antes de subordinadas alemanas (dass, weil, wenn …) — basado en reglas, sin latencia",
     "aiCleanup": "Limpieza con IA",

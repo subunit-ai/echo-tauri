@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Tylko tryb natychmiastowy: wpisuj gotowy wynik stopniowo, zamiast wklejać wszystko naraz. Wył. = natychmiastowe wklejenie (Ctrl+V, atomowe, niezawodne — zalecane w Windows).",
     "dachFormat": "Formatowanie niemieckie (DACH)",
     "dachFormatHint": "Skróty, waluta, „niemieckie” cudzysłowy",
+    "promptFallback": "Konsola jako siatka bezpieczeństwa",
+    "promptFallbackHint": "Brak aktywnego pola tekstowego? Dyktowanie trafia automatycznie do konsoli zamiast przepaść",
     "deCommas": "Niemieckie przecinki",
     "deCommasHint": "Wstawia brakujące przecinki przed niemieckimi zdaniami podrzędnymi (dass, weil, wenn …) — regułowe, bez opóźnień",
     "aiCleanup": "Korekta AI",

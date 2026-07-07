@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Samo v takojšnjem načinu: končani rezultat se izpiše postopoma, namesto da se prilepi naenkrat. Izklopljeno = takojšnje lepljenje (Ctrl+V, atomsko, zanesljivo — priporočeno v sistemu Windows).",
     "dachFormat": "Oblikovanje za nemško govoreče območje",
     "dachFormatHint": "Okrajšave, valuta, „nemški“ narekovaji",
+    "promptFallback": "Konzola kot varnostna mreža",
+    "promptFallbackHint": "Nobeno besedilno polje ni v fokusu? Narek samodejno pristane v konzoli, namesto da izgine",
     "deCommas": "Nemške vejice",
     "deCommasHint": "Vstavi manjkajoče vejice pred nemškimi odvisniki (dass, weil, wenn …) — pravilno zasnovano, brez zakasnitve",
     "aiCleanup": "Čiščenje z UI",
