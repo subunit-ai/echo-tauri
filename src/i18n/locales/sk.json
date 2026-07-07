@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Iba okamžitý režim: hotový výsledok píš postupne namiesto vloženia naraz. Vyp. = okamžité vloženie (Ctrl+V, atomické, spoľahlivé — odporúčané vo Windowse).",
     "dachFormat": "Formátovanie pre DACH",
     "dachFormatHint": "Skratky, mena, „nemecké“ úvodzovky",
+    "deCommas": "Nemecké čiarky",
+    "deCommasHint": "Dopĺňa chýbajúce čiarky pred nemeckými vedľajšími vetami (dass, weil, wenn …) — pravidlové, bez latencie",
     "aiCleanup": "Úprava pomocou AI",
     "cleanupStyle": "Štýl úpravy",
     "cleanupStylePrompt": "Prompt",

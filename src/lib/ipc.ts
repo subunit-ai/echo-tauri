@@ -111,6 +111,8 @@ export interface Config {
   vocabulary_default_seeded: boolean;
   dach_format_enabled: boolean;
   dach_format_migrated: boolean;
+  de_comma_enabled: boolean;
+  de_comma_migrated: boolean;
 
   history_size: number;
   history: Array<Record<string, unknown>>;

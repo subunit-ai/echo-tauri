@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Samo trenutačni način: postupno upisuje gotov rezultat umjesto lijepljenja odjednom. Isključeno = trenutačno lijepljenje (Ctrl+V, atomsko, pouzdano — preporučeno na Windowsu).",
     "dachFormat": "Formatiranje za njemačko govorno područje",
     "dachFormatHint": "Kratice, valuta, „njemački“ navodnici",
+    "deCommas": "Njemački zarezi",
+    "deCommasHint": "Umeće zareze ispred njemačkih zavisnih rečenica (dass, weil, wenn …) — na pravilima, bez latencije",
     "aiCleanup": "AI čišćenje",
     "cleanupStyle": "Stil čišćenja",
     "cleanupStylePrompt": "Upit",

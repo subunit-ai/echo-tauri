@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Kun øjeblikkelig tilstand: skriv det færdige resultat gradvist i stedet for at indsætte det hele på én gang. Fra = øjeblikkelig indsætning (Ctrl+V, atomisk, pålidelig — anbefales på Windows).",
     "dachFormat": "DACH-formatering",
     "dachFormatHint": "Forkortelser, valuta, „tyske“ anførselstegn",
+    "deCommas": "Tyske kommaer",
+    "deCommasHint": "Indsætter manglende kommaer før tyske ledsætninger (dass, weil, wenn …) — regelbaseret, uden latenstid",
     "aiCleanup": "AI-oprydning",
     "cleanupStyle": "Oprydningsstil",
     "cleanupStylePrompt": "Prompt",

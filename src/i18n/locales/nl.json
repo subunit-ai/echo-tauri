@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Alleen in directe modus: typ het voltooide resultaat geleidelijk in plaats van alles in één keer te plakken. Uit = direct plakken (Ctrl+V, atomair, betrouwbaar — aanbevolen op Windows).",
     "dachFormat": "Duitstalige opmaak",
     "dachFormatHint": "Afkortingen, valuta, „Duitse” aanhalingstekens",
+    "deCommas": "Duitse komma's",
+    "deCommasHint": "Voegt ontbrekende komma's toe vóór Duitse bijzinnen (dass, weil, wenn …) — regelgebaseerd, zonder vertraging",
     "aiCleanup": "AI-opschoning",
     "cleanupStyle": "Opschoonstijl",
     "cleanupStylePrompt": "Prompt",

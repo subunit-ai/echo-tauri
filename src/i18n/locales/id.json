@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Hanya mode instan: ketik hasil akhir secara bertahap alih-alih menempel sekaligus. Nonaktif = tempel instan (Ctrl+V, atomik, andal — disarankan di Windows).",
     "dachFormat": "Format DACH",
     "dachFormatHint": "Singkatan, mata uang, tanda kutip „Jerman“",
+    "deCommas": "Koma bahasa Jerman",
+    "deCommasHint": "Menyisipkan koma yang hilang sebelum anak kalimat Jerman (dass, weil, wenn …) — berbasis aturan, tanpa latensi",
     "aiCleanup": "Pembersihan AI",
     "cleanupStyle": "Gaya pembersihan",
     "cleanupStylePrompt": "Prompt",

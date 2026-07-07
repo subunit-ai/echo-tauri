@@ -239,6 +239,8 @@
     "instantLiveTypingHint": "Yalnızca anında modda: hazır sonucu tek seferde yapıştırmak yerine kademeli olarak yazar. Kapalı = anında yapıştırma (Ctrl+V, bütünsel, güvenilir — Windows'ta önerilir).",
     "dachFormat": "Almanca bölge biçimi",
     "dachFormatHint": "Kısaltmalar, para birimi, „Almanca“ tırnak işaretleri",
+    "deCommas": "Almanca virgüller",
+    "deCommasHint": "Almanca yan cümlelerden önce eksik virgülleri ekler (dass, weil, wenn …) — kural tabanlı, gecikmesiz",
     "aiCleanup": "Yapay zeka temizleme",
     "cleanupStyle": "Temizleme stili",
     "cleanupStylePrompt": "İstem",

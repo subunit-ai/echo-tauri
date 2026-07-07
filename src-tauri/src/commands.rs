@@ -447,6 +447,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             _ => result.text,
         }
     };
+    // German commas BEFORE dach: dach's punctuation-spacing normalisation then
+    // tidies anything the insertion touched. Both skip live-typed text (can't
+    // retro-edit what is already injected into the target app).
+    if cfg.de_comma_enabled && !already_injected {
+        text = crate::de_comma::insert_commas(&text);
+    }
     if cfg.dach_format_enabled && !already_injected {
         text = crate::dach::dach_format(&text);
     }
