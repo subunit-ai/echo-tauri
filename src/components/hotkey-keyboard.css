@@ -51,17 +51,38 @@
   border-color: color-mix(in srgb, var(--cyan) 55%, transparent);
 }
 
-/* ── Modal card ── */
+/* ── Modal backdrop: dim + blur, aligned toward the TOP so the card drops in
+   near where you clicked and never needs scrolling to reach. ── */
+.hk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 5vh 16px 16px;
+  background: rgba(2, 6, 18, 0.55);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  animation: hk-fade 0.16s ease-out;
+}
+@keyframes hk-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── Modal card (compact) ── */
 .hk-card {
-  width: min(680px, 94vw);
-  max-height: 92vh;
+  width: min(560px, 94vw);
+  max-height: 90vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 26px 26px 22px;
-  border-radius: var(--r-card, 18px);
+  gap: 9px;
+  padding: 18px 20px 16px;
+  border-radius: var(--r-card, 16px);
   background: var(--glass, rgba(28, 30, 36, 0.9));
   border: 1px solid var(--glass-edge);
   backdrop-filter: var(--blur-glass);
@@ -70,25 +91,40 @@
 }
 .hk-title {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 650;
   color: var(--ink, inherit);
 }
 .hk-sub {
-  margin: 0 0 4px;
-  max-width: 46ch;
+  margin: 0 0 2px;
+  max-width: 48ch;
   text-align: center;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.45;
   color: var(--ink3, inherit);
-  opacity: 0.85;
+  opacity: 0.82;
+}
+
+/* Compact keyboard just inside the picker (the intro keeps the larger one). */
+.hk-card .vk {
+  width: min(520px, 100%);
+  padding: 10px;
+  gap: 5px;
+}
+.hk-card .vk-row {
+  gap: 5px;
+}
+.hk-card .vk-key {
+  height: clamp(22px, 3.6vh, 30px);
+  font-size: clamp(9px, 1.25vw, 11px);
+  border-radius: var(--r-chip, 7px);
 }
 
 .hk-current {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 30px;
+  min-height: 26px;
 }
 .hk-current-label {
   font-size: 0.8rem;

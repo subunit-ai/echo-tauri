@@ -81,11 +81,34 @@ pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
         return Ok(()); // intro owns the keyboard — stay unregistered
     }
 
-    // Prompt-Console hotkey first, best-effort: a bad or conflicting combo must
-    // never take the RECORD hotkey down with it. Skipped when it duplicates the
-    // record combo (record wins — see on_event's dispatch). Always a multi-key
-    // combo, so it uses the OS plugin regardless of the record hotkey's kind.
-    if !prompt_combo.trim().is_empty() {
+    // Each hotkey is either a multi-key COMBO (OS plugin) or a single
+    // key/modifier (listen-only event tap — the only way a lone Control/Option
+    // works and keeps working normally). Route record + prompt independently.
+    use crate::hold_key::{HoldAction, HoldTarget};
+    let record_target = crate::hold_key::parse_target(&combo);
+    let prompt_trimmed = prompt_combo.trim();
+    let prompt_target = if prompt_trimmed.is_empty() {
+        None
+    } else {
+        crate::hold_key::parse_target(&prompt_combo)
+    };
+
+    // Event-tap bindings for whichever hotkeys are single tokens.
+    let mut bindings: Vec<(HoldTarget, HoldAction)> = Vec::new();
+    if let Some(t) = record_target {
+        bindings.push((t, HoldAction::Dictate));
+    }
+    if let Some(t) = prompt_target {
+        if Some(t) == record_target {
+            log::warn!("prompt-console hotkey equals record hotkey — skipping it");
+        } else {
+            bindings.push((t, HoldAction::Toggle));
+        }
+    }
+
+    // Plugin-register the prompt hotkey when it's a COMBO (best-effort: a bad
+    // prompt combo must never take the record hotkey down; skip if it dups record).
+    if prompt_target.is_none() && !prompt_trimmed.is_empty() {
         match parse_shortcut(&prompt_combo) {
             Some(sc) if parse_shortcut(&combo) == Some(sc) => {
                 log::warn!("prompt-console hotkey equals record hotkey — skipping it");
@@ -99,22 +122,25 @@ pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
         }
     }
 
-    // A lone key/modifier (Control, Option, F6, …) can't be an OS accelerator —
-    // and we want it to keep working normally besides — so it rides the
-    // listen-only event tap instead of the plugin.
-    if let Some(target) = crate::hold_key::parse_target(&combo) {
-        match crate::hold_key::start(app, target, hold_ms) {
-            Ok(()) => return Ok(()),
+    // Arm the event tap for the single-token bindings (if any).
+    if !bindings.is_empty() {
+        match crate::hold_key::start(app, bindings, hold_ms) {
+            Ok(()) if record_target.is_some() => return Ok(()), // record handled by tap
+            Ok(()) => {} // only the prompt hotkey used the tap; record combo below
             Err(e) => {
                 // Almost always: Input Monitoring not granted yet. Tell the UI so
                 // it can prompt; the hotkey arms itself the moment access lands.
-                log::warn!("hold hotkey {combo} not armed: {e}");
+                log::warn!("hold hotkey(s) not armed: {e}");
                 let _ = app.emit("hold-hotkey-needs-permission", combo.clone());
-                anyhow::bail!("hold hotkey {combo} needs Input Monitoring: {e}");
+                if record_target.is_some() {
+                    anyhow::bail!("hold hotkey needs Input Monitoring: {e}");
+                }
+                // record is a plugin combo → keep going and register it below.
             }
         }
     }
 
+    // Record hotkey via the OS plugin (reached only when it's a combo).
     match parse_shortcut(&combo) {
         Some(sc) => app
             .global_shortcut()

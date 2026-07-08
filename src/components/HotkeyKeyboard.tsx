@@ -180,7 +180,7 @@ export function HotkeyKeyboard({
       </button>
 
       {open && (
-        <div className="confirm-backdrop" onClick={() => setOpen(false)}>
+        <div className="hk-backdrop" onClick={() => setOpen(false)}>
           <div
             className="hk-card"
             role="dialog"

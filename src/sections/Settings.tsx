@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "../components/Avatar";
 import { BigModeSwitch } from "../components/BigModeSwitch";
-import { HotkeyCapture } from "../components/HotkeyCapture";
 import { HotkeyKeyboard } from "../components/HotkeyKeyboard";
 import { ModelManager } from "../components/ModelManager";
 import { StreamingSwitch } from "../components/StreamingSwitch";
@@ -802,7 +801,12 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                 <Toggle checked={c.target_lock} onChange={(v) => set("target_lock", v)} />
               </Row>
               <Row name={t("settings.promptHotkey")} hint={t("settings.promptHotkeyHint")}>
-                <HotkeyCapture value={c.prompt_console_hotkey} onChange={(v) => set("prompt_console_hotkey", v)} />
+                <HotkeyKeyboard
+                  value={c.prompt_console_hotkey}
+                  holdMs={c.hotkey_hold_ms ?? 200}
+                  onChange={(v) => set("prompt_console_hotkey", v)}
+                  onHoldMsChange={(ms) => set("hotkey_hold_ms", ms)}
+                />
               </Row>
               <Row name={t("settings.promptAsTarget")} hint={t("settings.promptAsTargetHint")}>
                 <Toggle checked={c.prompt_console_as_target} onChange={(v) => set("prompt_console_as_target", v)} />

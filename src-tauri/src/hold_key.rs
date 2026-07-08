@@ -1,16 +1,21 @@
-//! Single-key / single-modifier "hold to dictate" via a listen-only CGEventTap
-//! (macOS). This is the piece the OS global-shortcut plugin can't do: the plugin
-//! only binds a modifier+key COMBO and *swallows* the key while registered — so a
-//! lone Control or Option can never be a hotkey, and any single key it did bind
-//! would stop typing everywhere. A listen-only tap only OBSERVES events, so the
-//! key keeps working normally (Ctrl+C still copies) while we watch it in the
-//! background.
+//! Single-key / single-modifier "hold to dictate" (and "hold to toggle") via a
+//! listen-only CGEventTap (macOS). This is the piece the OS global-shortcut
+//! plugin can't do: the plugin only binds a modifier+key COMBO and *swallows* the
+//! key while registered — so a lone Control or Option can never be a hotkey, and
+//! any single key it did bind would stop typing everywhere. A listen-only tap only
+//! OBSERVES events, so the key keeps working normally (Ctrl+C still copies) while
+//! we watch it in the background.
 //!
 //! Semantics: press the configured lone key/modifier and hold it. If it stays
-//! down — alone, no other key involved — past `hold_ms`, dictation starts;
-//! releasing it stops + transcribes. A short tap does nothing, and pressing
-//! another key while it's held (i.e. using it as a modifier in a chord like
-//! Ctrl+C) disarms it, so chords never fire dictation.
+//! down — alone, no other key involved — past `hold_ms`, the binding fires. A
+//! short tap does nothing, and pressing another key while it's held (a chord like
+//! Ctrl+C) disarms it, so chords never trigger.
+//!
+//! Two binding kinds share the tap:
+//!   - `Dictate` (the record hotkey): fire = start recording; on release, stop +
+//!     transcribe (push-to-talk).
+//!   - `Toggle` (the Prompt-Console hotkey): fire = toggle the console once;
+//!     release does nothing.
 //!
 //! Only single-token hotkeys take this path; multi-key combos (`<ctrl>+<space>`)
 //! stay on the OS plugin (see hotkey.rs). Non-macOS builds get no-op stubs and
@@ -32,6 +37,15 @@ pub enum ModKind {
     Cmd,
     Shift,
     Fn,
+}
+
+/// What a binding does when it fires.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HoldAction {
+    /// Record hotkey: start on fire, stop + transcribe on release.
+    Dictate,
+    /// Prompt-Console hotkey: toggle the console once on fire; release is a no-op.
+    Toggle,
 }
 
 /// Resolve a hotkey string to a hold target IFF it is a single token (one bare
@@ -148,10 +162,14 @@ pub use macos::{has_permission, request_permission, start, stop};
 
 #[cfg(not(target_os = "macos"))]
 mod stub {
-    use super::HoldTarget;
+    use super::{HoldAction, HoldTarget};
     use tauri::AppHandle;
     /// Non-macOS: the event tap doesn't exist; callers fall back to the plugin.
-    pub fn start(_app: &AppHandle, _t: HoldTarget, _hold_ms: u32) -> Result<(), String> {
+    pub fn start(
+        _app: &AppHandle,
+        _bindings: Vec<(HoldTarget, HoldAction)>,
+        _hold_ms: u32,
+    ) -> Result<(), String> {
         Err("hold-key monitor is macOS-only".into())
     }
     pub fn stop() {}
@@ -165,49 +183,9 @@ mod stub {
 #[cfg(not(target_os = "macos"))]
 pub use stub::{has_permission, request_permission, start, stop};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lone_modifier_takes_the_hold_path() {
-        // The whole point: a bare Control/Option — impossible as an OS combo — is
-        // now a valid (hold) hotkey.
-        assert_eq!(parse_target("<ctrl>"), Some(HoldTarget::Modifier(ModKind::Ctrl)));
-        assert_eq!(parse_target("ctrl"), Some(HoldTarget::Modifier(ModKind::Ctrl)));
-        assert_eq!(parse_target("<alt>"), Some(HoldTarget::Modifier(ModKind::Alt)));
-        assert_eq!(parse_target("option"), Some(HoldTarget::Modifier(ModKind::Alt)));
-        assert_eq!(parse_target("<cmd>"), Some(HoldTarget::Modifier(ModKind::Cmd)));
-        assert_eq!(parse_target("<shift>"), Some(HoldTarget::Modifier(ModKind::Shift)));
-        assert_eq!(parse_target("fn"), Some(HoldTarget::Modifier(ModKind::Fn)));
-    }
-
-    #[test]
-    fn lone_key_takes_the_hold_path() {
-        assert_eq!(parse_target("<f6>"), Some(HoldTarget::Key(0x61)));
-        assert_eq!(parse_target("<space>"), Some(HoldTarget::Key(0x31)));
-        assert_eq!(parse_target("a"), Some(HoldTarget::Key(0x00)));
-        assert_eq!(parse_target("<f13>"), Some(HoldTarget::Key(0x69)));
-    }
-
-    #[test]
-    fn combos_stay_on_the_os_plugin() {
-        assert_eq!(parse_target("<ctrl>+<space>"), None);
-        assert_eq!(parse_target("<cmd>+<shift>+p"), None);
-        assert_eq!(parse_target(""), None);
-        assert_eq!(parse_target("   "), None);
-    }
-
-    #[test]
-    fn unknown_single_token_is_rejected() {
-        assert_eq!(parse_target("<f25>"), None);
-        assert_eq!(parse_target("<foobar>"), None);
-    }
-}
-
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{HoldTarget, ModKind};
+    use super::{HoldAction, HoldTarget, ModKind};
     use std::os::raw::c_void;
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
@@ -252,8 +230,8 @@ mod macos {
         }
     }
 
-    // All the modifier bits we care about, so "held solo" can check for any OTHER
-    // modifier sneaking in (which would make it a chord, not a dictation hold).
+    // All modifier bits we care about, so "held solo" can check for any OTHER
+    // modifier sneaking in (which would make it a chord, not a hold).
     fn all_mod_flags() -> CGEventFlags {
         CGEventFlags::CGEventFlagControl
             | CGEventFlags::CGEventFlagAlternate
@@ -262,53 +240,72 @@ mod macos {
             | CGEventFlags::CGEventFlagSecondaryFn
     }
 
-    struct HoldState {
-        app: AppHandle,
+    /// One watched hotkey (record or prompt) and its lifecycle state.
+    struct Binding {
         target: HoldTarget,
-        hold_ms: u32,
+        action: HoldAction,
         // Bumped on every arm/disarm so a stale hold-timer knows not to fire.
         arm_gen: AtomicU64,
         armed: AtomicBool,
-        dictating: AtomicBool,
+        // Dictate: currently recording. Toggle: fired for the current press.
+        active: AtomicBool,
+        // For modifier targets: last-seen down state, so a shared FlagsChanged
+        // event (fired for ANY modifier) is turned into per-binding transitions.
+        down: AtomicBool,
+    }
+
+    struct HoldState {
+        app: AppHandle,
+        hold_ms: u32,
+        bindings: Vec<Binding>,
         // CFMachPortRef of the tap, for re-enabling after a TapDisabled event.
         tap_port: AtomicUsize,
     }
 
     impl HoldState {
-        /// Start the hold timer: after `hold_ms`, if this arm is still the current
-        /// one and nothing disarmed it, dictation begins.
-        fn arm(self: &Arc<Self>) {
-            if self.dictating.load(Ordering::SeqCst) {
+        /// Start binding `i`'s hold timer: after `hold_ms`, if still armed and
+        /// nothing disarmed it, the binding fires.
+        fn arm(self: &Arc<Self>, i: usize) {
+            let b = &self.bindings[i];
+            if b.active.load(Ordering::SeqCst) {
                 return;
             }
-            let generation = self.arm_gen.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
-            self.armed.store(true, Ordering::SeqCst);
+            let generation = b.arm_gen.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
+            b.armed.store(true, Ordering::SeqCst);
             let st = self.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_millis(st.hold_ms as u64));
-                if st.arm_gen.load(Ordering::SeqCst) == generation
-                    && st.armed.load(Ordering::SeqCst)
-                    && !st.dictating.load(Ordering::SeqCst)
+                let b = &st.bindings[i];
+                if b.arm_gen.load(Ordering::SeqCst) == generation
+                    && b.armed.load(Ordering::SeqCst)
+                    && !b.active.load(Ordering::SeqCst)
                 {
-                    st.dictating.store(true, Ordering::SeqCst);
-                    st.armed.store(false, Ordering::SeqCst);
-                    crate::commands::do_start(&st.app);
+                    b.active.store(true, Ordering::SeqCst);
+                    b.armed.store(false, Ordering::SeqCst);
+                    match b.action {
+                        HoldAction::Dictate => crate::commands::do_start(&st.app),
+                        HoldAction::Toggle => crate::prompt_console::toggle(&st.app),
+                    }
                 }
             });
         }
 
-        /// Cancel a pending arm (short tap released, or a chord started).
-        fn disarm(&self) {
-            self.armed.store(false, Ordering::SeqCst);
-            self.arm_gen.fetch_add(1, Ordering::SeqCst);
+        /// Cancel binding `i`'s pending arm (short tap released, or a chord started).
+        fn disarm(&self, i: usize) {
+            let b = &self.bindings[i];
+            b.armed.store(false, Ordering::SeqCst);
+            b.arm_gen.fetch_add(1, Ordering::SeqCst);
         }
 
-        /// The hotkey was released: stop + transcribe if we were dictating.
-        fn release(&self) {
-            let was_dictating = self.dictating.swap(false, Ordering::SeqCst);
-            self.armed.store(false, Ordering::SeqCst);
-            self.arm_gen.fetch_add(1, Ordering::SeqCst);
-            if was_dictating {
+        /// Binding `i` was released.
+        fn release(&self, i: usize) {
+            let b = &self.bindings[i];
+            let was_active = b.active.swap(false, Ordering::SeqCst);
+            b.armed.store(false, Ordering::SeqCst);
+            b.arm_gen.fetch_add(1, Ordering::SeqCst);
+            // Only Dictate has release work (stop + transcribe). Toggle already
+            // fired on press and does nothing on release.
+            if was_active && b.action == HoldAction::Dictate {
                 let app = self.app.clone();
                 std::thread::spawn(move || {
                     let _ = crate::commands::do_transcribe(&app);
@@ -317,9 +314,7 @@ mod macos {
         }
     }
 
-    // The tap handler. `event_type`/`event` describe one low-level event; we
-    // never mutate or drop it (listen-only), just read state and steer the
-    // dictation lifecycle.
+    // The tap handler: one low-level event, dispatched to every binding.
     fn handle(state: &Arc<HoldState>, event_type: CGEventType, event: &CGEvent) {
         // Re-arm the tap if the OS disabled it (slow handler / user input storm).
         match event_type {
@@ -333,52 +328,58 @@ mod macos {
             _ => {}
         }
 
-        match state.target {
-            HoldTarget::Modifier(kind) => {
-                let target_flag = flag_of(kind);
-                match event_type {
-                    CGEventType::FlagsChanged => {
-                        let flags = event.get_flags();
-                        let target_down = flags.contains(target_flag);
-                        let others_down =
-                            !(flags & all_mod_flags() & !target_flag).is_empty();
-                        if target_down && !others_down {
-                            // Lone target modifier just went down → arm.
-                            state.arm();
-                        } else if !target_down {
-                            // Target released.
-                            state.release();
-                        } else {
-                            // Target down but another modifier joined → chord.
-                            state.disarm();
+        for (i, b) in state.bindings.iter().enumerate() {
+            match b.target {
+                HoldTarget::Modifier(kind) => {
+                    let target_flag = flag_of(kind);
+                    match event_type {
+                        CGEventType::FlagsChanged => {
+                            let flags = event.get_flags();
+                            let now_down = flags.contains(target_flag);
+                            let was_down = b.down.swap(now_down, Ordering::SeqCst);
+                            let others_down =
+                                !(flags & all_mod_flags() & !target_flag).is_empty();
+                            if now_down && !was_down {
+                                // Our modifier just went down. Arm only if it's solo.
+                                if others_down {
+                                    b.armed.store(false, Ordering::SeqCst);
+                                } else {
+                                    state.arm(i);
+                                }
+                            } else if !now_down && was_down {
+                                state.release(i);
+                            } else if now_down && others_down {
+                                // Another modifier joined while ours is held → chord.
+                                state.disarm(i);
+                            }
                         }
-                    }
-                    // A real key pressed while the modifier is held = a chord
-                    // (Ctrl+C, ⌥←, …). Never dictation — cancel the pending arm.
-                    CGEventType::KeyDown => {
-                        if !state.dictating.load(Ordering::SeqCst) {
-                            state.disarm();
+                        // A real key pressed while the modifier is held = a chord
+                        // (Ctrl+C, ⌥←, …). Never a hold — cancel the pending arm.
+                        CGEventType::KeyDown => {
+                            if !b.active.load(Ordering::SeqCst) {
+                                state.disarm(i);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
-            }
-            HoldTarget::Key(code) => {
-                let keycode =
-                    event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) as u16;
-                if keycode != code {
-                    return;
-                }
-                match event_type {
-                    CGEventType::KeyDown => {
-                        let autorepeat =
-                            event.get_integer_value_field(EventField::KEYBOARD_EVENT_AUTOREPEAT);
-                        if autorepeat == 0 {
-                            state.arm();
-                        }
+                HoldTarget::Key(code) => {
+                    let keycode =
+                        event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) as u16;
+                    if keycode != code {
+                        continue;
                     }
-                    CGEventType::KeyUp => state.release(),
-                    _ => {}
+                    match event_type {
+                        CGEventType::KeyDown => {
+                            let autorepeat = event
+                                .get_integer_value_field(EventField::KEYBOARD_EVENT_AUTOREPEAT);
+                            if autorepeat == 0 {
+                                state.arm(i);
+                            }
+                        }
+                        CGEventType::KeyUp => state.release(i),
+                        _ => {}
+                    }
                 }
             }
         }
@@ -396,28 +397,49 @@ mod macos {
 
     static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
-    /// (Re)start the key monitor for `target`. Tears down any previous tap first.
-    /// Returns Err (and changes nothing that would leave a half-live tap) if the
-    /// tap can't be created — almost always missing Input-Monitoring permission.
-    pub fn start(app: &AppHandle, target: HoldTarget, hold_ms: u32) -> Result<(), String> {
+    /// (Re)start the key monitor for `bindings`. Tears down any previous tap first.
+    /// Returns Err (changing nothing that would leave a half-live tap) if the tap
+    /// can't be created — almost always missing Input-Monitoring permission.
+    pub fn start(
+        app: &AppHandle,
+        bindings: Vec<(HoldTarget, HoldAction)>,
+        hold_ms: u32,
+    ) -> Result<(), String> {
         stop();
+        if bindings.is_empty() {
+            return Ok(());
+        }
+
+        // Watch the union of the events every binding needs.
+        let has_modifier = bindings
+            .iter()
+            .any(|(t, _)| matches!(t, HoldTarget::Modifier(_)));
+        let has_key = bindings.iter().any(|(t, _)| matches!(t, HoldTarget::Key(_)));
+        let mut events = Vec::new();
+        if has_modifier {
+            events.push(CGEventType::FlagsChanged);
+        }
+        events.push(CGEventType::KeyDown); // chord-cancel (modifier) + key arm
+        if has_key {
+            events.push(CGEventType::KeyUp);
+        }
 
         let state = Arc::new(HoldState {
             app: app.clone(),
-            target,
             hold_ms: hold_ms.max(1),
-            arm_gen: AtomicU64::new(0),
-            armed: AtomicBool::new(false),
-            dictating: AtomicBool::new(false),
+            bindings: bindings
+                .iter()
+                .map(|(target, action)| Binding {
+                    target: *target,
+                    action: *action,
+                    arm_gen: AtomicU64::new(0),
+                    armed: AtomicBool::new(false),
+                    active: AtomicBool::new(false),
+                    down: AtomicBool::new(false),
+                })
+                .collect(),
             tap_port: AtomicUsize::new(0),
         });
-
-        let events = match target {
-            HoldTarget::Modifier(_) => {
-                vec![CGEventType::FlagsChanged, CGEventType::KeyDown]
-            }
-            HoldTarget::Key(_) => vec![CGEventType::KeyDown, CGEventType::KeyUp],
-        };
 
         // Hand the freshly-built run loop (or a failure) back to this thread.
         let (tx, rx) = std::sync::mpsc::channel::<Result<RunLoopHandle, String>>();
@@ -459,7 +481,6 @@ mod macos {
                 let runloop = CFRunLoop::get_current();
                 unsafe { runloop.add_source(&source, kCFRunLoopCommonModes) };
                 tap.enable();
-                // Success: publish the loop so stop() can break it, then block.
                 if tx.send(Ok(RunLoopHandle(runloop))).is_err() {
                     return; // manager gave up
                 }
@@ -471,7 +492,7 @@ mod macos {
         match rx.recv() {
             Ok(Ok(runloop)) => {
                 *RUNNING.lock().unwrap() = Some(Running { runloop, join });
-                log::info!("hold-key monitor active: {target:?} hold={hold_ms}ms");
+                log::info!("hold-key monitor active: {} binding(s), hold={hold_ms}ms", state.bindings.len());
                 Ok(())
             }
             Ok(Err(e)) => {
@@ -493,5 +514,45 @@ mod macos {
             let _ = r.join.join();
             log::info!("hold-key monitor stopped");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lone_modifier_takes_the_hold_path() {
+        // The whole point: a bare Control/Option — impossible as an OS combo — is
+        // now a valid (hold) hotkey.
+        assert_eq!(parse_target("<ctrl>"), Some(HoldTarget::Modifier(ModKind::Ctrl)));
+        assert_eq!(parse_target("ctrl"), Some(HoldTarget::Modifier(ModKind::Ctrl)));
+        assert_eq!(parse_target("<alt>"), Some(HoldTarget::Modifier(ModKind::Alt)));
+        assert_eq!(parse_target("option"), Some(HoldTarget::Modifier(ModKind::Alt)));
+        assert_eq!(parse_target("<cmd>"), Some(HoldTarget::Modifier(ModKind::Cmd)));
+        assert_eq!(parse_target("<shift>"), Some(HoldTarget::Modifier(ModKind::Shift)));
+        assert_eq!(parse_target("fn"), Some(HoldTarget::Modifier(ModKind::Fn)));
+    }
+
+    #[test]
+    fn lone_key_takes_the_hold_path() {
+        assert_eq!(parse_target("<f6>"), Some(HoldTarget::Key(0x61)));
+        assert_eq!(parse_target("<space>"), Some(HoldTarget::Key(0x31)));
+        assert_eq!(parse_target("a"), Some(HoldTarget::Key(0x00)));
+        assert_eq!(parse_target("<f13>"), Some(HoldTarget::Key(0x69)));
+    }
+
+    #[test]
+    fn combos_stay_on_the_os_plugin() {
+        assert_eq!(parse_target("<ctrl>+<space>"), None);
+        assert_eq!(parse_target("<cmd>+<shift>+p"), None);
+        assert_eq!(parse_target(""), None);
+        assert_eq!(parse_target("   "), None);
+    }
+
+    #[test]
+    fn unknown_single_token_is_rejected() {
+        assert_eq!(parse_target("<f25>"), None);
+        assert_eq!(parse_target("<foobar>"), None);
     }
 }

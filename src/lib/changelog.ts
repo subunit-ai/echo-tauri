@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.92",
+    date: "2026-07-08",
+    title: { de: "Der Hotkey-Wähler, kompakter und überall", en: "The hotkey picker, tighter and everywhere" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Der Hotkey-Wähler öffnet sich jetzt kompakter und weiter oben — die Tastatur, die Haltedauer und alles passen ohne Scrollen ins Fenster.",
+        en: "The hotkey picker now opens more compact and higher up — the keyboard, the hold duration and everything fit on screen without scrolling.",
+      },
+      {
+        kind: "feature",
+        de: "Auch der Hotkey für die Prompt-Konsole hat jetzt denselben Wähler: klick aufs Feld, und die Tastatur klappt auf — dieselbe Freiheit, eine Kombination oder eine einzelne Taste bzw. einen Modifier (Control, Option …) zu wählen.",
+        en: "The Prompt-Console hotkey now uses the same picker too: click the field and the keyboard drops in — the same freedom to pick a combo or a single key/modifier (Control, Option …).",
+      },
+    ],
+  },
+  {
     version: "0.5.91",
     date: "2026-07-08",
     title: { de: "Eine einzelne Taste zum Diktieren", en: "A single key to dictate" },
