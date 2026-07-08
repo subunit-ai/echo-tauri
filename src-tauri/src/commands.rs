@@ -494,11 +494,21 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         timings: result.timings,
     };
 
-    // The recording had audio but transcribed to nothing (silence / a mic that
-    // delivered no signal). Surface that clearly instead of a silent "Done" with
-    // nothing pasted — otherwise a dead/muted mic looks exactly like "Echo stopped
-    // working" (the empty-result streak we saw in the field). Skip delivery/history.
+    // The recording had audio but transcribed to nothing.
     if result.text.trim().is_empty() {
+        // A SHORT empty take is a deliberate abort / accidental tap — no error
+        // flash (TJ: Abbruch ist kein Fehler; the state colors are reserved for
+        // future states like "Claude denkt"). Quietly back to idle.
+        if duration_s < 3.0 {
+            log::info!(
+                "transcribe: empty transcript on short take ({duration_s:.1}s) — treating as cancel"
+            );
+            emit_state(app, EngineState::Idle, None);
+            return Ok(result);
+        }
+        // A LONG take with no speech stays a visible warning: a dead/muted mic
+        // otherwise looks exactly like "Echo stopped working" (the empty-result
+        // streak we saw in the field). Skip delivery/history.
         log::info!("transcribe: empty transcript (no speech detected) — skipping delivery");
         emit_state(
             app,
