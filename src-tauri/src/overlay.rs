@@ -551,10 +551,10 @@ fn position_window(win: &WebviewWindow, anchor: &str, dim: f64) {
 
     let (orb_x, orb_y) = custom.unwrap_or_else(|| {
         let margin = 40.0;
-        // Clear the taskbar/dock. 64 sat INSIDE the default macOS Dock
-        // (~80 logical px incl. gap) — the pill visibly collided with it
-        // (TJ, v0.5.95). 96 keeps a calm gap above a standard-size Dock.
-        let bottom_margin = 96.0;
+        // Clear the taskbar/dock. 64 sat INSIDE the default macOS Dock edge
+        // (TJ, v0.5.95), but 96 floated way too high (TJ, v0.5.97) — he wants
+        // the pill just BARELY above the Dock: original 64 + ~10.
+        let bottom_margin = 74.0;
         let x = if anchor.contains("left") {
             mpos.x + margin
         } else if anchor.contains("right") {

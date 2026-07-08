@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.98",
+    date: "2026-07-09",
+    title: { de: "Ruhiges Loslassen", en: "Calm release" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Beim Loslassen leuchten die Balken der Pille nicht mehr kurz alle auf — sie gleiten jetzt sanft in den Ruhezustand über, ohne Blitz.",
+        en: "Releasing the hotkey no longer makes all pill bars flash up briefly — they now glide smoothly into their resting state, no flare.",
+      },
+      {
+        kind: "improvement",
+        de: "Die Pille sitzt wieder knapp über dem Dock — nur ein kleines Stück höher als ursprünglich, statt weit darüber zu schweben.",
+        en: "The pill sits just above the Dock again — only slightly higher than originally, instead of floating far above it.",
+      },
+    ],
+  },
+  {
     version: "0.5.97",
     date: "2026-07-08",
     title: { de: "Feinschliff an der Pille", en: "Pill polish" },
