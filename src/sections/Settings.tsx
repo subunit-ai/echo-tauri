@@ -437,6 +437,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
     idleMode: "normal",
     speed: c.orb_speed ?? 0.6,
     appear: c.orb_appear_anim || "bloom",
+    pillColorMode: c.orb_pill_color_mode || "color",
   };
   // The size slider visibly scales the preview too (clamped to the stage).
   const sizeFactor = c.orb_overlay_size ?? 1;
@@ -1177,6 +1178,21 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                   ["pop", t("settings.orbAppearPop")],
                   ["fade", t("settings.orbAppearFade")],
                   ["none", t("settings.orbAppearNone")],
+                ]}
+              />
+            </Row>
+            <Row name={t("settings.pillColorMode")} hint={t("settings.pillColorModeHint")}>
+              <Sel
+                value={
+                  ["idle_glass", "glass"].includes(c.orb_pill_color_mode)
+                    ? c.orb_pill_color_mode
+                    : "color"
+                }
+                onChange={(v) => set("orb_pill_color_mode", v)}
+                options={[
+                  ["color", t("settings.pillColorModeColor")],
+                  ["idle_glass", t("settings.pillColorModeIdleGlass")],
+                  ["glass", t("settings.pillColorModeGlass")],
                 ]}
               />
             </Row>

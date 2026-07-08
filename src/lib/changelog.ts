@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.94",
+    date: "2026-07-08",
+    title: { de: "Die Pille wird zur Linse", en: "The pill becomes a lens" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Orb-Pille in Version 2: länger und schlanker, mit neun Balken statt fünf und deutlich mehr Ausschlag — leise ist ein Zucken, laut füllt das Glas. Das Glas selbst bleibt jetzt komplett neutral (keine Einfärbung mehr durch den Status), die Farbe leuchtet nur noch in den Balken. Dazu der Dome-Linsen-Look: verdichtete Ränder, doppelte Glaskante, Inhalt biegt sich sichtbar zur Kante hin.",
+        en: "The orb pill, version 2: longer and slimmer, with nine bars instead of five and far more travel — quiet is a flicker, loud fills the glass. The glass itself now stays fully neutral (no more state tinting), color lives in the bars alone. Plus the dome-lens look: compressed rims, a double glass edge, content visibly bending toward the rim.",
+      },
+      {
+        kind: "feature",
+        de: "Im Ruhezustand zeigt die Pille jetzt ruhige Punkte statt offener Balken — mit sanftem Atmen, wenn die Leerlauf-Animation an ist. Neu dazu der Farbmodus unter Einstellungen → Overlay: Farbig, „Ruhezustand farblos“ oder „Immer Liquid Glass“ (nur die Bewegung verrät den Status). Statuswechsel blenden jetzt weich ineinander über, und das Aufleuchten beim Erscheinen nutzt deine Ruhe-Farbe.",
+        en: "At rest the pill now shows calm dots instead of open bars — gently breathing when the idle animation is on. New color mode under Settings → Overlay: colored, “colorless at rest” or “always liquid glass” (motion alone tells the state). State changes now cross-fade smoothly, and the appear bloom uses your idle color.",
+      },
+    ],
+  },
+  {
     version: "0.5.93",
     date: "2026-07-08",
     title: { de: "Loslass-Sound: drei neue wählbare Klänge", en: "Release sound: three new selectable tones" },
