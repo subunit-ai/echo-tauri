@@ -63,6 +63,10 @@ export interface OrbAnim {
   /** Smoothed state color (RGB) — lerped toward the target each frame so
    *  state changes ease instead of hard-cutting (TJ). Null until first frame. */
   col: number[] | null;
+  /** Smoothed per-bar heights for the ★ pill — every state edge (release →
+   *  transcribing → idle) morphs instead of jumping, so the bars never flash
+   *  up collectively when a session ends (TJ). Null until first pill frame. */
+  barH: number[] | null;
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -80,6 +84,7 @@ export function newOrbAnim(): OrbAnim {
     caps: [],
     appear: 0,
     col: null,
+    barH: null,
   };
 }
 
@@ -150,13 +155,17 @@ export function drawOrb(
   const cy = h / 2;
   const size = Math.min(w, h);
   const lvl = Math.min(1, level);
+  // The pill treats "done" as plain idle: its confirmation is the pasted text
+  // itself — the 700 ms all-bars flash in the done color on release read as a
+  // glitch (TJ; state colors stay reserved for real working feedback).
+  const stP = v.style === "pill" && st === "done" ? "idle" : st;
   // idle → idle · recording/transcribing → working · done → done · error → error.
   const stateColor =
-    st === "recording" || st === "transcribing"
+    stP === "recording" || stP === "transcribing"
       ? v.colors.working
-      : st === "done"
+      : stP === "done"
         ? v.colors.done
-        : st === "error"
+        : stP === "error"
           ? v.colors.error
           : v.colors.idle;
   // Pill color modes: "glass" = always frost (colorless liquid glass), and
@@ -164,7 +173,7 @@ export function drawOrb(
   const pillMode = v.pillColorMode ?? "color";
   const colTarget =
     v.style === "pill" &&
-    (pillMode === "glass" || (pillMode === "idle_glass" && st === "idle"))
+    (pillMode === "glass" || (pillMode === "idle_glass" && stP === "idle"))
       ? FROST
       : stateColor;
   // Smooth state-color transitions (TJ: the hard cuts felt abrupt) — one
@@ -181,7 +190,7 @@ export function drawOrb(
   // orb truly rests — the audio-track styles (bars/wave) then react ONLY to
   // real speech while recording, not to a constant idle shimmer. `ph` is the
   // frozen phase fed to the per-style oscillators.
-  const idleStill = st === "idle" && !v.idlePulse;
+  const idleStill = stP === "idle" && !v.idlePulse;
   const ph = idleStill ? 0 : t;
 
   ctx.clearRect(0, 0, w, h);
@@ -1442,6 +1451,7 @@ export function drawOrb(
       const N = 9;
       const barW = Math.max(1.8, H * 0.1);
       const span = W - H * 1.15; // usable width between the rounded ends
+      if (!an.barH || an.barH.length !== N) an.barH = new Array(N).fill(0);
       ctx.lineCap = "round";
       ctx.save();
       ctx.shadowColor = hexA(base, 0.7);
@@ -1453,25 +1463,32 @@ export function drawOrb(
         const edgeA = 1 - 0.4 * Math.pow(Math.abs(uL), 3); // rim feather
         const bx = cx + (uL * span) / 2;
 
-        let hBar: number;
+        let tH: number;
         if (speaking) {
           // big dynamic range (TJ: mehr Ausschlag): whisper = ticks,
           // loud = almost the full inner height of the glass
-          hBar = H * Math.min(0.85, REST[i] * (0.22 + 1.75 * bandAt((i + 0.5) / N)));
-        } else if (st === "idle") {
+          tH = H * Math.min(0.85, REST[i] * (0.22 + 1.75 * bandAt((i + 0.5) / N)));
+        } else if (stP === "idle") {
           // resting = DOTS; the idle-animation toggle makes them breathe.
           // NEGATIVE phase offset → the crest travels left → right (TJ; with
           // +i the right dots led the phase and the wave read right → left).
           const wave =
             v.idlePulse && !idleStill ? 0.5 + 0.5 * Math.sin(ph * 0.09 - i * 0.8) : 0;
-          hBar = barW * (1 + 0.65 * wave);
+          tH = barW * (1 + 0.65 * wave);
         } else {
-          // transcribing/done/error: calm phase-offset wave in state color
-          // (same left → right direction as the idle dots)
+          // transcribing: barely above the dots — a subtle shimmer that says
+          // "arbeitet" without lighting the whole pill up (the old 0.55+0.6
+          // amplitude made every release flash all bars at once — TJ). Error
+          // stays taller so a dead mic is still unmissable.
           const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 - i * 0.9);
-          hBar = H * REST[i] * (0.55 + 0.6 * wave * energy);
+          const amp = stP === "error" ? 0.45 + 0.4 * wave : 0.26 + 0.28 * wave * energy;
+          tH = H * REST[i] * amp;
         }
-        hBar *= domeY;
+        tH *= domeY;
+        // Per-bar smoothing: speech stays snappy (fast follow), every state
+        // edge (release → transcribing → idle) morphs instead of jumping.
+        an.barH[i] += (tH - an.barH[i]) * (speaking ? 0.55 : 0.16);
+        let hBar = an.barH[i];
 
         // Materialize: bars ignite centre-out after the glass has condensed.
         if (ap < 1 && apStyle !== "none" && apStyle !== "fade") {
