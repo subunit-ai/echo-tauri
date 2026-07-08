@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.88",
+    date: "2026-07-08",
+    title: { de: "Die neue Orb-Pille", en: "The new orb pill" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Echo hat ein neues Gesicht: die Orb-Pille — eine Liquid-Glass-Kapsel mit fünf Balken, die live auf deine Stimme reagieren. Beim Aufnehmen schlagen sie mit dem echten Stimmspektrum aus, in Ruhe atmen sie sanft. Die Pille ist ab jetzt der Standard-Look des Overlays.",
+        en: "Echo has a new face: the orb pill — a liquid-glass capsule with five bars that react to your voice live. While recording they follow your real voice spectrum; at rest they breathe gently. The pill is now the overlay's standard look.",
+      },
+      {
+        kind: "improvement",
+        de: "Dein gewählter Orb-Stil bleibt erhalten — nur wer noch den bisherigen Standard (Sonar) nutzt, bekommt einmalig die neue Pille. Alle Stile weiterhin unter Einstellungen → Overlay, inklusive Live-Vorschau.",
+        en: "Your chosen orb style is preserved — only installs still on the previous default (Sonar) move to the new pill once. All styles remain under Settings → Overlay, live preview included.",
+      },
+    ],
+  },
+  {
     version: "0.5.87",
     date: "2026-07-08",
     title: { de: "Kein Diktat geht mehr verloren", en: "No dictation gets lost anymore" },

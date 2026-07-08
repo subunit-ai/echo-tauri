@@ -139,14 +139,19 @@ pub struct Config {
     /// logical px; legacy "custom-X-Y" = orb top-left, converted in migrate())
     pub orb_position: String,
     pub orb_idle_pulse: bool,
-    /// ping | sphere | sonar | bars | wave | classic
-    /// | ping2 | sonar2 | bars2 | wave2 (V2 remodels) | halo | orbit | aurora | spectrum
-    /// | bars3 (hybrid 9-band EQ) | duobars | duobars2 | duobars3 (centre-baseline,
-    ///   independent top/bottom lobes — V1 = 5 bars, V2 = 13, V3 = 9)
+    /// pill (liquid-glass capsule, the standard) | ping | sphere | sonar | bars
+    /// | wave | classic | ping2 | sonar2 | bars2 | wave2 (V2 remodels) | halo
+    /// | orbit | aurora | spectrum | bars3 (hybrid 9-band EQ) | duobars
+    /// | duobars2 | duobars3 (centre-baseline, independent top/bottom lobes —
+    ///   V1 = 5 bars, V2 = 13, V3 = 9)
     pub orb_overlay_style: String,
     /// One-time guard: sets the default orb style to "sonar" ONCE for existing
     /// installs (see migrate()); afterwards the user's chosen style sticks.
     pub orb_style_migrated: bool,
+    /// One-time guard (v0.5.88): the liquid-glass pill becomes the standard
+    /// orb. Installs still on the previous default ("sonar") move over ONCE;
+    /// any deliberately-chosen style is left untouched.
+    pub orb_pill_migrated: bool,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
     /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
@@ -393,8 +398,9 @@ impl Default for Config {
             orb_color_theme: "cyan".to_string(),
             orb_position: "bottom-center".to_string(),
             orb_idle_pulse: true,
-            orb_overlay_style: "sonar".to_string(),
+            orb_overlay_style: "pill".to_string(),
             orb_style_migrated: false,
+            orb_pill_migrated: false,
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),
@@ -552,6 +558,7 @@ impl Config {
         c.gpu_aware_migrated = true;
         c.autostart_migrated = true; // fresh installs are already autostart-on by default
         c.orb_style_migrated = true; // fresh installs already default to the "sonar" orb
+        c.orb_pill_migrated = true; // fresh installs already default to the "pill" orb
         c.orb_colors_migrated = true; // fresh installs already use the per-state color defaults
         c.orb_idle_migrated = true; // fresh installs default to the "normal" idle mode
         c.sound_split_migrated = true; // fresh installs already have the split toggles
@@ -627,6 +634,15 @@ impl Config {
                 self.orb_overlay_style = "sonar".to_string();
             }
             self.orb_style_migrated = true;
+        }
+        // v0.5.88: the liquid-glass pill (the Echo-Orb from the website) becomes
+        // the standard overlay. Installs still on the previous default ("sonar")
+        // move over ONCE — deliberately-chosen styles stay untouched.
+        if !self.orb_pill_migrated {
+            if self.orb_overlay_style == "sonar" {
+                self.orb_overlay_style = "pill".to_string();
+            }
+            self.orb_pill_migrated = true;
         }
         // v0.4.15: per-state orb colors replace the single theme dropdown. Seed the
         // idle color from the user's previous theme (cyan/violet/mint) ONCE so their
@@ -910,5 +926,38 @@ mod tests {
         optout.de_comma_migrated = true;
         optout.migrate();
         assert!(!optout.de_comma_enabled, "explicit opt-out must survive migrate");
+    }
+
+    #[test]
+    fn orb_pill_migrates_default_once_but_keeps_chosen_styles() {
+        // Install still on the previous default → moves to the pill once.
+        let mut old = Config::default();
+        old.orb_overlay_style = "sonar".to_string();
+        old.orb_pill_migrated = false;
+        old.migrate();
+        assert_eq!(old.orb_overlay_style, "pill", "old default must move to the pill once");
+        assert!(old.orb_pill_migrated, "guard must trip so it never re-runs");
+
+        // A deliberately-chosen style must survive the migration untouched.
+        let mut chosen = Config::default();
+        chosen.orb_overlay_style = "nebula".to_string();
+        chosen.orb_pill_migrated = false;
+        chosen.migrate();
+        assert_eq!(chosen.orb_overlay_style, "nebula", "chosen style must survive");
+
+        // Ancient config (pre-v0.4.4, still "ping"): both guards run → pill.
+        let mut ancient = Config::default();
+        ancient.orb_overlay_style = "ping".to_string();
+        ancient.orb_style_migrated = false;
+        ancient.orb_pill_migrated = false;
+        ancient.migrate();
+        assert_eq!(ancient.orb_overlay_style, "pill", "ping→sonar→pill chain must land on pill");
+
+        // Someone who later switches BACK to sonar deliberately keeps it.
+        let mut back = Config::default();
+        back.orb_overlay_style = "sonar".to_string();
+        back.orb_pill_migrated = true;
+        back.migrate();
+        assert_eq!(back.orb_overlay_style, "sonar", "post-migration sonar choice must stick");
     }
 }
