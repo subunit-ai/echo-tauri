@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.100",
+    date: "2026-07-09",
+    title: { de: "Die Pille hört feiner hin", en: "The pill listens closer" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Balken reagieren jetzt deutlich feiner auf deine Stimme: Auch leises und normales Sprechen bewegt sie sichtbar — jeder Balken passt sich automatisch an deine Lautstärke, dein Mikrofon und deinen Raum an.",
+        en: "The bars now respond much more finely to your voice: quiet and normal speech moves them visibly — every bar auto-adapts to your loudness, your microphone and your room.",
+      },
+      {
+        kind: "fix",
+        de: "Vorher tanzten fast nur die linken Balken, während Mitte und rechte Seite stur blieben. Jetzt lebt die ganze Pille: Die rechten Balken springen auf S-, T- und Zischlaute an, die Mitte auf den Kern deiner Stimme.",
+        en: "Previously only the left bars really danced while the middle and right stayed stubborn. Now the whole pill is alive: the right bars fire on s, t and sibilant sounds, the middle on the core of your voice.",
+      },
+    ],
+  },
+  {
     version: "0.5.99",
     date: "2026-07-09",
     title: { de: "Die Genie-Animation, jetzt echt", en: "The genie animation, for real" },

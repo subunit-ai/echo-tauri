@@ -67,6 +67,11 @@ export interface OrbAnim {
    *  transcribing → idle) morphs instead of jumping, so the bars never flash
    *  up collectively when a session ends (TJ). Null until first pill frame. */
   barH: number[] | null;
+  /** Per-band auto-gain peaks (slow decay): each band normalises against its
+   *  own recent maximum, so the treble bands — tiny in absolute dB even with
+   *  the recorder's tilt — get a full visual range and quiet voices still
+   *  drive the pill (TJ: only the left bars ever moved). Null until used. */
+  bandAgc: number[] | null;
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -85,6 +90,7 @@ export function newOrbAnim(): OrbAnim {
     appear: 0,
     col: null,
     barH: null,
+    bandAgc: null,
   };
 }
 
@@ -283,6 +289,26 @@ export function drawOrb(
     const lo = Math.floor(p);
     const hi = Math.min(15, lo + 1);
     return an.bandEnv[lo] + (an.bandEnv[hi] - an.bandEnv[lo]) * (p - lo);
+  };
+  // Per-band auto-gain: every band tracks its own recent peak (decay ~2.5 s)
+  // and reads out relative to it. Absolute band levels are useless for the
+  // pill — speech energy sits almost entirely in the low bands, so the treble
+  // bars on the right never moved and quiet voices barely registered (TJ).
+  // Normalised per band, EVERY bar rides its own dynamic range.
+  if (!an.bandAgc) an.bandAgc = new Array(16).fill(0.18);
+  const agc = an.bandAgc;
+  for (let i = 0; i < 16; i++) {
+    agc[i] = Math.max(an.bandEnv[i], agc[i] * 0.9955, 0.1);
+  }
+  /** Auto-gained band value at normalized spectrum position x (0..1). */
+  const bandNormAt = (x: number): number => {
+    const p = Math.max(0, Math.min(1, x)) * 15;
+    const lo = Math.floor(p);
+    const hi = Math.min(15, lo + 1);
+    const f = p - lo;
+    const e = an.bandEnv[lo] + (an.bandEnv[hi] - an.bandEnv[lo]) * f;
+    const g = agc[lo] + (agc[hi] - agc[lo]) * f;
+    return Math.min(1, e / Math.max(0.05, g));
   };
 
   switch (v.style) {
@@ -1465,9 +1491,13 @@ export function drawOrb(
 
         let tH: number;
         if (speaking) {
-          // big dynamic range (TJ: mehr Ausschlag): whisper = ticks,
-          // loud = almost the full inner height of the glass
-          tH = H * Math.min(0.85, REST[i] * (0.22 + 1.75 * bandAt((i + 0.5) / N)));
+          // Auto-gained + compressed response: quiet speech still moves the
+          // bars visibly, and the treble bars (right) ride their own dynamic
+          // range instead of staying stuck (TJ). The speech shape is flatter
+          // than the resting dome so the edge bars have real travel too.
+          const resp = Math.pow(bandNormAt((i + 0.5) / N), 0.7);
+          const shape = 0.55 + 0.45 * REST[i];
+          tH = H * Math.min(0.85, shape * (0.1 + 0.95 * resp));
         } else if (stP === "idle") {
           // resting = DOTS; the idle-animation toggle makes them breathe.
           // NEGATIVE phase offset → the crest travels left → right (TJ; with
