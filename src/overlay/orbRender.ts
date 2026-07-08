@@ -1227,6 +1227,122 @@ export function drawOrb(
       ctx.fill();
       break;
     }
+    case "pill": {
+      // ★ Pille — the liquid-glass capsule from the Echo website's speed race,
+      // now the standard orb: a static glass pill with a specular streak, a
+      // gradient hairline border, a soft state-colored ambient glow and five
+      // voice-reactive EQ bars inside (driven by the REAL spectrum via bandAt).
+      // The capsule itself rests; the light and the bars carry the reaction —
+      // an anchored instrument, not a bouncing blob.
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.4 + lvl * 0.6) : 0);
+
+      const W = size * 0.94;
+      const H = W * 0.4;
+      const x0 = cx - W / 2;
+      const y0 = cy - H / 2;
+      const capsule = () => {
+        const r = H / 2;
+        ctx.beginPath();
+        ctx.moveTo(x0 + r, y0);
+        ctx.lineTo(x0 + W - r, y0);
+        ctx.arc(x0 + W - r, y0 + r, r, -Math.PI / 2, Math.PI / 2);
+        ctx.lineTo(x0 + r, y0 + H);
+        ctx.arc(x0 + r, y0 + r, r, Math.PI / 2, (3 * Math.PI) / 2);
+        ctx.closePath();
+      };
+
+      // 1) ambient glow — breathes with the voice, flares on syllable onsets
+      ctx.save();
+      ctx.shadowColor = hexA(base, 0.38 + 0.3 * energy + 0.25 * an.pulse);
+      ctx.shadowBlur = size * (0.08 + 0.05 * energy + 0.04 * an.pulse);
+      ctx.fillStyle = hexA(base, 0.08);
+      capsule();
+      ctx.fill();
+      ctx.restore();
+
+      // 2) glass body — dark smoke for contrast on any desktop, then the
+      //    website's 165° white→transparent→tint gradient on top
+      capsule();
+      ctx.fillStyle = "rgba(8,14,26,0.42)";
+      ctx.fill();
+      const gDir = { x: Math.cos(1.31), y: Math.sin(1.31) }; // ~165° like the site
+      const body = ctx.createLinearGradient(
+        cx - gDir.x * W * 0.5,
+        cy - gDir.y * H * 0.9,
+        cx + gDir.x * W * 0.5,
+        cy + gDir.y * H * 0.9,
+      );
+      body.addColorStop(0, "rgba(255,255,255,0.20)");
+      body.addColorStop(0.48, "rgba(255,255,255,0.045)");
+      body.addColorStop(1, hexA(base, 0.13));
+      capsule();
+      ctx.fillStyle = body;
+      ctx.fill();
+
+      // 3) specular streak (top-left), clipped to the glass
+      ctx.save();
+      capsule();
+      ctx.clip();
+      const spec = ctx.createRadialGradient(
+        cx - W * 0.24,
+        y0 + H * 0.2,
+        0,
+        cx - W * 0.24,
+        y0 + H * 0.2,
+        W * 0.32,
+      );
+      spec.addColorStop(0, "rgba(255,255,255,0.30)");
+      spec.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = spec;
+      ctx.fillRect(x0, y0, W, H);
+      ctx.restore();
+
+      // 4) hairline border — bright top edge sinking to a faint bottom
+      const rim = ctx.createLinearGradient(cx, y0, cx, y0 + H);
+      rim.addColorStop(0, `rgba(255,255,255,${0.42 + 0.2 * an.pulse})`);
+      rim.addColorStop(1, "rgba(255,255,255,0.10)");
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(1.1, size * 0.011);
+      capsule();
+      ctx.stroke();
+
+      // 5) five EQ bars — the website's echo-eq, but fed by the real voice
+      //    spectrum (bass→sibilance across the pill); calm breathing at rest
+      const REST = [0.34, 0.55, 0.68, 0.47, 0.3];
+      const POS = [0.12, 0.35, 0.55, 0.75, 0.92];
+      const barW = Math.max(1.6, H * 0.085);
+      const gap = barW * 1.7;
+      const totalW = 4 * gap;
+      ctx.lineCap = "round";
+      ctx.save();
+      ctx.shadowColor = hexA(base, 0.7);
+      ctx.shadowBlur = Math.max(3, H * 0.16);
+      for (let i = 0; i < 5; i++) {
+        let hBar: number;
+        if (speaking) {
+          // wide dynamic range: whisper = small ticks, loud = near full height
+          hBar = H * Math.min(0.78, REST[i] * (0.3 + 1.35 * bandAt(POS[i])));
+        } else {
+          // echo-eq breathing (phase-offset per bar), frozen when idleStill
+          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 1.15);
+          hBar = H * REST[i] * (0.5 + 0.32 + 0.68 * wave * energy);
+        }
+        const bx = cx - totalW / 2 + i * gap;
+        ctx.strokeStyle = hexA(base, 0.92);
+        ctx.lineWidth = barW;
+        ctx.beginPath();
+        ctx.moveTo(bx, cy - hBar / 2);
+        ctx.lineTo(bx, cy + hBar / 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.lineCap = "butt";
+      break;
+    }
     default: {
       // "ping" — slow echo rings that expand WIDE and fade out softly, + center dot.
       // Emit far less often than before (TJ: old frequency was way too high) and let

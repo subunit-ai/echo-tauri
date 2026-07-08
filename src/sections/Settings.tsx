@@ -193,6 +193,7 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
  *  The ★ block up front are the premium styles: complex, layered looks driven
  *  by the REAL voice spectrum (mic_features), not just the scalar level. */
 const ORB_STYLES: [string, string][] = [
+  ["pill", "★ Pille (Standard)"],
   ["nebula", "★ Nebula"],
   ["ferro", "★ Ferrofluid"],
   ["scope", "★ Oscilloscope"],
