@@ -282,10 +282,33 @@ export function Orb() {
         setOpenPanel(e.payload.hover ? e.payload.over ?? null : null);
       },
     );
+    // The prompt terminal genies out of / into the pill — pulse the orb like it
+    // emits/absorbs the window. "out" is delayed so the pulse lands right when
+    // the shrinking window arrives at the pill (flight ≈ 400 ms).
+    let genieTimer: number | undefined;
+    const unGenie = listen<string>("echo://orb-genie", (e) => {
+      if (genieTimer) window.clearTimeout(genieTimer);
+      genieTimer = window.setTimeout(
+        () => {
+          boxRef.current?.animate(
+            [
+              { transform: "scale(1)" },
+              { transform: "scale(1.16)", offset: 0.38 },
+              { transform: "scale(0.97)", offset: 0.74 },
+              { transform: "scale(1)" },
+            ],
+            { duration: 460, easing: "cubic-bezier(.3,.7,.3,1)" },
+          );
+        },
+        e.payload === "out" ? 260 : 0,
+      );
+    });
     return () => {
       un.then((f) => f());
       unCfg.then((f) => f());
       unHover.then((f) => f());
+      unGenie.then((f) => f());
+      if (genieTimer) window.clearTimeout(genieTimer);
     };
   }, []);
 

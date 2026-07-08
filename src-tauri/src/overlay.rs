@@ -78,6 +78,27 @@ fn window_size(dim: f64) -> (f64, f64) {
     (dim + 2.0 * GUTTER_X, dim + GUTTER_TOP + GUTTER_BOTTOM)
 }
 
+/// Centre of the orb/pill in LOGICAL screen coordinates — the anchor the prompt
+/// terminal's genie animation flows out of / vanishes into. None while the
+/// overlay isn't up or visible (orb disabled / hidden) — callers fall back to a
+/// plain scale-fade.
+pub fn orb_anchor(app: &AppHandle) -> Option<(f64, f64)> {
+    let win = app.get_webview_window("overlay")?;
+    if !win.is_visible().unwrap_or(false) {
+        return None;
+    }
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let pos = win.outer_position().ok()?;
+    let size = win.inner_size().ok()?;
+    let x = pos.x as f64 / sf;
+    let y = pos.y as f64 / sf;
+    let w = size.width as f64 / sf;
+    // The orb square sits between the gutters; its centre is the pill centre
+    // for every overlay style (the pill renders centred inside the square).
+    let dim = (w - 2.0 * GUTTER_X).max(1.0);
+    Some((x + w / 2.0, y + GUTTER_TOP + dim / 2.0))
+}
+
 /// Orb diameter (logical px) for a configured size multiplier — the ONE place
 /// this formula lives; config migration and the drag-save derive centres from it.
 pub fn orb_dim(size_mult: f64) -> f64 {

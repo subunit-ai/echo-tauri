@@ -778,6 +778,11 @@
         "examples": "Example — the result should look like this:",
         "constraints": "Avoid: … · Pay attention to:"
       }
+    },
+    "win": {
+      "close": "Close – flows into the pill",
+      "min": "Minimize – flows into the pill",
+      "zoom": "Zoom / restore"
     }
   },
   "changelog": {
