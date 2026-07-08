@@ -331,12 +331,18 @@ pub struct Config {
     pub sound_paste_enabled: bool,
     pub sound_start_id: String,
     pub sound_paste_id: String,
-    /// Release/stop cue (the reversed "standard" swoosh played natively on key
-    /// release — see sound.rs::play_stop). Its OWN toggle: it used to ride the
-    /// start toggle, so turning off the paste sound left it stuck on. Default true
-    /// preserves the shipped behaviour, but it's now independently silenceable.
+    /// Release/stop cue, played natively on key release (see sound.rs::play_stop).
+    /// Its OWN toggle: it used to ride the start toggle, so turning off the paste
+    /// sound left it stuck on. Default true preserves the shipped behaviour, but
+    /// it's now independently silenceable.
     #[serde(default = "default_true")]
     pub sound_stop_enabled: bool,
+    /// Which release-cue tone plays ("standard" / "tief" / "ausklang", v0.5.93) —
+    /// same id-matching pattern as `sound_start_id`, resolved natively in
+    /// sound.rs::play_stop (all three stop tones are bundled files, unlike the
+    /// start/paste synth presets). Default "standard"; unknown/empty falls back
+    /// to "standard".
+    pub sound_stop_id: String,
     /// One-time guard: seed the two new toggles from the legacy `sound_enabled` once.
     pub sound_split_migrated: bool,
 
@@ -507,6 +513,7 @@ impl Default for Config {
             sound_start_id: "standard".to_string(),
             sound_paste_id: "standard".to_string(),
             sound_stop_enabled: true,
+            sound_stop_id: "standard".to_string(),
             sound_split_migrated: false,
 
             vocab_enabled: true,

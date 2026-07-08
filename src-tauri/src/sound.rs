@@ -8,13 +8,16 @@
 //! arrived late. Playing it natively here makes it instant regardless of window
 //! state (TJ: "der muss instant kommen, vorgeladen sein").
 //!
-//! The release/stop cue (v0.5.89) is the exact same reasoning applied to the OTHER
-//! end of the press: `stop.wav` is `start.wav` reversed and trimmed to its actual
-//! swoosh content, with a short fade-in/fade-out so the reversal doesn't click
-//! (generated once offline, not derived at runtime). It plays natively for the
-//! same instant-even-hidden guarantee. It's the acoustic counterpart of the start
-//! cue, so it shares the start cue's own toggle/id — there is no separate "stop
-//! sound" setting.
+//! The release/stop cue is the same reasoning applied to the OTHER end of the
+//! press. v0.5.89 shipped it as `start.wav` reversed; v0.5.93 replaced that with
+//! three purpose-designed counterpart tones ("standard" / "tief" / "ausklang"),
+//! selectable via `sound_stop_id` (config.rs) the same way the start/paste cues
+//! are selectable via `sound_start_id`/`sound_paste_id`. It plays natively for
+//! the same instant-even-hidden guarantee, gated by its own toggle
+//! (`sound_stop_enabled`, independent since v0.5.91). Unlike the start/paste
+//! cues — where only the "standard" tone is a bundled file and the rest are
+//! synth presets played from the webview — all three stop tones are bundled
+//! files, so all three play natively; there is no synth stop preset.
 //!
 //! A dedicated thread plays the cues; it opens a FRESH output stream PER cue rather
 //! than holding one open for the app's life. A long-held cpal/CoreAudio stream goes
@@ -23,8 +26,7 @@
 //! A fresh handle each time can't go stale; the few-ms device open is negligible for
 //! a short UI cue and runs off the hot path (the press just sends on a channel). The
 //! bundled WAVs are embedded in the binary. Best-effort throughout: any audio
-//! failure is swallowed (the cue is non-critical, must never break dictation). Only
-//! the bundled "standard" cues are native; synth presets stay in the webview.
+//! failure is swallowed (the cue is non-critical, must never break dictation).
 
 use once_cell::sync::OnceCell;
 use std::io::Cursor;
@@ -32,14 +34,27 @@ use std::sync::mpsc::{channel, Sender};
 
 // Same asset the webview's "standard" start cue uses.
 static START_WAV: &[u8] = include_bytes!("../../src/assets/sounds/start.wav");
-// `start.wav` reversed (+ 5ms fade-in / 20ms fade-out to kill reversal clicks),
-// trimmed to the actual swoosh content — see src/assets/sounds/stop.wav.
-static STOP_WAV: &[u8] = include_bytes!("../../src/assets/sounds/stop.wav");
+// The three selectable release/stop tones (v0.5.93) — purpose-designed
+// counterparts to the start cue, not derived from it. Ids → src/lib/sounds.ts
+// `STOP_SOUND_PRESETS`, must stay in sync with `stop_bytes` below.
+static STOP_STANDARD_WAV: &[u8] = include_bytes!("../../src/assets/sounds/stop-standard.wav");
+static STOP_TIEF_WAV: &[u8] = include_bytes!("../../src/assets/sounds/stop-tief.wav");
+static STOP_AUSKLANG_WAV: &[u8] = include_bytes!("../../src/assets/sounds/stop-ausklang.wav");
+
+/// Resolve a `sound_stop_id` to its bundled bytes. Unknown or empty ids
+/// (old configs predating v0.5.93, or a typo) fall back to "standard".
+fn stop_bytes(id: &str) -> &'static [u8] {
+    match id {
+        "tief" => STOP_TIEF_WAV,
+        "ausklang" => STOP_AUSKLANG_WAV,
+        _ => STOP_STANDARD_WAV,
+    }
+}
 
 /// Which bundled cue to play, carried through the channel alongside the volume.
 enum Cue {
     Start(f32),
-    Stop(f32),
+    Stop(&'static [u8], f32),
 }
 
 // Sender into the audio thread.
@@ -56,7 +71,7 @@ pub fn init() {
                 for cue in rx {
                     let (bytes, vol): (&[u8], f32) = match cue {
                         Cue::Start(v) => (START_WAV, v),
-                        Cue::Stop(v) => (STOP_WAV, v),
+                        Cue::Stop(bytes, v) => (bytes, v),
                     };
                     // Open a FRESH output stream PER cue. A long-held stream goes
                     // stale after system sleep / lid-close / a default-device change
@@ -92,10 +107,12 @@ pub fn play_start(volume: f32) {
     }
 }
 
-/// Play the record-stop/release cue at `volume` (0–1) — the reversed start cue.
-/// No-op if `init` never ran or the audio thread/device is unavailable.
-pub fn play_stop(volume: f32) {
+/// Play the record-stop/release cue at `volume` (0–1). `id` selects the tone
+/// ("standard" / "tief" / "ausklang" — see `stop_bytes`); unknown/empty falls
+/// back to "standard". No-op if `init` never ran or the audio thread/device is
+/// unavailable.
+pub fn play_stop(id: &str, volume: f32) {
     if let Some(tx) = TX.get() {
-        let _ = tx.send(Cue::Stop(volume));
+        let _ = tx.send(Cue::Stop(stop_bytes(id), volume));
     }
 }

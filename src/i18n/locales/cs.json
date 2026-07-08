@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Změny se ukládají automaticky",
     "soundStop": "Zvuk uvolnění",
-    "soundStopHint": "Přehraje se při uvolnění klávesy (konec nahrávání) — obrácený úvodní zvuk. Nezávisle přepínatelný."
+    "soundStopHint": "Přehraje se při uvolnění klávesy (konec nahrávání) — obrácený úvodní zvuk. Nezávisle přepínatelný.",
+    "soundStopLow": "Nízký",
+    "soundStopFade": "Doznění"
   }
 }

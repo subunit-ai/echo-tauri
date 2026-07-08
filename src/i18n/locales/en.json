@@ -590,7 +590,9 @@
     "changelogHint": "What arrived in each version.",
     "changelogBtn": "View",
     "soundStop": "Release sound",
-    "soundStopHint": "Plays when you release the key (end of recording) — the reversed start swoosh. Independently toggleable."
+    "soundStopHint": "Plays when you release the key (end of recording) — choose from three tones. Independently toggleable.",
+    "soundStopLow": "Low",
+    "soundStopFade": "Fade"
   },
   "meetLocal": {
     "cardTitle": "Local meeting",

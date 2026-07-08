@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Ändringar sparas automatiskt",
     "soundStop": "Släppljud",
-    "soundStopHint": "Spelas när du släpper tangenten (slutet på inspelningen) — det inverterade startväsandet. Oberoende omväljtbar."
+    "soundStopHint": "Spelas när du släpper tangenten (slutet på inspelningen) — det inverterade startväsandet. Oberoende omväljtbar.",
+    "soundStopLow": "Låg",
+    "soundStopFade": "Uttoning"
   }
 }

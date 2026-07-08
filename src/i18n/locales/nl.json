@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Wijzigingen worden automatisch opgeslagen",
     "soundStop": "Loslaten geluid",
-    "soundStopHint": "Speelt af wanneer je de toets loslaat (einde opname) — omgekeerde startwosh. Onafhankelijk in- en uitschakelen."
+    "soundStopHint": "Speelt af wanneer je de toets loslaat (einde opname) — omgekeerde startwosh. Onafhankelijk in- en uitschakelen.",
+    "soundStopLow": "Laag",
+    "soundStopFade": "Uitklinken"
   }
 }

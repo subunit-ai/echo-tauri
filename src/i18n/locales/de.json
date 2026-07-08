@@ -592,7 +592,9 @@
     "changelogHint": "Was in jeder Version neu dazugekommen ist.",
     "changelogBtn": "Ansehen",
     "soundStop": "Loslass-Sound",
-    "soundStopHint": "Ton beim Loslassen der Taste (Aufnahme-Ende) — der umgekehrte Start-Sound. Unabhängig abschaltbar."
+    "soundStopHint": "Ton beim Loslassen der Taste (Aufnahme-Ende) — wählbar aus drei Klängen. Unabhängig abschaltbar.",
+    "soundStopLow": "Tief",
+    "soundStopFade": "Ausklang"
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",

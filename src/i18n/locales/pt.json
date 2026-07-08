@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "As alterações são guardadas automaticamente",
     "soundStop": "Som de liberação",
-    "soundStopHint": "Reproduz quando você solta a tecla (fim da gravação) — o swoosh de início invertido. Independentemente comutável."
+    "soundStopHint": "Reproduz quando você solta a tecla (fim da gravação) — o swoosh de início invertido. Independentemente comutável.",
+    "soundStopLow": "Grave",
+    "soundStopFade": "Esmaecimento"
   }
 }

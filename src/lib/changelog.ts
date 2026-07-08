@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.93",
+    date: "2026-07-08",
+    title: { de: "Loslass-Sound: drei neue wählbare Klänge", en: "Release sound: three new selectable tones" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Loslass-Sound (beim Ende der Aufnahme) hat jetzt drei eigene Klänge zur Auswahl: Standard, Tief und Ausklang. Wählbar unter Einstellungen → Sounds mit Vorhör-Button — genau wie beim Aktivierungs- und Einfüge-Sound.",
+        en: "The release sound (when recording ends) now has three tones to choose from: Standard, Low and Fade. Pick one under Settings → Sounds with a preview button — just like the activation and paste sounds.",
+      },
+    ],
+  },
+  {
     version: "0.5.92",
     date: "2026-07-08",
     title: { de: "Der Hotkey-Wähler, kompakter und überall", en: "The hotkey picker, tighter and everywhere" },

@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "変更は自動的に保存されます",
     "soundStop": "リリースサウンド",
-    "soundStopHint": "キーを離したときに再生されます（録音終了）— 開始時の逆向きのシューッという音。独立して切り替え可能です。"
+    "soundStopHint": "キーを離したときに再生されます（録音終了）— 開始時の逆向きのシューッという音。独立して切り替え可能です。",
+    "soundStopLow": "低音",
+    "soundStopFade": "フェード"
   }
 }

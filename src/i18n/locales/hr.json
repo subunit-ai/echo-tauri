@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Promjene se spremaju automatski",
     "soundStop": "Zvuk puštanja",
-    "soundStopHint": "Reproduciraj se kada otpustiš tipku (kraj snimanja) — obrnuti zvuk pokretanja. Samostalno prebacivanje."
+    "soundStopHint": "Reproduciraj se kada otpustiš tipku (kraj snimanja) — obrnuti zvuk pokretanja. Samostalno prebacivanje.",
+    "soundStopLow": "Nizak",
+    "soundStopFade": "Utihnuće"
   }
 }
