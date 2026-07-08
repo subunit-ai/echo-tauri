@@ -168,11 +168,12 @@ export function drawOrb(
       ? FROST
       : stateColor;
   // Smooth state-color transitions (TJ: the hard cuts felt abrupt) — one
-  // lerped RGB per canvas eases every switch over ~0.25 s; ALL styles benefit.
+  // lerped RGB per canvas eases every switch; ALL styles benefit. 0.08/frame
+  // ≈ half a second to ~90 % (0.16 still read as a cut to TJ, v0.5.97).
   {
     const t3 = hexRgb(colTarget);
     if (!an.col) an.col = t3;
-    else for (let i = 0; i < 3; i++) an.col[i] += (t3[i] - an.col[i]) * 0.16;
+    else for (let i = 0; i < 3; i++) an.col[i] += (t3[i] - an.col[i]) * 0.08;
   }
   const base = rgbHex(an.col);
   const dotR = size * 0.1;
@@ -1457,13 +1458,16 @@ export function drawOrb(
           // loud = almost the full inner height of the glass
           hBar = H * Math.min(0.85, REST[i] * (0.22 + 1.75 * bandAt((i + 0.5) / N)));
         } else if (st === "idle") {
-          // resting = DOTS; the idle-animation toggle makes them breathe
+          // resting = DOTS; the idle-animation toggle makes them breathe.
+          // NEGATIVE phase offset → the crest travels left → right (TJ; with
+          // +i the right dots led the phase and the wave read right → left).
           const wave =
-            v.idlePulse && !idleStill ? 0.5 + 0.5 * Math.sin(ph * 0.09 + i * 0.8) : 0;
+            v.idlePulse && !idleStill ? 0.5 + 0.5 * Math.sin(ph * 0.09 - i * 0.8) : 0;
           hBar = barW * (1 + 0.65 * wave);
         } else {
           // transcribing/done/error: calm phase-offset wave in state color
-          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 0.9);
+          // (same left → right direction as the idle dots)
+          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 - i * 0.9);
           hBar = H * REST[i] * (0.55 + 0.6 * wave * energy);
         }
         hBar *= domeY;

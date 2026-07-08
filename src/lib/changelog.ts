@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.97",
+    date: "2026-07-08",
+    title: { de: "Feinschliff an der Pille", en: "Pill polish" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Ruhe-Animation der Pille läuft jetzt von links nach rechts (vorher andersherum), und die Farbwechsel zwischen den Zuständen blenden noch weicher über — etwa eine halbe Sekunde statt eines kurzen Schnitts.",
+        en: "The pill's idle animation now travels left to right (it ran the other way before), and state color changes cross-fade even more gently — about half a second instead of a quick cut.",
+      },
+    ],
+  },
+  {
     version: "0.5.96",
     date: "2026-07-08",
     title: { de: "Der Orb sitzt über dem Dock — und Abbruch ist kein Fehler", en: "The orb clears the Dock — and cancelling is not an error" },
