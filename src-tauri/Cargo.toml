@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.5.94"
+version = "0.5.95"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"
@@ -128,6 +128,11 @@ core-graphics = "0.23"
 # it's ALWAYS the frontmost layer (Tauri's always_on_top only reaches floating
 # level). One msg_send in overlay::pin_topmost; objc is already in the macOS tree.
 objc = "0.2"
+# Runtime vibrancy toggle for the prompt terminal's genie animation: tauri's
+# set_effects(None) can't REMOVE the NSVisualEffectView on macOS (only Windows
+# implements clear), so prompt_console drives apply/clear directly. Same
+# version tauri already resolves — no new dependency tree.
+window-vibrancy = "0.6"
 
 [features]
 default = []

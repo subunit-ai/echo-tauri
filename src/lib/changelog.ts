@@ -31,6 +31,33 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.95",
+    date: "2026-07-08",
+    title: { de: "Das Prompt-Terminal, neu geboren", en: "The Prompt Terminal, reborn" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Das Prompt-Terminal gleitet jetzt wie von Zauberhand aus der Pille heraus — und beim Schließen oder Minimieren fließt es wieder in sie hinein, wie ein Fenster, das ins Dock saugt. Die Pille pulsiert kurz, wenn sie das Terminal aufnimmt oder freigibt.",
+        en: "The Prompt Terminal now flows out of the pill like magic — and on close or minimize it pours back into it, like a window minimizing into the Dock. The pill pulses as it absorbs or releases the terminal.",
+      },
+      {
+        kind: "feature",
+        de: "Echte Fenster-Knöpfe: die vertrauten drei Punkte oben links auf dem Mac (Rot und Gelb gleiten in die Pille, Grün zoomt), und auf Windows die gewohnten Symbole rechts oben.",
+        en: "Real window controls: the familiar three dots top-left on Mac (red and yellow flow into the pill, green zooms), and on Windows the usual buttons top-right.",
+      },
+      {
+        kind: "improvement",
+        de: "Der aktive Tab ist jetzt Teil des Fensters selbst: die Umrisslinie des Terminals steigt um ihn herum auf, wie bei einem echten Terminal-Tab — und gleitet flüssig mit, wenn du den Tab wechselst.",
+        en: "The active tab is now part of the window itself: the terminal's outline rises around it like a real terminal tab — and glides along smoothly when you switch tabs.",
+      },
+      {
+        kind: "improvement",
+        de: "Die ganze Oberfläche ist aufgeräumter: größere, freie Symbole ohne Kästchen, eine ruhigere Werkzeugleiste und ein feinerer Look bis in den Fuß des Fensters.",
+        en: "The whole surface is cleaner: larger free-standing icons without boxes, a calmer toolbar, and a more refined look all the way down.",
+      },
+    ],
+  },
+  {
     version: "0.5.94",
     date: "2026-07-08",
     title: { de: "Die Pille wird zur Linse", en: "The pill becomes a lens" },

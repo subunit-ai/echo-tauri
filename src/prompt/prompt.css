@@ -1,8 +1,15 @@
-/* Prompt Console — dark Liquid Glass HUD. The Tauri window is transparent +
-   undecorated; on macOS a native HudWindow vibrancy layer blurs the DESKTOP
-   behind us (CSS backdrop-filter can't reach outside the webview), so the
-   shell only needs the translucent glass tint, edge, and rim on top. Always
-   dark, independent of Echo's theme — it's a console. */
+/* Prompt Terminal — dark Liquid Glass HUD.
+
+   The Tauri window is transparent + undecorated; on macOS a native HudWindow
+   vibrancy layer blurs the DESKTOP behind us (CSS backdrop-filter can't reach
+   outside the webview). The window BODY is drawn by the .pc-sil SVG: recessed
+   chrome strip + ONE continuous silhouette for pane ⋃ active tab — the
+   window outline literally rises around the active tab (terminal-style
+   "the tab IS the window"). Always dark, independent of Echo's theme.
+
+   During the genie animation (materialize out of / vanish into the orb pill)
+   the native vibrancy is switched off — it's a full-window slab that ignores
+   CSS transforms — and .pc-anim briefly boosts the pane's own tint instead. */
 
 * {
   box-sizing: border-box;
@@ -26,166 +33,167 @@ body {
   user-select: none;
 }
 
+/* ---- Stage: the genie-animated wrapper (WAAPI drives transform/opacity) ---- */
+.pc-stage {
+  position: relative;
+  height: 100%;
+  will-change: transform, opacity;
+}
+
+/* Boot state: hidden until the first genie entrance runs (runGenie removes the
+   class; a failsafe in PromptConsole clears it if no entrance ever fires). */
+.pc-stage.pc-boot {
+  opacity: 0;
+}
+
+/* ---- Window silhouette (SVG) ---- */
+.pc-sil {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Depth: the pane+tab shape casts a soft shadow onto the recessed strip —
+   the tab visibly floats above the chrome. */
+.pc-sil-body {
+  filter: drop-shadow(0 -1px 6px rgba(0, 0, 0, 0.28));
+}
+
+/* Extra tint while the OS blur is off (genie flight) — see Silhouette. */
+.pc-sil-boost {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pc-anim .pc-sil-boost {
+  opacity: 1;
+}
+
 .pc-shell {
   position: relative;
+  z-index: 1;
   height: 100%;
   display: flex;
   flex-direction: column;
-  /* Real Liquid Glass: the macOS HudWindow vibrancy behind the window does the
-     frosting — so the tint is kept VERY light (the desktop genuinely shimmers
-     through) and we add a top-down sheen so it reads as a curved glass pane,
-     not a flat scrim. A brighter inner rim sells the glass edge.
-     --pc-glass scales EVERY tint alpha (set inline from config; the header
-     droplet cycles clear → regular → rich), so "clear" is genuinely
-     see-through instead of merely darker. */
-  --pc-glass: 0.25;
-  /* Shared surface for the active tab + the toolbar below it, so the open tab
-     merges seamlessly into the toolbar (Chrome-style). Scales with the glass. */
-  --pc-toolbar: rgb(40 62 100 / calc(0.9 * var(--pc-glass)));
-  background: linear-gradient(
-    160deg,
-    rgb(36 58 92 / calc(0.3 * var(--pc-glass))) 0%,
-    rgb(10 22 42 / calc(0.2 * var(--pc-glass))) 46%,
-    rgb(8 18 36 / calc(0.26 * var(--pc-glass))) 100%
-  );
-  border: 1px solid var(--glass-edge);
-  border-radius: 22px;
-  box-shadow: var(--shadow), inset 0 1px 0 rgba(190, 215, 245, 0.32),
-    inset 0 0 0 1px rgba(140, 175, 220, 0.07);
-  overflow: hidden;
 }
 
-/* Windows: no dependable window vibrancy → make the shell SOLID (still glassy
-   gradient + edge) so the console is never near-invisible. Also opaque-ify the
-   overlays and chips so nothing reads as see-through without an OS blur layer. */
-.is-windows .pc-shell {
-  background: linear-gradient(160deg, #18293f 0%, #0e1c30 52%, #0b1626 100%);
-}
-.is-windows .pc-lib,
-.is-windows .pc-coach {
-  background: #0e1c30;
-}
-.is-windows .pc-icon,
-.is-windows .pc-tab,
-.is-windows .pc-btn,
-.is-windows .pc-lib-search {
-  background: rgba(28, 48, 78, 0.45);
-}
-/* Solid toolbar + active-tab surface on Windows (no vibrancy to merge into). */
-.is-windows .pc-head,
-.is-windows .pc-tab.active {
-  background: #1b2f49;
-}
-
-/* Soft specular highlight across the top — the "liquid" catch-light. */
-.pc-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 44%;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
-}
-
-/* Cyan caustic pooling at the bottom edge — light refracting through the
-   pane. Kept faint; it should be felt, not seen. */
-.pc-shell::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 38%;
-  pointer-events: none;
-  background:
-    radial-gradient(120% 90% at 18% 115%, rgba(34, 211, 238, 0.09), transparent 60%),
-    linear-gradient(0deg, rgba(160, 200, 245, 0.045), transparent);
-}
-
-/* ---- Toolbar (below the tab strip, like Chrome's) ----
-   Shares the ACTIVE tab's surface (--pc-toolbar) so the open tab merges
-   seamlessly into it; a bottom hairline separates the toolbar from the page. */
-.pc-head {
-  position: relative;
+/* ================= Chrome strip (recessed titlebar) ================= */
+.pc-strip {
+  flex: none;
+  height: 40px; /* = STRIP_H in PromptConsole.tsx */
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px 8px 14px;
-  background: var(--pc-toolbar);
-  border-bottom: 1px solid var(--line);
-  flex: none;
+  gap: 12px;
+  padding: 0 10px 0 16px;
   cursor: default;
 }
 
-.pc-glyph {
-  color: var(--cyan);
-  font-size: 18px;
-  line-height: 1;
-  text-shadow: 0 0 16px rgba(34, 211, 238, 0.75), 0 0 36px rgba(34, 211, 238, 0.35);
-}
-
-.pc-title {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  color: var(--ink);
-}
-
-.pc-head-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.pc-icon {
-  width: 26px;
-  height: 24px;
+/* ---- macOS traffic lights — the real motif, drawn by us so they scale with
+   the genie flight. Hovering the cluster reveals the glyphs (like native). */
+.pc-lights {
+  flex: none;
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-top: -4px; /* optically centre against the tab baseline */
+}
+
+.pc-light {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0.5px solid rgba(0, 0, 0, 0.22);
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
-  border: 1px solid var(--glass-edge);
-  border-radius: 8px;
-  color: var(--ink2);
-  font-size: 12px;
+  cursor: default;
+  box-shadow: inset 0 0.5px 0.5px rgba(255, 255, 255, 0.28);
+}
+
+.pc-light svg {
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.pc-light svg path {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.pc-lights:hover .pc-light svg {
+  opacity: 1;
+}
+
+.pc-light:active {
+  filter: brightness(0.78);
+}
+
+.pc-light.close {
+  background: #ff5f57;
+}
+.pc-light.min {
+  background: #febc2e;
+}
+.pc-light.zoom {
+  background: #28c840;
+}
+
+/* ---- Windows window controls (right side, familiar motif) ---- */
+.pc-winctl {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  align-self: flex-start;
+  margin: 4px 0 0;
+}
+
+.pc-winctl button {
+  width: 36px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--ink3);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease,
-    box-shadow 0.15s ease, transform 0.12s var(--ease-out);
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.pc-icon:hover {
+.pc-winctl button:hover {
+  background: rgba(150, 185, 225, 0.14);
   color: var(--ink);
-  border-color: var(--glass-edge2);
-  background: var(--fill-ghost-hover);
 }
 
-.pc-icon:active {
-  transform: scale(0.92);
+.pc-winctl button.close:hover {
+  background: rgba(232, 17, 35, 0.85);
+  color: #fff;
 }
 
-.pc-icon.on {
-  color: var(--cyan);
-  border-color: rgba(34, 211, 238, 0.45);
-  box-shadow: 0 0 10px -2px rgba(34, 211, 238, 0.35), inset 0 1px 0 var(--rim-soft);
-}
-
-/* ---- Browser-/terminal-style tabs ----
-   A real tab strip: full-width row the tabs sit ON (align-items: flex-end), with
-   a baseline the active tab breaks through. Tabs are tall, top-rounded, and the
-   ACTIVE one is brighter + drops its bottom edge onto the strip baseline so it
-   reads as physically connected to the page below — like a browser tab. */
-.pc-tabs {
-  position: relative;
-  z-index: 2; /* the active tab overlaps the toolbar below */
+/* ================= Tabs =================
+   Inactive tabs are quiet, borderless labels resting in the recessed strip.
+   The ACTIVE tab has no box of its own — the window silhouette (SVG) rises
+   around it, so it IS part of the window outline. */
+.pc-tabrow {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
   align-items: flex-end;
-  gap: 4px;
-  /* The top line of the window — flush to the top edge (drag region). */
-  padding: 7px 10px 0 10px;
+  gap: 2px;
   overflow-x: auto;
-  flex: none;
   scrollbar-width: none;
+  padding-top: 6px;
 }
 
-.pc-tabs::-webkit-scrollbar {
+.pc-tabrow::-webkit-scrollbar {
   display: none;
 }
 
@@ -194,43 +202,36 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  /* Chrome-style: content-sized tabs (not full-width) so there's draggable
-     space after them on the top line; shrink + scroll when many. */
   flex: 0 1 auto;
-  min-width: 112px;
-  max-width: 240px;
-  height: 32px;
-  padding: 0 10px 0 13px;
-  /* Inactive tabs sit recessed (fainter glass). */
-  background: rgb(20 38 64 / calc(0.34 * var(--pc-glass)));
-  border: 1px solid var(--glass-edge);
-  border-bottom: 1px solid transparent;
-  border-radius: 12px 12px 0 0;
-  /* Bottom sits flush on the toolbar; active shares its colour → seamless merge,
-     inactive is darker → reads as tucked behind. (No negative margin: the strip
-     has overflow-x:auto, which would clip vertical overflow.) */
+  min-width: 104px;
+  max-width: 220px;
+  height: 34px; /* strip 40 − tab-top 6 */
+  padding: 0 9px 0 14px;
+  background: transparent;
+  border: none;
+  border-radius: 11px 11px 0 0;
   color: var(--ink3);
   font-size: 12.5px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.16s ease, background 0.16s ease;
 }
 
 .pc-tab:hover {
   color: var(--ink2);
-  background: rgb(28 48 78 / calc(0.5 * var(--pc-glass)));
+  background: rgba(150, 185, 225, 0.09);
 }
 
-/* Active = the open page: brighter surface, cyan top hairline, and its bottom
-   edge merges into the body (no baseline under it). */
+/* Active tab: the silhouette carries the surface — just light the content. */
 .pc-tab.active {
   color: var(--ink);
-  background: var(--pc-toolbar); /* same surface as the toolbar below */
-  border-color: var(--glass-edge2);
-  border-bottom-color: transparent; /* open bottom → merges into the toolbar */
-  box-shadow: inset 0 2px 0 -1px var(--cyan), inset 0 1px 0 var(--rim-soft);
-  z-index: 1;
+  background: transparent;
+}
+
+.pc-tab.active:hover {
+  background: transparent;
 }
 
 .pc-tab-label {
@@ -241,10 +242,6 @@ body {
 
 /* Pinned tab: small filled pin glyph, no close-x (protected from one-click
    close — unpin via the context menu first). */
-.pc-tab.pinned {
-  border-color: rgba(34, 211, 238, 0.28);
-}
-
 .pc-tab-pin {
   display: inline-flex;
   color: var(--cyan);
@@ -260,6 +257,7 @@ body {
   box-shadow: inset 2px 0 0 var(--cyan);
 }
 
+/* Close-x: appears on hover (and always on the active tab) — borderless. */
 .pc-tab-x {
   display: inline-flex;
   align-items: center;
@@ -267,14 +265,19 @@ body {
   width: 18px;
   height: 18px;
   color: var(--ink3);
-  font-size: 15px;
-  line-height: 1;
   border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.pc-tab:hover .pc-tab-x,
+.pc-tab.active .pc-tab-x {
+  opacity: 1;
 }
 
 .pc-tab-x:hover {
   color: var(--ink);
-  background: var(--fill-ghost-hover);
+  background: rgba(150, 185, 225, 0.18);
 }
 
 .pc-rename {
@@ -288,30 +291,104 @@ body {
   outline: none;
 }
 
-/* New-tab button — sits on the strip baseline next to the tabs. */
+/* New-tab: a quiet ghost icon at the end of the row. */
 .pc-tab-add {
   flex: none;
-  width: 30px;
+  width: 28px;
   height: 28px;
-  margin-bottom: 1px;
+  margin: 0 0 3px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: 1px solid var(--glass-edge);
-  border-radius: 9px;
+  border: none;
+  border-radius: 8px;
   color: var(--ink3);
-  font-size: 17px;
-  line-height: 1;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
-    transform 0.12s var(--ease-out);
+  transition: background 0.14s ease, color 0.14s ease, transform 0.12s var(--ease-out);
 }
 
 .pc-tab-add:hover {
   color: var(--cyan);
-  border-color: rgba(34, 211, 238, 0.45);
-  background: var(--fill-ghost-hover);
+  background: rgba(150, 185, 225, 0.1);
 }
 .pc-tab-add:active {
   transform: scale(0.92);
+}
+
+/* ================= Pane ================= */
+/* Clips drawers/toasts to the pane's rounded silhouette. Top corners stay
+   square — the silhouette's top edge is under the strip line anyway. */
+.pc-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0 0 22px 22px; /* = PANE_R */
+  overflow: hidden;
+}
+
+/* ---- Toolbar: borderless, luminous icons — no boxes. ---- */
+.pc-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 6px 16px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+  cursor: default;
+}
+
+.pc-glyph {
+  color: var(--cyan);
+  font-size: 16px;
+  line-height: 1;
+  text-shadow: 0 0 16px rgba(34, 211, 238, 0.75), 0 0 36px rgba(34, 211, 238, 0.35);
+}
+
+.pc-title {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+
+.pc-head-actions {
+  display: flex;
+  gap: 2px;
+}
+
+/* Icon buttons: pure glyphs, generous hit area, glow instead of borders. */
+.pc-icon {
+  width: 30px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.12s var(--ease-out);
+}
+
+.pc-icon:hover {
+  color: var(--ink);
+  background: rgba(150, 185, 225, 0.1);
+}
+
+.pc-icon:active {
+  transform: scale(0.9);
+}
+
+.pc-icon.on {
+  color: var(--cyan);
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.55));
 }
 
 /* ---- Editor ---- */
@@ -329,7 +406,7 @@ body {
   border: none;
   outline: none;
   resize: none;
-  padding: 12px 14px;
+  padding: 13px 16px;
   color: var(--ink);
   caret-color: var(--cyan);
   /* Proportional system font (not monospace): TJ found the monospace tracking
@@ -341,7 +418,6 @@ body {
   line-height: 1.4;
   letter-spacing: -0.003em;
   user-select: text;
-  border-radius: 0 0 0 0;
   transition: box-shadow 0.3s ease;
 }
 
@@ -598,21 +674,29 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px 10px 14px;
+  padding: 8px 12px 10px 16px;
   border-top: 1px solid var(--line);
   flex: none;
 }
 
+/* The count yields (ellipsis) before the actions ever clip — the window can
+   go down to 340px wide. */
 .pc-count {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 10.5px;
   color: var(--ink3);
   letter-spacing: 0.02em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pc-foot-actions {
+  flex: none;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
 
 .pc-btn {
@@ -620,10 +704,10 @@ body {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 5px 11px;
+  padding: 6px 11px;
   background: rgb(28 48 78 / calc(0.3 * var(--pc-glass)));
   border: 1px solid var(--glass-edge);
-  border-radius: 9px;
+  border-radius: 10px;
   color: var(--ink2);
   font-size: 11.5px;
   font-weight: 700;
@@ -652,11 +736,29 @@ body {
   border-color: rgba(34, 211, 238, 0.45);
 }
 
+/* Ghost buttons (footer tools): no box until you reach for them. */
+.pc-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  padding: 6px 8px;
+}
+
+.pc-btn.ghost:hover:not(:disabled) {
+  background: rgba(150, 185, 225, 0.1);
+  border-color: transparent;
+}
+
+.pc-btn.ghost.on {
+  color: var(--cyan);
+  border-color: transparent;
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.4));
+}
+
 /* Coach progress dots in the footer toggle — one per building block, in the
    same fixed order as the coach list. */
 .pc-dots {
   display: inline-flex;
-  gap: 3px;
+  gap: 2px;
 }
 
 .pc-dots i {
@@ -674,6 +776,7 @@ body {
 .pc-btn.primary {
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.32), rgba(8, 145, 178, 0.38));
   border-color: rgba(34, 211, 238, 0.5);
+  border-radius: 999px;
   color: #d9f6fd;
   box-shadow: 0 6px 16px -8px rgba(34, 211, 238, 0.45), inset 0 1px 0 var(--rim-cta);
 }
@@ -960,10 +1063,6 @@ body {
   flex: none;
 }
 
-.is-windows .pc-refine {
-  background: #0e1c30;
-}
-
 /* ---- "Leeren" undo toast (floats over the bottom of the editor) ---- */
 .pc-undo {
   position: absolute;
@@ -1015,15 +1114,14 @@ body {
 /* ---- Click-to-dictate: mic button + live preview bar ---- */
 .pc-btn.mic.rec {
   color: #fecdd3;
-  border-color: rgba(244, 63, 94, 0.55);
   background: rgba(244, 63, 94, 0.18);
-  box-shadow: 0 0 12px -2px rgba(244, 63, 94, 0.5), inset 0 1px 0 var(--rim-soft);
+  box-shadow: 0 0 12px -2px rgba(244, 63, 94, 0.5);
   animation: pc-mic-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes pc-mic-pulse {
-  0%, 100% { box-shadow: 0 0 10px -3px rgba(244, 63, 94, 0.45), inset 0 1px 0 var(--rim-soft); }
-  50% { box-shadow: 0 0 16px 0 rgba(244, 63, 94, 0.7), inset 0 1px 0 var(--rim-soft); }
+  0%, 100% { box-shadow: 0 0 10px -3px rgba(244, 63, 94, 0.45); }
+  50% { box-shadow: 0 0 16px 0 rgba(244, 63, 94, 0.7); }
 }
 
 /* Live transcription preview — a glass strip pinned to the bottom of the editor
@@ -1090,12 +1188,31 @@ body {
   background: rgba(244, 63, 94, 0.26);
 }
 
+/* ================= Windows =================
+   No dependable window vibrancy (Acrylic is flaky on ARM / older GPUs) — the
+   silhouette already paints SOLID fills there (see Silhouette); solidify the
+   floating layers too so nothing reads as see-through without an OS blur. */
+.is-windows .pc-lib,
+.is-windows .pc-coach,
+.is-windows .pc-refine,
 .is-windows .pc-dictate {
   background: #0e1c30;
 }
 
-/* prompt.css honored no reduced-motion at all: the pc-rise panel entrances,
-   the infinite mic/dot pulses and the spinner all played regardless. */
+.is-windows .pc-btn:not(.ghost):not(.primary),
+.is-windows .pc-lib-search {
+  background: rgba(28, 48, 78, 0.45);
+}
+
+.is-windows .pc-tab:hover:not(.active),
+.is-windows .pc-icon:hover,
+.is-windows .pc-tab-add:hover,
+.is-windows .pc-btn.ghost:hover:not(:disabled) {
+  background: rgba(150, 185, 225, 0.12);
+}
+
+/* Reduced motion: no panel entrances, no infinite pulses; the genie flight
+   itself degrades to a quick fade in PromptConsole.runGenie. */
 @media (prefers-reduced-motion: reduce) {
   .pc-lib,
   .pc-coach,

@@ -1,7 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  currentMonitor,
+  getCurrentWindow,
+  LogicalPosition,
+  LogicalSize,
+} from "@tauri-apps/api/window";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { getConfig, setConfig } from "../lib/ipc";
 import { setLanguage } from "../i18n";
@@ -12,6 +23,14 @@ import { setLanguage } from "../i18n";
  * native vibrancy behind this view). Terminal-grade tab UX: drag-reorder,
  * pin (protect from close), duplicate, ⌘1–9 / ⌘T / ⌘W / ⌃Tab, plus a
  * command palette (⌘P).
+ *
+ * Window chrome (2026-07 remodel): the window silhouette is ONE continuous
+ * SVG shape — pane + the ACTIVE tab, drawn with Chrome-style outward
+ * shoulders, so the outline literally IS the tab. macOS gets traffic lights
+ * (close/minimize genie into the pill, green zooms), Windows gets its
+ * controls on the right. Open/close play a genie animation out of / into the
+ * orb pill (see runGenie): the OS vibrancy is switched off around the flight
+ * because that native blur layer ignores CSS transforms.
  *
  * Iron rule: NOTHING is ever lost. Every edit auto-saves (debounced) to
  * prompts.json via the `prompts_save` IPC; hiding the window only hides it;
@@ -75,6 +94,8 @@ const ICONS = {
   check: ["M4 12.5l5 5L20 6.5"],
   micOn: ["M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z", "M19 11a7 7 0 0 1-14 0", "M12 18v3"],
   stop: ["M7 7h10v10H7z"],
+  plus: ["M12 5v14", "M5 12h14"],
+  minus: ["M5 12h14"],
 };
 
 /** Glass intensity levels — cycled from the header droplet. The CSS multiplies
@@ -183,6 +204,120 @@ function wordDiff(a: string, b: string): DiffSeg[] {
   return out;
 }
 
+// ---- Window chrome geometry (logical px) -----------------------------------
+// The silhouette below draws pane + active tab as ONE path, so keep these in
+// sync with the .pc-strip / .pc-tab CSS.
+const STRIP_H = 40; // chrome strip height — the pane's top edge sits here
+const TAB_TOP = 6; // how far below the window top the active tab peaks
+const TAB_R = 11; // tab top corner radius
+const SHOULDER = 9; // outward flare radius where the tab meets the pane
+const PANE_R = 22; // pane corner radius — matches the native vibrancy radius
+
+const IS_WINDOWS = navigator.userAgent.includes("Windows");
+
+/** One continuous window silhouette: the pane below the strip, with the ACTIVE
+ *  tab rising through the strip as part of the same outline (Chrome-style
+ *  outward shoulders). This is what makes the tab read as "the window". */
+function silhouettePath(w: number, h: number, bump: { x: number; w: number } | null): string {
+  const S = STRIP_H;
+  let d = `M 0 ${h - PANE_R} L 0 ${S + PANE_R} A ${PANE_R} ${PANE_R} 0 0 1 ${PANE_R} ${S}`;
+  if (bump) {
+    // Clamp the bump inside the pane's top edge (a tab scrolled half out of
+    // view must not push the outline past the corner arcs).
+    const min = PANE_R + SHOULDER + 2;
+    const max = w - PANE_R - SHOULDER - 2;
+    const bx = Math.min(Math.max(bump.x, min), Math.max(min, max - 40));
+    const bxe = Math.min(Math.max(bx + bump.w, bx + 40), max);
+    d +=
+      ` L ${bx - SHOULDER} ${S}` +
+      ` A ${SHOULDER} ${SHOULDER} 0 0 0 ${bx} ${S - SHOULDER}` +
+      ` L ${bx} ${TAB_TOP + TAB_R}` +
+      ` A ${TAB_R} ${TAB_R} 0 0 1 ${bx + TAB_R} ${TAB_TOP}` +
+      ` L ${bxe - TAB_R} ${TAB_TOP}` +
+      ` A ${TAB_R} ${TAB_R} 0 0 1 ${bxe} ${TAB_TOP + TAB_R}` +
+      ` L ${bxe} ${S - SHOULDER}` +
+      ` A ${SHOULDER} ${SHOULDER} 0 0 0 ${bxe + SHOULDER} ${S}`;
+  }
+  d +=
+    ` L ${w - PANE_R} ${S} A ${PANE_R} ${PANE_R} 0 0 1 ${w} ${S + PANE_R}` +
+    ` L ${w} ${h - PANE_R} A ${PANE_R} ${PANE_R} 0 0 1 ${w - PANE_R} ${h}` +
+    ` L ${PANE_R} ${h} A ${PANE_R} ${PANE_R} 0 0 1 0 ${h - PANE_R} Z`;
+  return d;
+}
+
+/** The recessed chrome strip behind the tabs (full width, rounded top). Drawn
+ *  masked so it never doubles up under the silhouette. */
+function stripPath(w: number): string {
+  const r = 16;
+  return `M 0 ${STRIP_H} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${w - r} 0 A ${r} ${r} 0 0 1 ${w} ${r} L ${w} ${STRIP_H} Z`;
+}
+
+/** The window body as SVG: recessed strip + (pane ⋃ active tab) silhouette with
+ *  a gradient rim. Fills scale with the glass level; Windows gets solid fills
+ *  (no OS vibrancy to shine through). */
+function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: number; w: number } | null; glass: number }) {
+  if (w <= 0 || h <= 0) return null;
+  const sil = silhouettePath(w, h, bump);
+  return (
+    <svg className="pc-sil" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <defs>
+        <linearGradient id="pcTint" x1="0" y1="0" x2="0.4" y2="1">
+          {IS_WINDOWS ? (
+            <>
+              <stop offset="0" stopColor="#18293f" />
+              <stop offset="0.5" stopColor="#0e1c30" />
+              <stop offset="1" stopColor="#0b1626" />
+            </>
+          ) : (
+            <>
+              <stop offset="0" stopColor={`rgba(36,58,92,${Math.min(1, 0.3 * glass)})`} />
+              <stop offset="0.46" stopColor={`rgba(10,22,42,${Math.min(1, 0.2 * glass)})`} />
+              <stop offset="1" stopColor={`rgba(8,18,36,${Math.min(1, 0.26 * glass)})`} />
+            </>
+          )}
+        </linearGradient>
+        <linearGradient id="pcRim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="rgba(200,225,250,0.42)" />
+          <stop offset="0.16" stopColor="rgba(170,205,240,0.2)" />
+          <stop offset="1" stopColor="rgba(160,195,235,0.13)" />
+        </linearGradient>
+        <mask id="pcNotch">
+          <rect x="0" y="0" width={w} height={h} fill="white" />
+          <path d={sil} fill="black" />
+        </mask>
+      </defs>
+      {/* Recessed titlebar strip — darker, tucked BEHIND the pane+tab shape. */}
+      <path
+        d={stripPath(w)}
+        fill={IS_WINDOWS ? "rgba(7,15,27,0.96)" : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`}
+        mask="url(#pcNotch)"
+      />
+      {/* Extra body during the genie flight — the OS blur is off then, so the
+          pane briefly carries more of its own tint (see .pc-anim). */}
+      <path className="pc-sil-boost" d={sil} fill="rgba(9,18,34,0.6)" />
+      {/* Pane + active tab: ONE shape. The outline IS the tab. */}
+      <path className="pc-sil-body" d={sil} fill="url(#pcTint)" />
+      <path d={sil} fill="none" stroke="url(#pcRim)" strokeWidth="1" />
+    </svg>
+  );
+}
+
+// ---- Genie animation keyframes ---------------------------------------------
+// A funnel squash: width collapses faster than height on the way down, so the
+// window visibly pours into the pill instead of merely shrinking.
+const GENIE_IN: Keyframe[] = [
+  { transform: "scale(0.02, 0.06)", opacity: 0, easing: "cubic-bezier(.3,.7,.4,1)" },
+  { transform: "scale(0.3, 0.52)", opacity: 0.92, offset: 0.38, easing: "cubic-bezier(.17,.84,.3,1)" },
+  { transform: "scale(1.014, 0.992)", opacity: 1, offset: 0.86, easing: "ease-out" },
+  { transform: "scale(1, 1)", opacity: 1 },
+];
+const GENIE_OUT: Keyframe[] = [
+  { transform: "scale(1, 1)", opacity: 1, easing: "cubic-bezier(.55,.06,.68,.19)" },
+  { transform: "scale(0.44, 0.68)", opacity: 0.94, offset: 0.4, easing: "cubic-bezier(.5,.1,.68,.35)" },
+  { transform: "scale(0.11, 0.26)", opacity: 0.6, offset: 0.78, easing: "ease-in" },
+  { transform: "scale(0.015, 0.05)", opacity: 0 },
+];
+
 export function PromptConsole() {
   const { t } = useTranslation();
   const [data, setData] = useState<PromptData | null>(null);
@@ -240,6 +375,23 @@ export function PromptConsole() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const dragId = useRef<string | null>(null);
+
+  // ---- Window chrome state ----
+  const [winSize, setWinSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  // The active tab's bump in the silhouette — measured from the DOM, then
+  // spring-animated so switching tabs GLIDES the outline over (rAF, no lib).
+  const [bumpDraw, setBumpDraw] = useState<{ x: number; w: number } | null>(null);
+  const bumpCur = useRef<{ x: number; w: number } | null>(null);
+  const bumpRaf = useRef(0);
+  const tabEls = useRef(new Map<string, HTMLDivElement>());
+  const tabRowRef = useRef<HTMLDivElement>(null);
+  // Genie animation plumbing.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const genieAnim = useRef<Animation | null>(null);
+  const genieRan = useRef(false);
+  const booted = useRef(false);
+  // Green light / zoom: remember the pre-zoom frame to restore on toggle.
+  const zoomPrev = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   /** Latest action set for the global shortcut handler (the keydown listener is
    *  mounted once, so it can't close over fresh state — we reassign this every
@@ -308,6 +460,65 @@ export function PromptConsole() {
       })
       .catch(() => {});
 
+  // ---- Genie: materialize out of / vanish into the orb pill. ----
+  // transform-origin = the pill centre in THIS window's coordinates, so the
+  // whole shell funnels toward the pill. The native vibrancy layer can't follow
+  // CSS transforms, so it's switched off for the flight (prompt_set_effects)
+  // and back on once the window is at rest.
+  const genieOrigin = async (): Promise<string> => {
+    try {
+      const a = await invoke<[number, number] | null>("prompt_genie_anchor");
+      if (!a) return "50% 118%"; // no visible orb → sink softly below the window
+      const win = getCurrentWindow();
+      const [pos, sf] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
+      return `${a[0] - pos.x / sf}px ${a[1] - pos.y / sf}px`;
+    } catch {
+      return "50% 118%";
+    }
+  };
+
+  const runGenie = async (dir: "in" | "out") => {
+    const stage = stageRef.current;
+    if (!stage) {
+      if (dir === "out") invoke("prompt_console_hide_now").catch(() => {});
+      return;
+    }
+    genieAnim.current?.cancel();
+    genieRan.current = true;
+    invoke("prompt_set_effects", { on: false }).catch(() => {});
+    // The stage boots hidden (.pc-boot) so nothing flashes before the first
+    // entrance; the keyframes own opacity from here on.
+    stage.classList.remove("pc-boot");
+    stage.classList.add("pc-anim");
+    stage.style.transformOrigin = await genieOrigin();
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frames = reduce
+      ? dir === "in"
+        ? [{ opacity: 0 }, { opacity: 1 }]
+        : [{ opacity: 1 }, { opacity: 0 }]
+      : dir === "in"
+        ? GENIE_IN
+        : GENIE_OUT;
+    const anim = stage.animate(frames, {
+      duration: reduce ? 140 : dir === "in" ? 460 : 400,
+      fill: "both",
+    });
+    genieAnim.current = anim;
+    try {
+      await anim.finished;
+    } catch {
+      return; // cancelled — a newer genie superseded this one
+    }
+    if (dir === "out") {
+      // Stay collapsed (fill: both) while hidden — no flash on the next show.
+      invoke("prompt_console_hide_now").catch(() => {});
+    } else {
+      anim.cancel();
+      stage.classList.remove("pc-anim");
+      invoke("prompt_set_effects", { on: true }).catch(() => {});
+    }
+  };
+
   useEffect(() => {
     invoke<string>("prompts_load")
       .then((raw) => setData(parseData(raw)))
@@ -328,6 +539,23 @@ export function PromptConsole() {
     const unPartial = listen<string>("echo://stream-partial", (e) => {
       if (micActive.current) setLivePartial(e.payload);
     });
+
+    // Genie choreography from Rust (toggle/show paths emit this).
+    const unGenie = listen<string>("echo://prompt-genie", (e) => {
+      void runGenie(e.payload === "out" ? "out" : "in");
+    });
+
+    // Failsafe: the stage starts collapsed/invisible; if no entrance ever runs
+    // (event lost, anchor call wedged), snap visible rather than stay blank.
+    const failsafe = window.setTimeout(() => {
+      if (!genieRan.current && stageRef.current) {
+        stageRef.current.classList.remove("pc-boot");
+        invoke("prompt_set_effects", { on: true }).catch(() => {});
+      }
+    }, 1200);
+
+    const onResize = () => setWinSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
 
     // Global keyboard map (terminal muscle memory). The palette owns its own
     // keys while open; everything routes through the `actions` ref so it sees
@@ -379,12 +607,67 @@ export function PromptConsole() {
     return () => {
       unTranscript.then((f) => f());
       unPartial.then((f) => f());
+      unGenie.then((f) => f());
+      window.clearTimeout(failsafe);
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("blur", onBlurOrHide);
       document.removeEventListener("visibilitychange", onBlurOrHide);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // First boot: the stage exists only once the data loaded — play the entrance
+  // then (the Rust create-path can't reach a webview that isn't listening yet).
+  useEffect(() => {
+    if (data && !booted.current) {
+      booted.current = true;
+      void runGenie("in");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // ---- Silhouette bump: measure the active tab, spring the outline to it. ----
+  const springBumpTo = (target: { x: number; w: number } | null) => {
+    cancelAnimationFrame(bumpRaf.current);
+    if (!target) {
+      bumpCur.current = null;
+      setBumpDraw(null);
+      return;
+    }
+    if (!bumpCur.current) {
+      bumpCur.current = { ...target };
+      setBumpDraw({ ...target });
+      return;
+    }
+    const step = () => {
+      const c = bumpCur.current!;
+      c.x += (target.x - c.x) * 0.34;
+      c.w += (target.w - c.w) * 0.34;
+      if (Math.abs(target.x - c.x) < 0.5 && Math.abs(target.w - c.w) < 0.5) {
+        c.x = target.x;
+        c.w = target.w;
+        setBumpDraw({ ...c });
+        return;
+      }
+      setBumpDraw({ ...c });
+      bumpRaf.current = requestAnimationFrame(step);
+    };
+    step();
+  };
+
+  useLayoutEffect(() => {
+    if (!data) return;
+    const el = tabEls.current.get(data.activeId);
+    if (!el) {
+      springBumpTo(null);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    springBumpTo({ x: r.left, w: r.width });
+    // Label width follows the text, so drafts is a real dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.activeId, data?.drafts, renaming, winSize]);
 
   if (!data) return null;
   const active = data.drafts.find((d) => d.id === data.activeId) ?? data.drafts[0];
@@ -569,6 +852,35 @@ export function PromptConsole() {
     });
   };
 
+  /** Green traffic light: zoom to a comfortable large frame / restore. */
+  const toggleZoom = async () => {
+    try {
+      const win = getCurrentWindow();
+      const sf = await win.scaleFactor();
+      if (zoomPrev.current) {
+        const p = zoomPrev.current;
+        zoomPrev.current = null;
+        await win.setSize(new LogicalSize(p.w, p.h));
+        await win.setPosition(new LogicalPosition(p.x, p.y));
+      } else {
+        const [pos, size, mon] = await Promise.all([win.outerPosition(), win.outerSize(), currentMonitor()]);
+        if (!mon) return;
+        zoomPrev.current = { x: pos.x / sf, y: pos.y / sf, w: size.width / sf, h: size.height / sf };
+        const msf = mon.scaleFactor || 1;
+        const mw = mon.size.width / msf;
+        const mh = mon.size.height / msf;
+        const mx = mon.position.x / msf;
+        const my = mon.position.y / msf;
+        const zw = Math.min(mw * 0.62, 1020);
+        const zh = Math.min(mh * 0.74, 860);
+        await win.setSize(new LogicalSize(zw, zh));
+        await win.setPosition(new LogicalPosition(mx + (mw - zw) / 2, my + (mh - zh) / 2));
+      }
+    } catch {
+      /* zoom is best-effort */
+    }
+  };
+
   const openCoach = () => {
     setCoachOpen(true);
     setLibOpen(false);
@@ -666,6 +978,8 @@ export function PromptConsole() {
       });
   };
 
+  /** Close/minimize: flush, then hand over to Rust — it emits the genie-out
+   *  event back to us, we animate into the pill and call hide_now. */
   const hide = () => {
     flushNow();
     invoke("prompt_console_toggle").catch(() => {});
@@ -813,362 +1127,409 @@ export function PromptConsole() {
       : null;
 
   return (
-    <div className="pc-shell" data-glass={glass} style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}>
-      {/* Chrome-style: the tab strip IS the top line of the window. */}
-      <div className="pc-tabs" data-tauri-drag-region>
-        {data.drafts.map((dr) => (
-          <div
-            key={dr.id}
-            className={`pc-tab ${dr.id === data.activeId ? "active" : ""} ${dr.pinned ? "pinned" : ""} ${
-              dragOverId === dr.id ? "drop-target" : ""
-            }`}
-            draggable={renaming !== dr.id}
-            onClick={() => update((d) => ({ ...d, activeId: dr.id }))}
-            onDoubleClick={() => setRenaming(dr.id)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setMenu({ id: dr.id, x: e.clientX, y: e.clientY });
-            }}
-            onDragStart={() => (dragId.current = dr.id)}
-            onDragOver={(e) => {
-              if (dragId.current && dragId.current !== dr.id) {
-                e.preventDefault();
-                if (dragOverId !== dr.id) setDragOverId(dr.id);
-              }
-            }}
-            onDragLeave={() => setDragOverId((id) => (id === dr.id ? null : id))}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragId.current) reorderTab(dragId.current, dr.id);
-              dragId.current = null;
-              setDragOverId(null);
-            }}
-            onDragEnd={() => {
-              dragId.current = null;
-              setDragOverId(null);
-            }}
-            title={t("prompt.tabHint")}
-          >
-            {dr.pinned && (
-              <span className="pc-tab-pin" title={t("prompt.menu.unpin")}>
-                <Ico paths={ICONS.pin} filled size={10} />
-              </span>
-            )}
-            {renaming === dr.id ? (
-              <input
-                className="pc-rename"
-                autoFocus
-                defaultValue={dr.title}
-                onClick={(e) => e.stopPropagation()}
-                onBlur={(e) => {
-                  rename(dr.id, e.target.value);
-                  setRenaming(null);
+    <div
+      ref={stageRef}
+      className="pc-stage pc-boot"
+      data-glass={glass}
+      style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}
+    >
+      <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} />
+
+      <div className="pc-shell">
+        {/* ---- Chrome strip: traffic lights (macOS) / window controls (Windows),
+             and the tabs. The ACTIVE tab is drawn by the silhouette — the
+             outline of the window rises around it. ---- */}
+        <div className="pc-strip" data-tauri-drag-region>
+          {!IS_WINDOWS && (
+            <div className="pc-lights">
+              <button className="pc-light close" title={t("prompt.win.close")} onClick={hide}>
+                <svg viewBox="0 0 12 12">
+                  <path d="M3.2 3.2l5.6 5.6M8.8 3.2L3.2 8.8" />
+                </svg>
+              </button>
+              <button className="pc-light min" title={t("prompt.win.min")} onClick={hide}>
+                <svg viewBox="0 0 12 12">
+                  <path d="M2.6 6h6.8" />
+                </svg>
+              </button>
+              <button className="pc-light zoom" title={t("prompt.win.zoom")} onClick={() => void toggleZoom()}>
+                <svg viewBox="0 0 12 12">
+                  <path d="M6 2.6v6.8M2.6 6h6.8" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          <div className="pc-tabrow" ref={tabRowRef} data-tauri-drag-region>
+            {data.drafts.map((dr) => (
+              <div
+                key={dr.id}
+                ref={(el) => {
+                  if (el) tabEls.current.set(dr.id, el);
+                  else tabEls.current.delete(dr.id);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  if (e.key === "Escape") setRenaming(null);
-                  e.stopPropagation();
+                className={`pc-tab ${dr.id === data.activeId ? "active" : ""} ${dr.pinned ? "pinned" : ""} ${
+                  dragOverId === dr.id ? "drop-target" : ""
+                }`}
+                draggable={renaming !== dr.id}
+                onClick={() => update((d) => ({ ...d, activeId: dr.id }))}
+                onDoubleClick={() => setRenaming(dr.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ id: dr.id, x: e.clientX, y: e.clientY });
                 }}
-              />
-            ) : (
-              <>
-                <span className="pc-tab-label">{tabLabel(dr, t("prompt.tabUntitled"))}</span>
-                {!dr.pinned && (
-                  <span
-                    className="pc-tab-x"
-                    title={dr.text.trim() ? t("prompt.tabArchive") : t("prompt.tabClose")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      closeTab(dr.id);
-                    }}
-                  >
-                    ×
+                onDragStart={() => (dragId.current = dr.id)}
+                onDragOver={(e) => {
+                  if (dragId.current && dragId.current !== dr.id) {
+                    e.preventDefault();
+                    if (dragOverId !== dr.id) setDragOverId(dr.id);
+                  }
+                }}
+                onDragLeave={() => setDragOverId((id) => (id === dr.id ? null : id))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (dragId.current) reorderTab(dragId.current, dr.id);
+                  dragId.current = null;
+                  setDragOverId(null);
+                }}
+                onDragEnd={() => {
+                  dragId.current = null;
+                  setDragOverId(null);
+                }}
+                title={t("prompt.tabHint")}
+              >
+                {dr.pinned && (
+                  <span className="pc-tab-pin" title={t("prompt.menu.unpin")}>
+                    <Ico paths={ICONS.pin} filled size={10} />
                   </span>
                 )}
-              </>
-            )}
-          </div>
-        ))}
-        <button className="pc-tab-add" title={t("prompt.newTab")} onClick={addTab}>
-          +
-        </button>
-      </div>
-
-      {/* Toolbar (below the tabs, like Chrome's): the active tab merges into it. */}
-      <header className="pc-head" data-tauri-drag-region>
-        <span className="pc-glyph" data-tauri-drag-region>✦</span>
-        <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
-        <div className="pc-head-actions">
-          <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
-            <Ico paths={ICONS.search} />
-          </button>
-          <button
-            className={`pc-icon ${autocorrect ? "on" : ""}`}
-            title={t("prompt.autocorrect", { state: t(autocorrect ? "common.on" : "common.off") })}
-            onClick={toggleAutocorrect}
-          >
-            <Ico paths={ICONS.spell} />
-          </button>
-          <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
-            <Ico paths={ICONS.drop} />
-          </button>
-          <button
-            className={`pc-icon ${asTarget ? "on" : ""}`}
-            title={t("prompt.targetHint")}
-            onClick={toggleTarget}
-          >
-            <Ico paths={ICONS.mic} />
-          </button>
-          <button className={`pc-icon ${onTop ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
-            <Ico paths={ICONS.pin} />
-          </button>
-          <button className="pc-icon" title={t("prompt.close")} onClick={hide}>
-            <Ico paths={ICONS.x} size={12} />
-          </button>
-        </div>
-      </header>
-
-      <div className="pc-body">
-        <textarea
-          ref={editorRef}
-          className={`pc-editor ${flash ? "pc-flash" : ""}`}
-          value={active.text}
-          placeholder={t("prompt.placeholder")}
-          spellCheck={autocorrect}
-          autoCorrect={autocorrect ? "on" : "off"}
-          autoCapitalize="off"
-          onChange={(e) => setText(e.target.value)}
-        />
-        {coachOpen && (
-          <div className="pc-coach">
-            <div className="pc-coach-head">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Ico paths={ICONS.bolt} filled size={12} /> {t("prompt.coach.title")}
-              </span>
-              <div className="pc-score">
-                <div className="pc-score-fill" style={{ width: `${score}%` }} />
-              </div>
-              <span className="pc-score-num">{score}%</span>
-            </div>
-            <div className="pc-refine-bar">
-              <div className="pc-refine-row">
-                <button
-                  className="pc-btn refine"
-                  onClick={runCorrect}
-                  disabled={correcting || refining || !active.text.trim()}
-                  title={t("prompt.correct.hint")}
-                >
-                  <Ico paths={ICONS.check} size={13} />
-                  {correcting ? t("prompt.correct.loading") : t("prompt.correct.button")}
-                </button>
-                <button
-                  className="pc-btn primary refine"
-                  onClick={runRefine}
-                  disabled={refining || correcting || !active.text.trim()}
-                  title={t("prompt.refine.hint")}
-                >
-                  <Ico paths={ICONS.spark} filled size={12} />
-                  {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
-                </button>
-              </div>
-              {refineErr && <span className="pc-refine-err">{refineErr}</span>}
-            </div>
-            <div className="pc-coach-list">
-              {score === 100 && <div className="pc-coach-all">✓ {t("prompt.coach.allGood")}</div>}
-              {/* All 7 building blocks, ALWAYS in the same order — rows change
-                  state in place instead of jumping between sections while the
-                  user types. */}
-              {COACH_KEYS.map((k) => (
-                <div key={k} className={`pc-coach-row ${checks[k] ? "met" : ""}`}>
-                  <div className="pc-coach-top">
-                    <span className="pc-coach-name">{t(`prompt.coach.name.${k}`)}</span>
-                    {checks[k] ? (
-                      <span className="pc-coach-ok">
-                        <span className="pc-check">✓</span> {t(`prompt.coach.ok.${k}`)}
+                {renaming === dr.id ? (
+                  <input
+                    className="pc-rename"
+                    autoFocus
+                    defaultValue={dr.title}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => {
+                      rename(dr.id, e.target.value);
+                      setRenaming(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape") setRenaming(null);
+                      e.stopPropagation();
+                    }}
+                  />
+                ) : (
+                  <>
+                    <span className="pc-tab-label">{tabLabel(dr, t("prompt.tabUntitled"))}</span>
+                    {!dr.pinned && (
+                      <span
+                        className="pc-tab-x"
+                        title={dr.text.trim() ? t("prompt.tabArchive") : t("prompt.tabClose")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(dr.id);
+                        }}
+                      >
+                        <Ico paths={ICONS.x} size={9} />
                       </span>
-                    ) : (
-                      <button className="pc-btn" onClick={() => addCoachTemplate(k)}>
-                        {t("prompt.coach.add")}
-                      </button>
                     )}
-                  </div>
-                  {!checks[k] && <div className="pc-coach-q">{t(`prompt.coach.q.${k}`)}</div>}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {libOpen && (
-          <div className="pc-lib">
-            <div className="pc-lib-head">
-              <span>{t("prompt.library")}</span>
-              <div className="pc-lib-search">
-                <Ico paths={ICONS.search} size={11} />
-                <input
-                  value={libQuery}
-                  placeholder={t("prompt.librarySearch")}
-                  spellCheck={false}
-                  onChange={(e) => setLibQuery(e.target.value)}
-                />
+                  </>
+                )}
               </div>
-              <button className="pc-btn" onClick={saveToLibrary} disabled={!active.text.trim()}>
-                {t("prompt.saveToLibrary")}
-              </button>
-            </div>
-            <div className="pc-lib-list">
-              {data.library.length === 0 && <div className="pc-lib-empty">{t("prompt.libraryEmpty")}</div>}
-              {data.library.length > 0 && libFiltered.length === 0 && (
-                <div className="pc-lib-empty">{t("prompt.libraryNoMatch")}</div>
-              )}
-              {libFiltered.map((e) => (
-                <div key={e.id} className="pc-lib-row" onClick={() => loadFromLibrary(e)} title={e.text.slice(0, 400)}>
-                  <div className="pc-lib-meta">
-                    <span className="pc-lib-title">{e.title || t("prompt.tabUntitled")}</span>
-                    <span className="pc-lib-sub">
-                      {e.text.length} · {new Date(e.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <button
-                    className="pc-icon"
-                    title={t("prompt.libraryCopy")}
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      copyEntry(e.text);
-                    }}
-                  >
-                    <Ico paths={ICONS.copy} size={12} />
-                  </button>
-                  <button
-                    className="pc-icon"
-                    title={t("prompt.libraryDelete")}
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      deleteFromLibrary(e.id);
-                    }}
-                  >
-                    <Ico paths={ICONS.trash} size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {(refining || refineResult) && (
-          <div className="pc-refine">
-            <div className="pc-refine-head">
-              <span className="pc-refine-title">
-                <Ico paths={ICONS.spark} filled size={12} /> {t("prompt.refine.title")}
-              </span>
-              {refineResult && diffSegs && (
-                <div className="pc-seg">
-                  <button
-                    className={refineView === "diff" ? "on" : ""}
-                    onClick={() => setRefineView("diff")}
-                  >
-                    {t("prompt.refine.viewDiff")}
-                  </button>
-                  <button
-                    className={refineView === "result" ? "on" : ""}
-                    onClick={() => setRefineView("result")}
-                  >
-                    {t("prompt.refine.viewResult")}
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="pc-refine-body">
-              {refining ? (
-                <div className="pc-refine-loading">
-                  <span className="pc-spinner" />
-                  {t("prompt.refine.loading")}
-                </div>
-              ) : refineView === "diff" && diffSegs ? (
-                <div className="pc-diff">
-                  {diffSegs.map((s, i) => (
-                    <span key={i} className={`pc-d-${s.type}`}>
-                      {s.text}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <div className="pc-diff">{refineResult}</div>
-              )}
-            </div>
-            {refineResult && (
-              <div className="pc-refine-foot">
-                <button className="pc-btn" onClick={cancelRefine}>
-                  {t("prompt.refine.reject")}
-                </button>
-                <button className="pc-btn primary" onClick={acceptRefine}>
-                  {t("prompt.refine.accept")}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        {toast && (
-          <div className="pc-undo">
-            <span className="pc-undo-text">{toast.text}</span>
-            {toast.undo && (
-              <button className="pc-undo-btn" onClick={toast.undo}>
-                {t("prompt.clear.undoAction")}
-              </button>
-            )}
-          </div>
-        )}
-        {micRecording && (
-          <div className="pc-dictate">
-            <span className="pc-dictate-dot" />
-            <span className="pc-dictate-text">{livePartial || t("prompt.mic.listening")}</span>
-            <button className="pc-dictate-stop" onClick={() => void stopMic()}>
-              <Ico paths={ICONS.stop} size={11} /> {t("prompt.mic.stopShort")}
+            ))}
+            <button className="pc-tab-add" title={t("prompt.newTab")} onClick={addTab}>
+              <Ico paths={ICONS.plus} size={13} />
             </button>
           </div>
-        )}
-      </div>
 
-      <footer className="pc-foot">
-        <span className="pc-count">
-          {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
-        </span>
-        <div className="pc-foot-actions">
-          <button
-            className={`pc-btn mic ${micRecording ? "rec" : ""}`}
-            title={t(micRecording ? "prompt.mic.stop" : "prompt.mic.start")}
-            onClick={toggleMic}
-          >
-            <Ico paths={micRecording ? ICONS.stop : ICONS.micOn} filled={micRecording} size={13} />
-          </button>
-          <button
-            className={`pc-btn ${coachOpen ? "on" : ""}`}
-            title={t("prompt.coach.title")}
-            onClick={() => (coachOpen ? setCoachOpen(false) : openCoach())}
-          >
-            <span className="pc-dots">
-              {COACH_KEYS.map((k) => (
-                <i key={k} className={checks[k] ? "on" : ""} />
-              ))}
-            </span>
-            {score}%
-          </button>
-          <button
-            className={`pc-btn ${libOpen ? "on" : ""}`}
-            title={t("prompt.library")}
-            onClick={() => (libOpen ? setLibOpen(false) : openLibrary())}
-          >
-            <Ico paths={ICONS.lib} size={12} />
-          </button>
-          <button className="pc-btn" onClick={clearActive} disabled={!active.text} title={t("prompt.clear.hint")}>
-            <Ico paths={ICONS.eraser} size={13} />
-          </button>
-          <button className="pc-btn" onClick={copy} disabled={!active.text} title={t("prompt.copyHint")}>
-            {copied ? t("prompt.copied") : t("prompt.copy")}
-          </button>
-          <button className="pc-btn primary" onClick={insert} disabled={!active.text.trim()} title={t("prompt.insertHint")}>
-            {t("prompt.insert")}
-          </button>
+          {IS_WINDOWS && (
+            <div className="pc-winctl">
+              <button title={t("prompt.win.min")} onClick={hide}>
+                <Ico paths={ICONS.minus} size={13} />
+              </button>
+              <button className="close" title={t("prompt.win.close")} onClick={hide}>
+                <Ico paths={ICONS.x} size={12} />
+              </button>
+            </div>
+          )}
         </div>
-      </footer>
+
+        {/* ---- Pane: toolbar + editor + footer, clipped to the silhouette. ---- */}
+        <div className="pc-main">
+          <header className="pc-head" data-tauri-drag-region>
+            <span className="pc-glyph" data-tauri-drag-region>✦</span>
+            <span className="pc-title" data-tauri-drag-region>{t("prompt.title")}</span>
+            <div className="pc-head-actions">
+              <button className="pc-icon" title={t("prompt.paletteHint")} onClick={openPalette}>
+                <Ico paths={ICONS.search} size={15} />
+              </button>
+              <button
+                className={`pc-icon ${autocorrect ? "on" : ""}`}
+                title={t("prompt.autocorrect", { state: t(autocorrect ? "common.on" : "common.off") })}
+                onClick={toggleAutocorrect}
+              >
+                <Ico paths={ICONS.spell} size={15} />
+              </button>
+              <button className="pc-icon" title={t("prompt.glass", { level: t(`prompt.glassLevel.${glass}`) })} onClick={cycleGlass}>
+                <Ico paths={ICONS.drop} size={15} />
+              </button>
+              <button
+                className={`pc-icon ${asTarget ? "on" : ""}`}
+                title={t("prompt.targetHint")}
+                onClick={toggleTarget}
+              >
+                <Ico paths={ICONS.mic} size={15} />
+              </button>
+              <button className={`pc-icon ${onTop ? "on" : ""}`} title={t("prompt.pin")} onClick={togglePin}>
+                <Ico paths={ICONS.pin} size={15} />
+              </button>
+            </div>
+          </header>
+
+          <div className="pc-body">
+            <textarea
+              ref={editorRef}
+              className={`pc-editor ${flash ? "pc-flash" : ""}`}
+              value={active.text}
+              placeholder={t("prompt.placeholder")}
+              spellCheck={autocorrect}
+              autoCorrect={autocorrect ? "on" : "off"}
+              autoCapitalize="off"
+              onChange={(e) => setText(e.target.value)}
+            />
+            {coachOpen && (
+              <div className="pc-coach">
+                <div className="pc-coach-head">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <Ico paths={ICONS.bolt} filled size={12} /> {t("prompt.coach.title")}
+                  </span>
+                  <div className="pc-score">
+                    <div className="pc-score-fill" style={{ width: `${score}%` }} />
+                  </div>
+                  <span className="pc-score-num">{score}%</span>
+                </div>
+                <div className="pc-refine-bar">
+                  <div className="pc-refine-row">
+                    <button
+                      className="pc-btn refine"
+                      onClick={runCorrect}
+                      disabled={correcting || refining || !active.text.trim()}
+                      title={t("prompt.correct.hint")}
+                    >
+                      <Ico paths={ICONS.check} size={13} />
+                      {correcting ? t("prompt.correct.loading") : t("prompt.correct.button")}
+                    </button>
+                    <button
+                      className="pc-btn primary refine"
+                      onClick={runRefine}
+                      disabled={refining || correcting || !active.text.trim()}
+                      title={t("prompt.refine.hint")}
+                    >
+                      <Ico paths={ICONS.spark} filled size={12} />
+                      {refining ? t("prompt.refine.loading") : t("prompt.refine.button")}
+                    </button>
+                  </div>
+                  {refineErr && <span className="pc-refine-err">{refineErr}</span>}
+                </div>
+                <div className="pc-coach-list">
+                  {score === 100 && <div className="pc-coach-all">✓ {t("prompt.coach.allGood")}</div>}
+                  {/* All 7 building blocks, ALWAYS in the same order — rows change
+                      state in place instead of jumping between sections while the
+                      user types. */}
+                  {COACH_KEYS.map((k) => (
+                    <div key={k} className={`pc-coach-row ${checks[k] ? "met" : ""}`}>
+                      <div className="pc-coach-top">
+                        <span className="pc-coach-name">{t(`prompt.coach.name.${k}`)}</span>
+                        {checks[k] ? (
+                          <span className="pc-coach-ok">
+                            <span className="pc-check">✓</span> {t(`prompt.coach.ok.${k}`)}
+                          </span>
+                        ) : (
+                          <button className="pc-btn" onClick={() => addCoachTemplate(k)}>
+                            {t("prompt.coach.add")}
+                          </button>
+                        )}
+                      </div>
+                      {!checks[k] && <div className="pc-coach-q">{t(`prompt.coach.q.${k}`)}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {libOpen && (
+              <div className="pc-lib">
+                <div className="pc-lib-head">
+                  <span>{t("prompt.library")}</span>
+                  <div className="pc-lib-search">
+                    <Ico paths={ICONS.search} size={11} />
+                    <input
+                      value={libQuery}
+                      placeholder={t("prompt.librarySearch")}
+                      spellCheck={false}
+                      onChange={(e) => setLibQuery(e.target.value)}
+                    />
+                  </div>
+                  <button className="pc-btn" onClick={saveToLibrary} disabled={!active.text.trim()}>
+                    {t("prompt.saveToLibrary")}
+                  </button>
+                </div>
+                <div className="pc-lib-list">
+                  {data.library.length === 0 && <div className="pc-lib-empty">{t("prompt.libraryEmpty")}</div>}
+                  {data.library.length > 0 && libFiltered.length === 0 && (
+                    <div className="pc-lib-empty">{t("prompt.libraryNoMatch")}</div>
+                  )}
+                  {libFiltered.map((e) => (
+                    <div key={e.id} className="pc-lib-row" onClick={() => loadFromLibrary(e)} title={e.text.slice(0, 400)}>
+                      <div className="pc-lib-meta">
+                        <span className="pc-lib-title">{e.title || t("prompt.tabUntitled")}</span>
+                        <span className="pc-lib-sub">
+                          {e.text.length} · {new Date(e.updatedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <button
+                        className="pc-icon"
+                        title={t("prompt.libraryCopy")}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          copyEntry(e.text);
+                        }}
+                      >
+                        <Ico paths={ICONS.copy} size={12} />
+                      </button>
+                      <button
+                        className="pc-icon"
+                        title={t("prompt.libraryDelete")}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          deleteFromLibrary(e.id);
+                        }}
+                      >
+                        <Ico paths={ICONS.trash} size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(refining || refineResult) && (
+              <div className="pc-refine">
+                <div className="pc-refine-head">
+                  <span className="pc-refine-title">
+                    <Ico paths={ICONS.spark} filled size={12} /> {t("prompt.refine.title")}
+                  </span>
+                  {refineResult && diffSegs && (
+                    <div className="pc-seg">
+                      <button
+                        className={refineView === "diff" ? "on" : ""}
+                        onClick={() => setRefineView("diff")}
+                      >
+                        {t("prompt.refine.viewDiff")}
+                      </button>
+                      <button
+                        className={refineView === "result" ? "on" : ""}
+                        onClick={() => setRefineView("result")}
+                      >
+                        {t("prompt.refine.viewResult")}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="pc-refine-body">
+                  {refining ? (
+                    <div className="pc-refine-loading">
+                      <span className="pc-spinner" />
+                      {t("prompt.refine.loading")}
+                    </div>
+                  ) : refineView === "diff" && diffSegs ? (
+                    <div className="pc-diff">
+                      {diffSegs.map((s, i) => (
+                        <span key={i} className={`pc-d-${s.type}`}>
+                          {s.text}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="pc-diff">{refineResult}</div>
+                  )}
+                </div>
+                {refineResult && (
+                  <div className="pc-refine-foot">
+                    <button className="pc-btn" onClick={cancelRefine}>
+                      {t("prompt.refine.reject")}
+                    </button>
+                    <button className="pc-btn primary" onClick={acceptRefine}>
+                      {t("prompt.refine.accept")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {toast && (
+              <div className="pc-undo">
+                <span className="pc-undo-text">{toast.text}</span>
+                {toast.undo && (
+                  <button className="pc-undo-btn" onClick={toast.undo}>
+                    {t("prompt.clear.undoAction")}
+                  </button>
+                )}
+              </div>
+            )}
+            {micRecording && (
+              <div className="pc-dictate">
+                <span className="pc-dictate-dot" />
+                <span className="pc-dictate-text">{livePartial || t("prompt.mic.listening")}</span>
+                <button className="pc-dictate-stop" onClick={() => void stopMic()}>
+                  <Ico paths={ICONS.stop} size={11} /> {t("prompt.mic.stopShort")}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <footer className="pc-foot">
+            <span className="pc-count">
+              {chars} · {words} {t("prompt.words")} · ~{tokens} {t("prompt.tokens")}
+            </span>
+            <div className="pc-foot-actions">
+              <button
+                className={`pc-btn ghost mic ${micRecording ? "rec" : ""}`}
+                title={t(micRecording ? "prompt.mic.stop" : "prompt.mic.start")}
+                onClick={toggleMic}
+              >
+                <Ico paths={micRecording ? ICONS.stop : ICONS.micOn} filled={micRecording} size={14} />
+              </button>
+              <button
+                className={`pc-btn ghost ${coachOpen ? "on" : ""}`}
+                title={t("prompt.coach.title")}
+                onClick={() => (coachOpen ? setCoachOpen(false) : openCoach())}
+              >
+                <span className="pc-dots">
+                  {COACH_KEYS.map((k) => (
+                    <i key={k} className={checks[k] ? "on" : ""} />
+                  ))}
+                </span>
+                {score}%
+              </button>
+              <button
+                className={`pc-btn ghost ${libOpen ? "on" : ""}`}
+                title={t("prompt.library")}
+                onClick={() => (libOpen ? setLibOpen(false) : openLibrary())}
+              >
+                <Ico paths={ICONS.lib} size={13} />
+              </button>
+              <button className="pc-btn ghost" onClick={clearActive} disabled={!active.text} title={t("prompt.clear.hint")}>
+                <Ico paths={ICONS.eraser} size={14} />
+              </button>
+              <button className="pc-btn" onClick={copy} disabled={!active.text} title={t("prompt.copyHint")}>
+                {copied ? t("prompt.copied") : t("prompt.copy")}
+              </button>
+              <button className="pc-btn primary" onClick={insert} disabled={!active.text.trim()} title={t("prompt.insertHint")}>
+                {t("prompt.insert")}
+              </button>
+            </div>
+          </footer>
+        </div>
+      </div>
 
       {/* Tab context menu (right-click) */}
       {menu && menuDraft && (

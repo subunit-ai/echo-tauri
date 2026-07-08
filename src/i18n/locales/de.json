@@ -780,6 +780,11 @@
         "examples": "Beispiel — so soll das Ergebnis aussehen:",
         "constraints": "Vermeide: … · Achte auf:"
       }
+    },
+    "win": {
+      "close": "Schließen – gleitet in die Pille",
+      "min": "Minimieren – gleitet in die Pille",
+      "zoom": "Vergrößern / Zurück"
     }
   },
   "changelog": {
