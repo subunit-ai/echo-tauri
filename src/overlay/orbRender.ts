@@ -200,7 +200,8 @@ export function drawOrb(
   // "hide" → recording). Fixed cadence (~0.65 s @ 60 fps), deliberately NOT
   // scaled by v.speed — it's a UI transition, not part of the style's rhythm.
   const apStyle = v.appear ?? "bloom";
-  an.appear = apStyle === "none" ? 1 : Math.min(1, an.appear + 1 / 40);
+  // ~0.95 s statt 0.65 s — das Materialize las sich als zu abrupt (TJ).
+  an.appear = apStyle === "none" ? 1 : Math.min(1, an.appear + 1 / 58);
   const ap = an.appear;
   ctx.save(); // paired with the restore right after the style switch
   let bloomA = 0; // strength of the additive light flash drawn on top
@@ -209,21 +210,21 @@ export function drawOrb(
     if (apStyle === "fade") {
       ctx.globalAlpha *= easeOut;
     } else if (apStyle === "pop") {
-      const s = 0.55 + 0.45 * backOut(ap);
-      ctx.translate(cx, cy);
-      ctx.scale(s, s);
-      ctx.translate(-cx, -cy);
-      ctx.globalAlpha *= Math.min(1, ap * 2.4);
-    } else {
-      // "bloom" — the standard: light condenses into the orb. The body springs
-      // 0.7 → ~1.04 → 1 while a bright flash peaks early and dissolves into
-      // the style's own ambient glow.
       const s = 0.7 + 0.3 * backOut(ap);
       ctx.translate(cx, cy);
       ctx.scale(s, s);
       ctx.translate(-cx, -cy);
-      ctx.globalAlpha *= Math.min(1, ap * 2.6);
-      bloomA = Math.sin(Math.min(1, ap * 1.35) * Math.PI);
+      ctx.globalAlpha *= Math.min(1, ap * 1.8);
+    } else {
+      // "bloom" — the standard: light condenses into the orb. The body springs
+      // 0.7 → ~1.04 → 1 while a bright flash peaks early and dissolves into
+      // the style's own ambient glow.
+      const s = 0.82 + 0.18 * backOut(ap);
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha *= Math.min(1, ap * 1.6);
+      bloomA = Math.sin(Math.min(1, ap * 1.25) * Math.PI) * 0.85;
     }
   }
 

@@ -13,16 +13,20 @@ canvas {
   height: 100vh;
 }
 
-/* Orb satellite chips: spring once on hover (TJ: "soll aufploppen, einmal
-   springen"). Overshoot past 1, settle slightly enlarged while hovered; the
-   inline transform takes back over on mouse-leave so it snaps calmly to rest.
-   A running animation overrides the inline `transform: scale(1)` per spec. */
-@keyframes orb-chip-pop {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.32); }
-  70% { transform: scale(1.06); }
-  100% { transform: scale(1.14); }
-}
+/* Orb satellite chips — SAME micro-interactions as the pill (TJ):
+   hover = gentle lift, press = quick dip. Replaces the old 1.32x bounce-pop
+   (too loud for something seen dozens of times a day — Emil). !important
+   wins over the inline visibility transform; hidden chips have
+   pointer-events: none, so they can never lift. */
 .orb-chip:hover {
-  animation: orb-chip-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform: translateY(-2px) scale(1.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 0 12px rgba(255, 255, 255, 0.06),
+    0 10px 26px -6px rgba(2, 8, 20, 0.85),
+    0 20px 42px -18px rgba(0, 0, 0, 0.6) !important;
+}
+.orb-chip:active {
+  transform: translateY(0) scale(0.94) !important;
+  transition-duration: 0.09s !important;
 }
