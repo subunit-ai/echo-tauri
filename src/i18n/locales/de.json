@@ -836,7 +836,12 @@
     "exportCsv": "Als CSV exportieren",
     "exportJson": "Als JSON exportieren",
     "exportDone": "Im Downloads-Ordner gespeichert",
-    "empty": "Noch keine Aktivität. Beginne zu diktieren, um deine Statistiken zu sehen."
+    "empty": "Noch keine Aktivität. Beginne zu diktieren, um deine Statistiken zu sehen.",
+    "statWpm": "Sprechtempo",
+    "wpmUnit": "Wörter/Min.",
+    "wpmTrend": "Sprechtempo im Verlauf",
+    "wrappedSavePng": "PNG speichern",
+    "wrappedSaveError": "Export fehlgeschlagen"
   },
   "learning": {
     "title": "Wortschatz",
@@ -858,6 +863,19 @@
     "sourceLocal": "Lokal",
     "sourceLlm": "KI",
     "empty": "Noch keine Daten. Diktiere mehr, um deine Lern-Erkenntnisse freizuschalten.",
-    "needMoreData": "Diktiere etwas mehr, um diese Erkenntnis freizuschalten."
+    "needMoreData": "Diktiere etwas mehr, um diese Erkenntnis freizuschalten.",
+    "wodTitle": "Wort des Tages",
+    "wodUsedBadge": "schon benutzt",
+    "wodExampleLabel": "Beispiel",
+    "wodSynonymsLabel": "Synonyme",
+    "topWordsTitle": "Häufigste Wörter",
+    "topWordsSub": "Deine häufigsten Wörter im gewählten Zeitraum.",
+    "distinctiveTitle": "Deine distinktiven Wörter",
+    "distinctiveSub": "Seltene, eigene Begriffe, die Echo immer korrekt schreiben soll — füge sie deinem Vokabular hinzu.",
+    "ttrLow": "wenig Abwechslung",
+    "ttrMid": "solide Abwechslung",
+    "ttrHigh": "sehr abwechslungsreich",
+    "fillerNone": "Keine Füllwörter gefunden",
+    "overusedNone": "Keine auffällig überstrapazierten Wörter"
   }
 }

@@ -1,5 +1,6 @@
 //! Echo — Tauri backend entrypoint.
 
+mod analysis; // local text analysis (Activity/Learning) — tokenizer, stop words, coach data
 mod auth;
 mod auto_mode;
 mod autovocab;
@@ -128,6 +129,17 @@ pub fn run() {
             commands::open_external,
             commands::history_list,
             commands::history_count,
+            commands::activity_daily,
+            commands::activity_hourly,
+            commands::activity_word_frequency,
+            commands::activity_streak,
+            commands::activity_overview,
+            commands::learning_analysis,
+            commands::learning_suggestions,
+            commands::goals_get,
+            commands::goals_set,
+            commands::activity_export,
+            commands::word_of_day,
             commands::account_stats,
             commands::delete_history_entry,
             commands::clear_history,
@@ -270,6 +282,21 @@ pub fn run() {
                         );
                         c.stats_seeded = true;
                         c.stats_seed_version = STATS_SEED_VERSION;
+                        let _ = c.save();
+                    }
+                }
+
+                // One-time backfill of the per-day activity buckets (daily_stats)
+                // from the retained history: the day bucket comes from SQLite
+                // localtime, the words are counted in Rust. Like the stats seed,
+                // only the account active at upgrade is backfilled (known,
+                // consistent limitation).
+                {
+                    let mut c = st.config.lock();
+                    if !c.daily_stats_seeded {
+                        let account = crate::presets::account_key(&c);
+                        store::backfill_daily_stats(&account);
+                        c.daily_stats_seeded = true;
                         let _ = c.save();
                     }
                 }

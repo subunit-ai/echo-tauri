@@ -391,11 +391,22 @@ pub struct Config {
     pub de_comma_migrated: bool,
 
     pub history_size: i32,
+    /// One-time guard for the history_size default bump 50→500 (more data for
+    /// Activity/Learning): only installs still on the untouched OLD default are
+    /// lifted; a deliberately chosen cap is respected forever.
+    pub history_size_migrated: bool,
     /// Lossless passthrough of history entries (shape owned by the transcription path).
     pub history: Vec<Value>,
     pub history_enabled: bool,
     /// Long-form recordings (>= long_form_threshold_seconds) kept separately.
     pub meetings: Vec<Value>,
+
+    /// Word goals for the Activity dashboard rings (user-editable via goals_set).
+    pub daily_word_goal: i64,
+    pub weekly_word_goal: i64,
+    /// One-time guard: has the history → `daily_stats` backfill run yet?
+    /// (fresh installs have nothing to backfill → true from the start).
+    pub daily_stats_seeded: bool,
 
     pub total_transcriptions: i64,
     pub total_audio_seconds: f64,
@@ -533,10 +544,15 @@ impl Default for Config {
             de_comma_enabled: true,
             de_comma_migrated: false,
 
-            history_size: 50,
+            history_size: 500,
+            history_size_migrated: false,
             history: Vec::new(),
             history_enabled: true,
             meetings: Vec::new(),
+
+            daily_word_goal: 500,
+            weekly_word_goal: 3000,
+            daily_stats_seeded: false,
 
             total_transcriptions: 0,
             total_audio_seconds: 0.0,
@@ -607,6 +623,8 @@ impl Config {
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.dach_format_migrated = true; // fresh installs already default DACH formatting on
         c.de_comma_migrated = true; // fresh installs already default German commas on
+        c.history_size_migrated = true; // fresh installs already start at the 500 cap
+        c.daily_stats_seeded = true; // fresh installs have no history to backfill
         c.route_default_engine();
         c.seed_default_vocabulary();
         c.merge_default_vocab_updates();
@@ -732,6 +750,14 @@ impl Config {
         if !self.de_comma_migrated {
             self.de_comma_enabled = true;
             self.de_comma_migrated = true;
+        }
+        // v0.6.x: History-Cap-Default 50→500 (mehr Datenbasis für Activity/Learning).
+        // Nur wer den ALTEN Default (50) nie angefasst hat, wird einmalig angehoben.
+        if !self.history_size_migrated {
+            if self.history_size == 50 {
+                self.history_size = 500;
+            }
+            self.history_size_migrated = true;
         }
         // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
         // of its top-left ("custom-x-y"), so size changes scale the orb in place

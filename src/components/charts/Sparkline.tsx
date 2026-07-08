@@ -2,10 +2,6 @@
 // Achsen-Chrom (keine Ticks/Labels/Gridlines). Self-contained, keine externe
 // Lib. Theme-agnostisch: Farbe kommt aus --cyan, nichts hart-kodiert.
 
-export interface SparklineDatum {
-  value: number;
-}
-
 export function Sparkline({
   values,
   width = 96,

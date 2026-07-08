@@ -7,7 +7,7 @@
    lives in app.css and is reused verbatim from the section components; this
    file only adds the NEW look/layout classes that are unique to charts,
    goal rings, the word cloud, insight cards, the Echo Wrapped poster, the
-   upgrade coach and the filler/warning chips.
+   word-of-the-day card, the upgrade coach and the filler/warning chips.
 
    Dark-first Liquid Glass, same recipe as app.css: frosted glass fills
    (--glass/--glass2), hairline edges (--glass-edge/--line), soft downward
@@ -562,6 +562,97 @@
 }
 
 /* ================================================================
+   Word of the day — Learning's prominent daily-word card (§12d).
+   Sits above the range-switched content, independent of it.
+   ================================================================ */
+
+.wod-card {
+  position: relative;
+  background: var(--glass);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wod-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wod-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+.wod-word {
+  font-size: 27px;
+  font-weight: 800;
+  color: var(--cyan-ink);
+  line-height: 1.15;
+}
+.wod-meaning {
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.wod-example {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink2);
+  line-height: 1.5;
+  border-left: 2px solid var(--line2);
+  padding-left: 12px;
+}
+.wod-synonyms-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  margin-top: 4px;
+}
+.wod-synonyms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wod-synonym {
+  display: inline-flex;
+  align-items: center;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  color: var(--ink2);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.wod-used-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ok);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-line);
+  border-radius: var(--r-chip);
+  padding: 2px 9px;
+}
+
+/* ================================================================
    Upgrade coach — Learning's word→alternatives suggestion list.
    ================================================================ */
 
@@ -608,8 +699,23 @@
 .upgrade-alts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px 10px;
   flex: 1 1 auto;
+}
+/* Wraps one alternative's chip + its optional §12c explanation note so the
+   two stack together instead of the note drifting to its own flex line. */
+.alt-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 240px;
+}
+.alt-note {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink3);
+  padding-left: 2px;
 }
 .alt-chip {
   display: inline-flex;

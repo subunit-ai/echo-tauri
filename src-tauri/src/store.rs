@@ -81,6 +81,17 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             chars          INTEGER NOT NULL DEFAULT 0,
             updated_at     INTEGER NOT NULL DEFAULT 0
          );
+         CREATE TABLE IF NOT EXISTS daily_stats (
+            account            TEXT    NOT NULL,
+            day                TEXT    NOT NULL,
+            transcriptions     INTEGER NOT NULL DEFAULT 0,
+            words              INTEGER NOT NULL DEFAULT 0,
+            audio_seconds      REAL    NOT NULL DEFAULT 0,
+            time_saved_seconds REAL    NOT NULL DEFAULT 0,
+            updated_at         INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account, day)
+         );
+         CREATE INDEX IF NOT EXISTS idx_daily_account_day ON daily_stats(account, day DESC);
          CREATE TABLE IF NOT EXISTS notes (
             id         TEXT    NOT NULL,
             account    TEXT    NOT NULL,
@@ -322,6 +333,201 @@ pub fn clear_history() {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
     let _ = conn.execute("DELETE FROM history", []);
+}
+
+// ---- Per-day usage stats (Activity dashboard — account-scoped, never pruned) ----
+//
+// `daily_stats` buckets every completed dictation into LOCAL calendar days
+// ('YYYY-MM-DD', bucketed by SQLite `strftime(…,'localtime')` — the crate has
+// no chrono/time on purpose). Unlike `history` these rows are NEVER pruned, so
+// long-range charts and streaks survive any history cap.
+
+/// Book one finished dictation into its day bucket (day via SQLite localtime).
+pub fn bump_daily_stats(account: &str, words: i64, audio_seconds: f64, time_saved: f64, now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let r = conn.execute(
+        "INSERT INTO daily_stats (account, day, transcriptions, words, audio_seconds, time_saved_seconds, updated_at)
+         VALUES (?1, strftime('%Y-%m-%d', ?2, 'unixepoch', 'localtime'), 1, ?3, ?4, ?5, ?2)
+         ON CONFLICT(account, day) DO UPDATE SET
+            transcriptions     = transcriptions + 1,
+            words              = words + excluded.words,
+            audio_seconds      = audio_seconds + excluded.audio_seconds,
+            time_saved_seconds = time_saved_seconds + excluded.time_saved_seconds,
+            updated_at         = excluded.updated_at",
+        params![account, now, words.max(0), audio_seconds.max(0.0), time_saved.max(0.0)],
+    );
+    if let Err(e) = r {
+        log::warn!("store: daily_stats bump failed: {e}");
+    }
+}
+
+/// Range query for the daily chart, ASCENDING by day. `since_expr` is an SQLite
+/// date modifier like "-30 days". Sparse: only days with activity are returned;
+/// the frontend zero-fills the continuous axis.
+pub fn daily_range(account: &str, since_expr: &str) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT day, transcriptions, words, audio_seconds, time_saved_seconds
+               FROM daily_stats
+               WHERE account = ?1 AND day >= date('now', ?2, 'localtime')
+               ORDER BY day ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let rows = stmt.query_map(params![account, since_expr], |r| {
+        Ok(json!({
+            "day": r.get::<_, String>(0)?,
+            "transcriptions": r.get::<_, i64>(1)?,
+            "words": r.get::<_, i64>(2)?,
+            "audio_seconds": r.get::<_, f64>(3)?,
+            "time_saved_seconds": r.get::<_, f64>(4)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(e) => {
+            log::warn!("store: daily_range query failed: {e}");
+            Vec::new()
+        }
+    }
+}
+
+/// All active days ('YYYY-MM-DD') for `account`, DESCENDING (streak input).
+pub fn active_days(account: &str) -> Vec<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) =
+        conn.prepare_cached("SELECT day FROM daily_stats WHERE account = ?1 ORDER BY day DESC")
+    else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Sum of `(words, transcriptions, time_saved_seconds)` since `since_expr`
+/// (SQLite date modifier; "0 days" = today, "-6 days" = this week).
+pub fn daily_sum_since(account: &str, since_expr: &str) -> (i64, i64, f64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return (0, 0, 0.0) };
+    conn.query_row(
+        "SELECT COALESCE(SUM(words), 0), COALESCE(SUM(transcriptions), 0),
+                COALESCE(SUM(time_saved_seconds), 0)
+         FROM daily_stats WHERE account = ?1 AND day >= date('now', ?2, 'localtime')",
+        params![account, since_expr],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap_or((0, 0, 0.0))
+}
+
+/// Today's LOCAL calendar date ('YYYY-MM-DD') via SQLite — the crate has no
+/// chrono/time; SQLite is the single source of date truth. Empty when the
+/// store isn't initialized (best-effort like every helper here).
+pub fn today_local() -> String {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return String::new() };
+    conn.query_row("SELECT strftime('%Y-%m-%d', 'now', 'localtime')", [], |r| r.get(0))
+        .unwrap_or_default()
+}
+
+/// Transcript texts of the last `days` local days, newest first — the input for
+/// the local analysis passes (word frequency, learning, word-of-day recency).
+pub fn history_texts_since(days: u32) -> Vec<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT text FROM history
+               WHERE ts >= CAST(strftime('%s', date('now', ?1, 'localtime')) AS INTEGER)
+               ORDER BY ts DESC, id DESC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Dictations per LOCAL hour of day (0..23) over the last `days`. Sparse —
+/// only hours that occur; the command layer fills the full 0..23 range.
+pub fn hourly_counts(days: u32) -> Vec<(i64, i64)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT CAST(strftime('%H', ts, 'unixepoch', 'localtime') AS INTEGER) AS hour, COUNT(*)
+               FROM history
+               WHERE ts >= CAST(strftime('%s', date('now', ?1, 'localtime')) AS INTEGER)
+               GROUP BY hour ORDER BY hour ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// One-time backfill of `daily_stats` from the retained `history` (guarded by
+/// `config.daily_stats_seeded`). SQL buckets the day (localtime), Rust counts
+/// the words (SQL can't). Each day is OVERWRITTEN (SET =, not +), so a re-run
+/// can never double-count.
+pub fn backfill_daily_stats(account: &str) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    // (day, words, saved-per-row) aggregated in Rust; word counting mirrors
+    // do_transcribe (split_whitespace), "time saved" the same honest formula.
+    let rows: Vec<(String, String, f64)> = {
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime') AS day, text, duration_s
+             FROM history",
+        ) else {
+            return;
+        };
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<f64>>(2)?.unwrap_or(0.0),
+            ))
+        });
+        match rows {
+            Ok(it) => it.filter_map(Result::ok).collect::<Vec<_>>(),
+            Err(e) => {
+                log::warn!("store: daily_stats backfill query failed: {e}");
+                return;
+            }
+        }
+    };
+    let mut per_day: std::collections::HashMap<String, (i64, i64, f64, f64)> =
+        std::collections::HashMap::new();
+    for (day, text, duration_s) in rows {
+        let words = text.split_whitespace().count() as i64;
+        let saved = crate::commands::time_saved_seconds(words, duration_s);
+        let e = per_day.entry(day).or_insert((0, 0, 0.0, 0.0));
+        e.0 += 1;
+        e.1 += words;
+        e.2 += duration_s.max(0.0);
+        e.3 += saved;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let n_days = per_day.len();
+    for (day, (transcriptions, words, audio, saved)) in per_day {
+        let _ = conn.execute(
+            "INSERT INTO daily_stats (account, day, transcriptions, words, audio_seconds, time_saved_seconds, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(account, day) DO UPDATE SET
+                transcriptions     = excluded.transcriptions,
+                words              = excluded.words,
+                audio_seconds      = excluded.audio_seconds,
+                time_saved_seconds = excluded.time_saved_seconds,
+                updated_at         = excluded.updated_at",
+            params![account, day, transcriptions, words, audio, saved, now],
+        );
+    }
+    log::info!("store: backfilled daily_stats for {n_days} day(s)");
 }
 
 // ---- Meetings ----
@@ -1182,6 +1388,59 @@ mod tests {
         assert_eq!(fl[0]["id"], "f2");
         assert_eq!(fl[0]["icon"], "idea");
         assert_eq!(fl[0]["color"], "#16a34a");
+
+        // Daily stats: localtime day bucketing, accumulation, range/sum/active-day
+        // readers, isolation, and the overwrite semantics of the backfill.
+        let now_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let today = today_local();
+        assert_eq!(today.len(), 10, "today_local must be 'YYYY-MM-DD'");
+        bump_daily_stats("em:d", 100, 60.0, 90.0, now_epoch);
+        bump_daily_stats("em:d", 50, 30.0, 45.0, now_epoch); // same day → accumulates
+        bump_daily_stats("em:e", 7, 5.0, 3.0, now_epoch); // different account
+        // A day 40 days back is outside "-30 days" but still an active day.
+        bump_daily_stats("em:d", 10, 6.0, 9.0, now_epoch - 40 * 86_400);
+        let range = daily_range("em:d", "-30 days");
+        assert_eq!(range.len(), 1);
+        assert_eq!(range[0]["day"], today.as_str());
+        assert_eq!(range[0]["transcriptions"], 2);
+        assert_eq!(range[0]["words"], 150);
+        assert!((range[0]["audio_seconds"].as_f64().unwrap() - 90.0).abs() < 1e-9);
+        assert!((range[0]["time_saved_seconds"].as_f64().unwrap() - 135.0).abs() < 1e-9);
+        assert_eq!(daily_range("em:d", "-90 days").len(), 2); // wider window sees both
+        let (sum_w, sum_t, sum_s) = daily_sum_since("em:d", "0 days");
+        assert_eq!((sum_w, sum_t), (150, 2));
+        assert!((sum_s - 135.0).abs() < 1e-9);
+        let days = active_days("em:d");
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0], today); // DESC: newest first
+        assert_eq!(active_days("em:e").len(), 1); // isolation
+        // Backfill: aggregates the real history into per-day buckets and
+        // OVERWRITES (SET =, not +) whatever the bucket held → idempotent.
+        clear_history();
+        add_history(&json!({"ts": now_epoch, "text": "eins zwei drei", "duration_s": 2.0}), 0);
+        add_history(&json!({"ts": now_epoch, "text": "vier fünf", "duration_s": 1.0}), 0);
+        backfill_daily_stats("em:d");
+        backfill_daily_stats("em:d"); // second run must not double-count
+        let back = daily_range("em:d", "0 days");
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0]["transcriptions"], 2);
+        assert_eq!(back[0]["words"], 5);
+        assert!((back[0]["audio_seconds"].as_f64().unwrap() - 3.0).abs() < 1e-9);
+        // saved = (3/40*60 - 2) + (2/40*60 - 1) = 2.5 + 2.0
+        assert!((back[0]["time_saved_seconds"].as_f64().unwrap() - 4.5).abs() < 1e-9);
+        // The 40-days-ago bucket was untouched by the backfill (no history there).
+        assert_eq!(active_days("em:d").len(), 2);
+        // History texts for the analysis passes (last N local days).
+        let texts = history_texts_since(7);
+        assert_eq!(texts.len(), 2);
+        assert_eq!(texts[0], "vier fünf"); // newest first (same ts → higher id first)
+        // Hourly buckets: both rows share one local hour, count = 2.
+        let hours = hourly_counts(7);
+        assert_eq!(hours.iter().map(|(_, c)| c).sum::<i64>(), 2);
+        assert!(hours.iter().all(|(h, _)| (0..24).contains(h)));
 
         let _ = std::fs::remove_file(&path);
     }

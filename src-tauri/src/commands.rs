@@ -588,6 +588,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         (c.history_enabled, c.history_size.max(0) as usize, crate::presets::account_key(&c))
     };
     crate::store::bump_account_stats(&account, duration_s, words, chars, now as i64);
+    // Per-day bucket for the Activity dashboard (never pruned, unlike history).
+    let saved = time_saved_seconds(words, duration_s);
+    crate::store::bump_daily_stats(&account, words, duration_s, saved, now as i64);
     if history_enabled && !result.text.trim().is_empty() {
         let entry = serde_json::json!({
             "text": result.text,
@@ -803,6 +806,337 @@ pub fn account_stats(state: State<'_, AppState>) -> AccountStats {
         chars,
         time_saved_seconds: time_saved_seconds(words, audio_seconds),
     }
+}
+
+// ── Activity + Learning (dashboard/coach — local analysis, account-scoped stats) ──
+//
+// history-based views (hourly, word frequency, learning) are machine-wide —
+// the `history` table has no account column, exactly like the History tab.
+// `daily_stats`/`account_stats` readers ARE account-scoped.
+
+/// Per-day activity rows for the trend chart, ASC by day (sparse: only days
+/// with activity — the frontend zero-fills the axis). Account-scoped.
+#[tauri::command]
+pub fn activity_daily(state: State<'_, AppState>, days: Option<u32>) -> Vec<serde_json::Value> {
+    let account = crate::presets::account_key(&state.config.lock());
+    crate::store::daily_range(&account, &format!("-{} days", days.unwrap_or(30)))
+}
+
+/// Dictations per local hour of day over the last `days` (default 30). The
+/// backend fills 0..23 without gaps. Machine-wide (history has no account).
+#[tauri::command]
+pub fn activity_hourly(days: Option<u32>) -> Vec<serde_json::Value> {
+    let mut buckets = [0i64; 24];
+    for (hour, count) in crate::store::hourly_counts(days.unwrap_or(30)) {
+        if (0..24).contains(&hour) {
+            buckets[hour as usize] = count;
+        }
+    }
+    (0..24)
+        .map(|h| serde_json::json!({ "hour": h, "transcriptions": buckets[h] }))
+        .collect()
+}
+
+/// Top content words from the retained history (stop-word filtered DE+EN,
+/// min length 3, no pure numbers), desc by count. Machine-wide.
+#[tauri::command]
+pub fn activity_word_frequency(limit: Option<u32>, days: Option<u32>) -> Vec<serde_json::Value> {
+    let texts = crate::store::history_texts_since(days.unwrap_or(90));
+    crate::analysis::word_frequency(&texts, limit.unwrap_or(40) as usize)
+        .into_iter()
+        .map(|(word, count)| serde_json::json!({ "word": word, "count": count }))
+        .collect()
+}
+
+/// Days since 1970-01-01 for a 'YYYY-MM-DD' string (Howard Hinnant's
+/// days_from_civil) — pure integer math on the SQLite-bucketed LOCAL dates, so
+/// consecutive-day streaks need no date crate. None on malformed input.
+fn day_number(day: &str) -> Option<i64> {
+    let mut it = day.split('-');
+    let y: i64 = it.next()?.parse().ok()?;
+    let m: i64 = it.next()?.parse().ok()?;
+    let d: i64 = it.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 719_468)
+}
+
+/// (current, longest, last_active_day, active_today) for `account`, computed
+/// on the 'YYYY-MM-DD' day strings from `daily_stats`. A current streak is a
+/// consecutive run ending today — or yesterday (today simply not dictated yet).
+fn compute_streak(account: &str) -> (i64, i64, Option<String>, bool) {
+    let days = crate::store::active_days(account); // DESC
+    let today = crate::store::today_local();
+    let nums: Vec<i64> = days.iter().filter_map(|d| day_number(d)).collect();
+    let mut longest = 0i64;
+    let mut run = 0i64;
+    let mut prev: Option<i64> = None;
+    for n in &nums {
+        run = match prev {
+            Some(p) if p - n == 1 => run + 1,
+            _ => 1,
+        };
+        longest = longest.max(run);
+        prev = Some(*n);
+    }
+    let mut current = 0i64;
+    if let (Some(tn), Some(first)) = (day_number(&today), nums.first().copied()) {
+        if tn - first <= 1 {
+            current = 1;
+            let mut prev = first;
+            for n in nums.iter().skip(1) {
+                if prev - n == 1 {
+                    current += 1;
+                    prev = *n;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    let active_today = days.first().map(|d| d == &today).unwrap_or(false);
+    (current, longest, days.into_iter().next(), active_today)
+}
+
+/// Current/longest dictation streak (consecutive active local days). Account-scoped.
+#[tauri::command]
+pub fn activity_streak(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let (current, longest, last_active_day, active_today) = compute_streak(&account);
+    serde_json::json!({
+        "current": current,
+        "longest": longest,
+        "last_active_day": last_active_day,
+        "active_today": active_today,
+    })
+}
+
+/// One fetch for the Activity dashboard header: lifetime totals, today,
+/// this week (rolling 7 days), streak and the configured goals.
+#[tauri::command]
+pub fn activity_overview(state: State<'_, AppState>) -> serde_json::Value {
+    let (account, daily_word_goal, weekly_word_goal) = {
+        let c = state.config.lock();
+        (crate::presets::account_key(&c), c.daily_word_goal, c.weekly_word_goal)
+    };
+    let (transcriptions, audio_seconds, words, _chars) = crate::store::get_account_stats(&account);
+    let (today_w, today_t, today_s) = crate::store::daily_sum_since(&account, "0 days");
+    let (week_w, week_t, week_s) = crate::store::daily_sum_since(&account, "-6 days");
+    let (current, longest, _, _) = compute_streak(&account);
+    serde_json::json!({
+        "total": {
+            "transcriptions": transcriptions,
+            "words": words,
+            "audio_seconds": audio_seconds,
+            "time_saved_seconds": time_saved_seconds(words, audio_seconds),
+        },
+        "today": { "words": today_w, "transcriptions": today_t, "time_saved_seconds": today_s },
+        "this_week": { "words": week_w, "transcriptions": week_t, "time_saved_seconds": week_s },
+        "streak": { "current": current, "longest": longest },
+        "goals": { "daily_word_goal": daily_word_goal, "weekly_word_goal": weekly_word_goal },
+    })
+}
+
+/// Lexical-quality analysis over the last `days` (default 30) of history.
+/// 100% local — this command NEVER touches the network (the coach can't hang).
+#[tauri::command]
+pub fn learning_analysis(days: Option<u32>) -> serde_json::Value {
+    let days = days.unwrap_or(30);
+    let texts = crate::store::history_texts_since(days);
+    let stats = crate::analysis::learning(&texts);
+    let mut v = serde_json::to_value(stats).unwrap_or_else(|_| serde_json::json!({}));
+    if let Some(o) = v.as_object_mut() {
+        o.insert("window_days".into(), serde_json::json!(days));
+        o.insert("sample_transcriptions".into(), serde_json::json!(texts.len()));
+    }
+    v
+}
+
+/// LLM word-upgrade hook over the subscription lane, built EXACTLY like
+/// `vocab_suggest::curate`: endpoint derived from the configured transcribe
+/// URL (`/v1/word-upgrade`), Bearer auth (X-API-Key fallback), best-effort.
+/// Returns None on ANY failure — endpoint missing (today's reality), auth,
+/// timeout, bad shape — so the caller falls back to the local UPGRADE_MAP.
+/// Expected response: {"upgrades":[{"word":…,"alternatives":[{"word":…,"note":…}]}]}
+/// — exactly the §12c client shape.
+fn word_upgrade_curate(
+    cfg: &Config,
+    local: &[crate::analysis::Suggestion],
+) -> Option<Vec<crate::analysis::Suggestion>> {
+    if local.is_empty() || cfg.mode != "subunit" {
+        return None;
+    }
+    let url = cfg
+        .subunit_endpoint
+        .replace("/v1/transcribe", "/v1/word-upgrade");
+    let items: Vec<serde_json::Value> = local
+        .iter()
+        .map(|s| serde_json::json!({ "word": s.word, "count": s.count, "example": s.example }))
+        .collect();
+    let mut req = crate::http::client()
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(30))
+        .json(&serde_json::json!({ "words": items, "language": cfg.language }));
+    if !cfg.subunit_access_token.is_empty() {
+        req = req.bearer_auth(&cfg.subunit_access_token);
+    } else if !cfg.subunit_api_key.is_empty() {
+        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+    }
+    let resp = req.send().ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let j = resp.json::<serde_json::Value>().ok()?;
+    let arr = j.get("upgrades")?.as_array()?;
+    let mut by_word: std::collections::HashMap<String, Vec<crate::analysis::WordAlternative>> =
+        std::collections::HashMap::new();
+    for u in arr {
+        let Some(word) = u.get("word").and_then(|v| v.as_str()) else { continue };
+        let Some(alts) = u.get("alternatives").and_then(|v| v.as_array()) else { continue };
+        let parsed: Vec<crate::analysis::WordAlternative> = alts
+            .iter()
+            .filter_map(|a| {
+                let w = a.get("word")?.as_str()?.trim().to_string();
+                if w.is_empty() {
+                    return None;
+                }
+                let note = a
+                    .get("note")
+                    .and_then(|n| n.as_str())
+                    .map(|n| n.trim().to_string())
+                    .filter(|n| !n.is_empty());
+                Some(crate::analysis::WordAlternative { word: w, note })
+            })
+            .collect();
+        if !parsed.is_empty() {
+            by_word.insert(word.trim().to_lowercase(), parsed);
+        }
+    }
+    if by_word.is_empty() {
+        return None; // nothing usable → local map wins
+    }
+    // Merge onto the local suggestions: counts/examples stay local truth; a
+    // word the LLM didn't rule on keeps its curated alternatives.
+    Some(
+        local
+            .iter()
+            .map(|s| crate::analysis::Suggestion {
+                word: s.word.clone(),
+                count: s.count,
+                alternatives: by_word
+                    .remove(&s.word)
+                    .unwrap_or_else(|| s.alternatives.clone()),
+                example: s.example.clone(),
+            })
+            .collect(),
+    )
+}
+
+/// Word-upgrade suggestions for the Learning coach. Default (and guaranteed
+/// fallback) is the curated local UPGRADE_MAP; the `/v1/word-upgrade` LLM lane
+/// only ever *augments* it when the subscription mode is active and the server
+/// answers with a usable shape — any failure silently falls back to local.
+#[tauri::command]
+pub fn learning_suggestions(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+    let texts = crate::store::history_texts_since(days.unwrap_or(30));
+    let local = crate::analysis::local_suggestions(&texts);
+    let cfg = state.config.lock().clone();
+    if cfg.mode == "subunit" {
+        if let Some(suggestions) = word_upgrade_curate(&cfg, &local) {
+            return serde_json::json!({ "source": "llm", "suggestions": suggestions });
+        }
+    }
+    serde_json::json!({ "source": "local", "suggestions": local })
+}
+
+/// Daily/weekly word goals (Activity rings). Struct param mirrors `set_config`,
+/// sidestepping the Tauri v2 snake_case↔camelCase key convention.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Goals {
+    pub daily_word_goal: i64,
+    pub weekly_word_goal: i64,
+}
+
+#[tauri::command]
+pub fn goals_get(state: State<'_, AppState>) -> Goals {
+    let c = state.config.lock();
+    Goals {
+        daily_word_goal: c.daily_word_goal,
+        weekly_word_goal: c.weekly_word_goal,
+    }
+}
+
+#[tauri::command]
+pub fn goals_set(app: AppHandle, state: State<'_, AppState>, goals: Goals) -> Result<(), String> {
+    {
+        let mut c = state.config.lock();
+        c.daily_word_goal = goals.daily_word_goal.max(0);
+        c.weekly_word_goal = goals.weekly_word_goal.max(0);
+        c.save().map_err(|e| e.to_string())?;
+    }
+    use tauri::Emitter;
+    let _ = app.emit("echo://config-changed", ());
+    Ok(())
+}
+
+/// Persist an Activity export (CSV/JSON built in TS, PNG from the Wrapped
+/// poster canvas) into ~/Downloads and reveal it. There is no dialog/fs plugin
+/// in this app — this tiny command is the whole persistence path. Returns the
+/// written path.
+#[tauri::command]
+pub fn activity_export(kind: String, filename: String, contents_b64: String) -> Result<String, String> {
+    if !matches!(kind.as_str(), "csv" | "json" | "png") {
+        return Err(format!("unsupported export kind: {kind}"));
+    }
+    // Path hardening: a plain basename only — no separators, no traversal.
+    if filename.trim().is_empty()
+        || filename.contains('/')
+        || filename.contains('\\')
+        || filename.contains("..")
+    {
+        return Err("invalid filename".to_string());
+    }
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(contents_b64.trim())
+        .map_err(|e| format!("base64: {e}"))?;
+    let dir = dirs::download_dir().unwrap_or_else(|| {
+        dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Downloads")
+    });
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&filename);
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    let shown = path.to_string_lossy().to_string();
+    crate::meet::open_url(&shown);
+    Ok(shown)
+}
+
+/// „Wort des Tages“ — curated, local, deterministic per local calendar day
+/// (§12b): the date hash picks a start index, the first word NOT dictated in
+/// the last 30 days wins; `already_used` flags a full-circle day.
+#[tauri::command]
+pub fn word_of_day() -> serde_json::Value {
+    let day = crate::store::today_local();
+    let texts = crate::store::history_texts_since(30);
+    let recent: std::collections::HashSet<String> =
+        texts.iter().flat_map(|t| crate::analysis::tokenize(t)).collect();
+    let (entry, already_used) = crate::analysis::pick_word_of_day(&day, &recent);
+    serde_json::json!({
+        "word": entry.word,
+        "meaning": entry.meaning,
+        "example": entry.example,
+        "synonyms": entry.synonyms,
+        "already_used": already_used,
+    })
 }
 
 /// All stored meetings, newest first (each with its store `id`).

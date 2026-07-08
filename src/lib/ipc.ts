@@ -525,10 +525,14 @@ export interface LearningAnalysis {
 }
 export const learningAnalysis = (days = 30) => invoke<LearningAnalysis>("learning_analysis", { days });
 
+export interface WordAlternative {
+  word: string;
+  note?: string;
+}
 export interface WordSuggestion {
   word: string;
   count: number;
-  alternatives: string[];
+  alternatives: WordAlternative[];
   example?: string;
 }
 export interface LearningSuggestions {
@@ -547,3 +551,12 @@ export const goalsSet = (goals: Goals) => invoke<void>("goals_set", { goals });
 
 export const activityExport = (kind: "csv" | "json" | "png", filename: string, contentsB64: string) =>
   invoke<string>("activity_export", { kind, filename, contentsB64 });
+
+export interface WordOfDay {
+  word: string;
+  meaning: string;
+  example: string;
+  synonyms: string[];
+  already_used: boolean;
+}
+export const wordOfDay = () => invoke<WordOfDay>("word_of_day");

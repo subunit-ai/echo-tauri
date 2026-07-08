@@ -834,7 +834,12 @@
     "exportCsv": "Export CSV",
     "exportJson": "Export JSON",
     "exportDone": "Saved to Downloads",
-    "empty": "No activity yet. Start dictating to see your stats here."
+    "empty": "No activity yet. Start dictating to see your stats here.",
+    "statWpm": "Speaking pace",
+    "wpmUnit": "words/min",
+    "wpmTrend": "Speaking pace over time",
+    "wrappedSavePng": "Save PNG",
+    "wrappedSaveError": "Export failed"
   },
   "learning": {
     "title": "Learning",
@@ -856,6 +861,19 @@
     "sourceLocal": "Local",
     "sourceLlm": "AI",
     "empty": "No data yet. Dictate more to unlock your learning insights.",
-    "needMoreData": "Dictate a bit more to unlock this insight."
+    "needMoreData": "Dictate a bit more to unlock this insight.",
+    "wodTitle": "Word of the day",
+    "wodUsedBadge": "already used",
+    "wodExampleLabel": "Example",
+    "wodSynonymsLabel": "Synonyms",
+    "topWordsTitle": "Most used words",
+    "topWordsSub": "Your most frequent words in the selected period.",
+    "distinctiveTitle": "Your distinctive words",
+    "distinctiveSub": "Rare, personal terms Echo should always spell correctly — add them to your vocabulary.",
+    "ttrLow": "little variety",
+    "ttrMid": "solid variety",
+    "ttrHigh": "very varied",
+    "fillerNone": "No filler words found",
+    "overusedNone": "No noticeably overused words"
   }
 }
