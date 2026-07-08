@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.99",
+    date: "2026-07-09",
+    title: { de: "Die Genie-Animation, jetzt echt", en: "The genie animation, for real" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Das Prompt-Terminal fliegt jetzt sichtbar BIS IN die Pille — vorher löste es sich ein Stück darüber in Luft auf. Es bleibt auf dem ganzen Weg voll sichtbar, und die Pille pulsiert genau im Moment des Eintauchens.",
+        en: "The Prompt Terminal now visibly flies ALL THE WAY into the pill — before, it dissolved into thin air just above it. It stays fully visible the whole way, and the pill pulses right at the moment of impact.",
+      },
+      {
+        kind: "improvement",
+        de: "Aus dem einfachen Schrumpfen ist ein echter Magic-Lamp-Sog geworden: das Fenster formt sich erst zu einem Trichter, dessen Mündung über der Pille liegt, dann rutscht es beschleunigend hindurch — und beim Öffnen strömt es genauso wieder heraus.",
+        en: "The plain shrink is now a real magic-lamp suction: the window first forms a funnel whose mouth sits over the pill, then accelerates down through it — and pours back out the same way when opening.",
+      },
+    ],
+  },
+  {
     version: "0.5.98",
     date: "2026-07-09",
     title: { de: "Ruhiges Loslassen", en: "Calm release" },

@@ -211,7 +211,7 @@ pub async fn prompt_console_hide_now(app: AppHandle) {
 /// transform-origin of its genie animation. None → no visible orb → fall back
 /// to a plain scale-fade.
 #[tauri::command]
-pub fn prompt_genie_anchor(app: AppHandle) -> Option<(f64, f64)> {
+pub fn prompt_genie_anchor(app: AppHandle) -> Option<(f64, f64, f64)> {
     crate::overlay::orb_anchor(&app)
 }
 
