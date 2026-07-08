@@ -173,6 +173,20 @@ pub fn do_cancel(app: &AppHandle) {
 /// calls this on a spawned thread; the IPC command calls it directly.
 pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let state = app.state::<AppState>();
+
+    // Release cue, played NATIVELY (sound.rs) for the same reason as the
+    // record-start cue: instant regardless of window visibility. This is the
+    // reversed "standard" wav — the acoustic counterpart to the start cue — so it
+    // reuses the START cue's own toggle/id rather than a separate stop setting.
+    // Fired first, before any of the (possibly network-blocking) work below, so it
+    // lands the instant the key is released, not after a token refresh.
+    if state.recorder.is_recording() {
+        let c = state.config.lock();
+        if c.sound_start_enabled && c.sound_start_id == "standard" {
+            crate::sound::play_stop(c.sound_volume);
+        }
+    }
+
     // The session is over — clear the re-entry guard so the next press is accepted.
     state.session_active.store(false, Ordering::SeqCst);
 

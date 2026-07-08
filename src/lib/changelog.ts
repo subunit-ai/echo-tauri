@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.89",
+    date: "2026-07-08",
+    title: { de: "Ein Sound zum Loslassen", en: "A sound for letting go" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Start-Sound bekommt sein akustisches Gegenstück: Lässt du die Diktier-Taste los, hörst du denselben Sound rückwärts — ein sanfter Swoosh, der die Aufnahme sauber abschließt. Spielt instant, auch wenn Echo im Tray versteckt ist, und folgt deiner bestehenden Start-Sound-Einstellung (Lautstärke + An/Aus) unter Einstellungen → Sounds.",
+        en: "The start sound now has its acoustic counterpart: release the dictation key and you hear the same sound played backwards — a gentle swoosh that closes out the recording. Plays instantly, even with Echo hidden in the tray, and follows your existing start-sound setting (volume + on/off) under Settings → Sounds.",
+      },
+    ],
+  },
+  {
     version: "0.5.88",
     date: "2026-07-08",
     title: { de: "Die neue Orb-Pille", en: "The new orb pill" },
