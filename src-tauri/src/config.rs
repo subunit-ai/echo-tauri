@@ -173,6 +173,10 @@ pub struct Config {
     /// scale) | "fade" | "none". New field → container serde(default) hands
     /// existing installs the default, no migration guard needed.
     pub orb_appear_anim: String,
+    /// Pill color mode: "color" (state colors, default) | "idle_glass"
+    /// (colorless frost at rest, state colors while working) | "glass"
+    /// (always colorless liquid glass — only motion tells the state).
+    pub orb_pill_color_mode: String,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
     /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
@@ -436,6 +440,7 @@ impl Default for Config {
             orb_style_migrated: false,
             orb_pill_migrated: false,
             orb_appear_anim: "bloom".to_string(),
+            orb_pill_color_mode: "color".to_string(),
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),

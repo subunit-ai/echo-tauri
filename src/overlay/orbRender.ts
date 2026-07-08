@@ -25,7 +25,14 @@ export interface OrbVisual {
    *  "bloom" (light condenses into the orb — the standard) | "pop" (spring
    *  scale) | "fade" (plain fade-in) | "none". Undefined = "bloom". */
   appear?: string;
+  /** Pill color mode: "color" (state colors, default) | "idle_glass" (frost
+   *  at rest, colors while working) | "glass" (always colorless liquid
+   *  glass — only the motion tells the state). */
+  pillColorMode?: string;
 }
+
+/** Neutral frost tone for the colorless pill modes. */
+const FROST = "#e2eefb";
 
 /** Mutable per-canvas animation scratch — advanced in place by `drawOrb`. */
 export interface OrbAnim {
@@ -53,6 +60,9 @@ export interface OrbAnim {
    *  to 0 on every hidden frame — so the orb re-materializes each time it
    *  comes back, in the overlay AND the configurator preview alike. */
   appear: number;
+  /** Smoothed state color (RGB) — lerped toward the target each frame so
+   *  state changes ease instead of hard-cutting (TJ). Null until first frame. */
+  col: number[] | null;
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -69,7 +79,25 @@ export function newOrbAnim(): OrbAnim {
     parts: [],
     caps: [],
     appear: 0,
+    col: null,
   };
+}
+
+function hexRgb(hex: string): number[] {
+  const h = hex.replace("#", "");
+  return [
+    parseInt(h.slice(0, 2), 16) || 0,
+    parseInt(h.slice(2, 4), 16) || 0,
+    parseInt(h.slice(4, 6), 16) || 0,
+  ];
+}
+
+function rgbHex(c: number[]): string {
+  const p = (n: number) =>
+    Math.round(Math.max(0, Math.min(255, n)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${p(c[0])}${p(c[1])}${p(c[2])}`;
 }
 
 /** easeOutBack: starts at 0, overshoots past 1 (~1.1), settles at 1 — the
@@ -123,7 +151,7 @@ export function drawOrb(
   const size = Math.min(w, h);
   const lvl = Math.min(1, level);
   // idle → idle · recording/transcribing → working · done → done · error → error.
-  const base =
+  const stateColor =
     st === "recording" || st === "transcribing"
       ? v.colors.working
       : st === "done"
@@ -131,6 +159,22 @@ export function drawOrb(
         : st === "error"
           ? v.colors.error
           : v.colors.idle;
+  // Pill color modes: "glass" = always frost (colorless liquid glass), and
+  // "idle_glass" = frost at rest, state colors only while working.
+  const pillMode = v.pillColorMode ?? "color";
+  const colTarget =
+    v.style === "pill" &&
+    (pillMode === "glass" || (pillMode === "idle_glass" && st === "idle"))
+      ? FROST
+      : stateColor;
+  // Smooth state-color transitions (TJ: the hard cuts felt abrupt) — one
+  // lerped RGB per canvas eases every switch over ~0.25 s; ALL styles benefit.
+  {
+    const t3 = hexRgb(colTarget);
+    if (!an.col) an.col = t3;
+    else for (let i = 0; i < 3; i++) an.col[i] += (t3[i] - an.col[i]) * 0.16;
+  }
+  const base = rgbHex(an.col);
   const dotR = size * 0.1;
   // When idle animation is OFF, freeze every style's time-based motion so the
   // orb truly rests — the audio-track styles (bars/wave) then react ONLY to
@@ -1279,64 +1323,71 @@ export function drawOrb(
       break;
     }
     case "pill": {
-      // ★ Pille — the liquid-glass capsule from the Echo website's speed race,
-      // now the standard orb: a static glass pill with a specular streak, a
-      // gradient hairline border, a soft state-colored ambient glow and five
-      // voice-reactive EQ bars inside (driven by the REAL spectrum via bandAt).
-      // The capsule itself rests; the light and the bars carry the reaction —
-      // an anchored instrument, not a bouncing blob.
+      // ★ Pille v2 — a NEUTRAL liquid-glass capsule with a dome lens: the
+      // glass itself carries no state color (chic, transparent — TJ), only
+      // the nine spectrum bars inside glow. The lens look follows the SCAI
+      // sidebar dome recipe (magnified centre, compressed rims, light
+      // bending at the edge — src/index.css .snav-lens* / GlassSlider.tsx):
+      // bar positions run through a dome mapping, heights get a vertical
+      // dome factor, and a thick inner refraction rim doubles the edge.
+      // At rest the bars collapse to DOTS (idle pulse = gentle dot breathe).
       an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
       const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
       an.pulse = idleStill
         ? an.pulse
         : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.4 + lvl * 0.6) : 0);
 
-      const W = size * 0.94;
-      const H = W * 0.4;
+      // Longer + slimmer than v1 (TJ: mehr horizontale Länge).
+      const W = size * 0.98;
+      const H = W * 0.32;
       const x0 = cx - W / 2;
       const y0 = cy - H / 2;
-      const capsule = () => {
-        const r = H / 2;
+      const capsule = (inset = 0) => {
+        const xx = x0 + inset;
+        const yy = y0 + inset;
+        const ww = W - inset * 2;
+        const hh = H - inset * 2;
+        const r = hh / 2;
         ctx.beginPath();
-        ctx.moveTo(x0 + r, y0);
-        ctx.lineTo(x0 + W - r, y0);
-        ctx.arc(x0 + W - r, y0 + r, r, -Math.PI / 2, Math.PI / 2);
-        ctx.lineTo(x0 + r, y0 + H);
-        ctx.arc(x0 + r, y0 + r, r, Math.PI / 2, (3 * Math.PI) / 2);
+        ctx.moveTo(xx + r, yy);
+        ctx.lineTo(xx + ww - r, yy);
+        ctx.arc(xx + ww - r, yy + r, r, -Math.PI / 2, Math.PI / 2);
+        ctx.lineTo(xx + r, yy + hh);
+        ctx.arc(xx + r, yy + r, r, Math.PI / 2, (3 * Math.PI) / 2);
         ctx.closePath();
       };
 
-      // 1) ambient glow — breathes with the voice, flares on syllable onsets
+      // 1) ambient halo — NEUTRAL white and very soft; the glass must not be
+      //    tinted by the state (color lives only in the bars).
       ctx.save();
-      ctx.shadowColor = hexA(base, 0.38 + 0.3 * energy + 0.25 * an.pulse);
-      ctx.shadowBlur = size * (0.08 + 0.05 * energy + 0.04 * an.pulse);
-      ctx.fillStyle = hexA(base, 0.08);
+      ctx.shadowColor = `rgba(255,255,255,${0.14 + 0.1 * energy + 0.1 * an.pulse})`;
+      ctx.shadowBlur = size * (0.05 + 0.03 * energy);
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
       capsule();
       ctx.fill();
       ctx.restore();
 
-      // 2) glass body — dark smoke for contrast on any desktop, then the
-      //    website's 165° white→transparent→tint gradient on top
+      // 2) glass body — smoke for contrast + a pure white 165° gradient
+      //    (no color stop: the capsule stays neutral on any desktop).
       capsule();
-      ctx.fillStyle = "rgba(8,14,26,0.42)";
+      ctx.fillStyle = "rgba(10,14,22,0.34)";
       ctx.fill();
-      const gDir = { x: Math.cos(1.31), y: Math.sin(1.31) }; // ~165° like the site
+      const gDir = { x: Math.cos(1.31), y: Math.sin(1.31) };
       const body = ctx.createLinearGradient(
         cx - gDir.x * W * 0.5,
         cy - gDir.y * H * 0.9,
         cx + gDir.x * W * 0.5,
         cy + gDir.y * H * 0.9,
       );
-      body.addColorStop(0, "rgba(255,255,255,0.20)");
-      body.addColorStop(0.48, "rgba(255,255,255,0.045)");
-      body.addColorStop(1, hexA(base, 0.13));
+      body.addColorStop(0, "rgba(255,255,255,0.17)");
+      body.addColorStop(0.48, "rgba(255,255,255,0.035)");
+      body.addColorStop(1, "rgba(255,255,255,0.07)");
       capsule();
       ctx.fillStyle = body;
       ctx.fill();
 
-      // 3) specular streak (top-left), clipped to the glass. While the pill
-      //    materializes, the highlight sweeps in from the left edge — light
-      //    catching the lens — and lands on its resting spot (x0 + 0.26·W).
+      // 3) specular streak (top-left), clipped to the glass; sweeps in from
+      //    the left while the pill materializes (light catching the lens).
       ctx.save();
       capsule();
       ctx.clip();
@@ -1348,58 +1399,100 @@ export function drawOrb(
         0,
         specX,
         y0 + H * 0.2,
-        W * 0.32,
+        W * 0.3,
       );
-      spec.addColorStop(0, "rgba(255,255,255,0.30)");
+      spec.addColorStop(0, "rgba(255,255,255,0.28)");
       spec.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = spec;
       ctx.fillRect(x0, y0, W, H);
+      // bottom-edge counter light: thick glass catches light on the lower rim
+      const under = ctx.createLinearGradient(cx, y0 + H * 0.55, cx, y0 + H);
+      under.addColorStop(0, "rgba(255,255,255,0)");
+      under.addColorStop(1, "rgba(255,255,255,0.09)");
+      ctx.fillStyle = under;
+      ctx.fillRect(x0, y0, W, H);
       ctx.restore();
 
-      // 4) hairline border — bright top edge sinking to a faint bottom
+      // 4) rims — outer hairline + inner refraction ring (the "thick glass"
+      //    double edge from the SCAI dome lens / iOS glass).
       const rim = ctx.createLinearGradient(cx, y0, cx, y0 + H);
-      rim.addColorStop(0, `rgba(255,255,255,${0.42 + 0.2 * an.pulse})`);
-      rim.addColorStop(1, "rgba(255,255,255,0.10)");
+      rim.addColorStop(0, `rgba(255,255,255,${0.4 + 0.18 * an.pulse})`);
+      rim.addColorStop(1, "rgba(255,255,255,0.12)");
       ctx.strokeStyle = rim;
-      ctx.lineWidth = Math.max(1.1, size * 0.011);
+      ctx.lineWidth = Math.max(1.1, size * 0.01);
       capsule();
       ctx.stroke();
+      const rimIn = ctx.createLinearGradient(cx, y0, cx, y0 + H);
+      rimIn.addColorStop(0, "rgba(255,255,255,0.15)");
+      rimIn.addColorStop(0.5, "rgba(255,255,255,0.02)");
+      rimIn.addColorStop(1, "rgba(255,255,255,0.08)");
+      ctx.strokeStyle = rimIn;
+      ctx.lineWidth = Math.max(1.6, size * 0.016);
+      capsule(Math.max(2.2, size * 0.022));
+      ctx.stroke();
 
-      // 5) five EQ bars — the website's echo-eq, but fed by the real voice
-      //    spectrum (bass→sibilance across the pill); calm breathing at rest
-      const REST = [0.34, 0.55, 0.68, 0.47, 0.3];
-      const POS = [0.12, 0.35, 0.55, 0.75, 0.92];
-      const barW = Math.max(1.6, H * 0.085);
-      const gap = barW * 1.7;
-      const totalW = 4 * gap;
+      // 5) nine spectrum bars behind the dome lens. Bass→sibilance left to
+      //    right; positions run through the dome mapping (centre spacing
+      //    magnified, rims compressed → content "bends" at the glass edge),
+      //    heights get the vertical dome factor, alpha feathers out at the
+      //    rims (the SCAI edge mask). At idle the bars rest as DOTS.
+      const REST = [0.2, 0.33, 0.47, 0.62, 0.72, 0.62, 0.47, 0.33, 0.2];
+      const N = 9;
+      const barW = Math.max(1.8, H * 0.1);
+      const span = W - H * 1.15; // usable width between the rounded ends
       ctx.lineCap = "round";
       ctx.save();
       ctx.shadowColor = hexA(base, 0.7);
-      ctx.shadowBlur = Math.max(3, H * 0.16);
-      for (let i = 0; i < 5; i++) {
+      ctx.shadowBlur = Math.max(3, H * 0.18);
+      for (let i = 0; i < N; i++) {
+        const u = (i - (N - 1) / 2) / ((N - 1) / 2); // -1..1 across the pill
+        const uL = u * (1.1 - 0.22 * u * u); // dome: centre magnified, rims squeezed
+        const domeY = 1.08 - 0.16 * uL * uL; // vertical lens magnification
+        const edgeA = 1 - 0.4 * Math.pow(Math.abs(uL), 3); // rim feather
+        const bx = cx + (uL * span) / 2;
+
         let hBar: number;
         if (speaking) {
-          // wide dynamic range: whisper = small ticks, loud = near full height
-          hBar = H * Math.min(0.78, REST[i] * (0.3 + 1.35 * bandAt(POS[i])));
+          // big dynamic range (TJ: mehr Ausschlag): whisper = ticks,
+          // loud = almost the full inner height of the glass
+          hBar = H * Math.min(0.85, REST[i] * (0.22 + 1.75 * bandAt((i + 0.5) / N)));
+        } else if (st === "idle") {
+          // resting = DOTS; the idle-animation toggle makes them breathe
+          const wave =
+            v.idlePulse && !idleStill ? 0.5 + 0.5 * Math.sin(ph * 0.09 + i * 0.8) : 0;
+          hBar = barW * (1 + 0.65 * wave);
         } else {
-          // echo-eq breathing (phase-offset per bar), frozen when idleStill
-          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 1.15);
-          hBar = H * REST[i] * (0.5 + 0.32 + 0.68 * wave * energy);
+          // transcribing/done/error: calm phase-offset wave in state color
+          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 0.9);
+          hBar = H * REST[i] * (0.55 + 0.6 * wave * energy);
         }
-        // Materialize: bars pop in centre-out with a tiny spring, after the
-        // glass itself has condensed (ap > ~0.3).
+        hBar *= domeY;
+
+        // Materialize: bars ignite centre-out after the glass has condensed.
         if (ap < 1 && apStyle !== "none" && apStyle !== "fade") {
-          const bs = Math.max(0, Math.min(1, (ap - 0.3 - Math.abs(i - 2) * 0.09) / 0.28));
+          const bs = Math.max(
+            0,
+            Math.min(1, (ap - 0.3 - Math.abs(i - (N - 1) / 2) * 0.055) / 0.28),
+          );
           if (bs <= 0) continue;
           hBar *= backOut(bs);
         }
-        const bx = cx - totalW / 2 + i * gap;
-        ctx.strokeStyle = hexA(base, 0.92);
-        ctx.lineWidth = barW;
-        ctx.beginPath();
-        ctx.moveTo(bx, cy - hBar / 2);
-        ctx.lineTo(bx, cy + hBar / 2);
-        ctx.stroke();
+
+        if (hBar <= barW * 1.7) {
+          // resting dot — a filled circle reads cleaner than a zero-length
+          // round-cap stroke (breathing scales the radius slightly)
+          ctx.fillStyle = hexA(base, 0.92 * edgeA);
+          ctx.beginPath();
+          ctx.arc(bx, cy, (barW / 2) * Math.max(1, hBar / barW), 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = hexA(base, 0.92 * edgeA);
+          ctx.lineWidth = barW;
+          ctx.beginPath();
+          ctx.moveTo(bx, cy - hBar / 2);
+          ctx.lineTo(bx, cy + hBar / 2);
+          ctx.stroke();
+        }
       }
       ctx.restore();
       ctx.lineCap = "butt";
@@ -1444,16 +1537,20 @@ export function drawOrb(
 
   // Bloom flash — additive light ON TOP of the freshly drawn style, so the
   // orb literally lights up out of nothing and the flare fades into its glow.
+  // Flash color = the configured IDLE color (TJ) — the orb wakes up in its
+  // resting tint, not in whatever state triggered the show; frost when the
+  // pill runs in the colorless glass mode.
   if (bloomA > 0.01) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     const isPill = v.style === "pill";
+    const flashCol = isPill && pillMode === "glass" ? FROST : v.colors.idle;
     const rx = (isPill ? size * 0.44 : size * 0.36) * (0.6 + 0.7 * ap);
-    const ry = (isPill ? size * 0.21 : size * 0.36) * (0.6 + 0.7 * ap);
+    const ry = (isPill ? size * 0.19 : size * 0.36) * (0.6 + 0.7 * ap);
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
     g.addColorStop(0, `rgba(255,255,255,${0.55 * bloomA})`);
-    g.addColorStop(0.35, hexA(base, 0.5 * bloomA));
-    g.addColorStop(1, hexA(base, 0));
+    g.addColorStop(0.35, hexA(flashCol, 0.5 * bloomA));
+    g.addColorStop(1, hexA(flashCol, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);

@@ -39,6 +39,8 @@ export interface Config {
   orb_idle_mode: string;
   /** Materialize animation on (re)appear: "bloom" | "pop" | "fade" | "none". */
   orb_appear_anim: string;
+  /** Pill color mode: "color" | "idle_glass" | "glass" (always colorless). */
+  orb_pill_color_mode: string;
   /** How the islands are revealed: "hover" | "click". */
   orb_trigger: string;
   orb_speed: number;
