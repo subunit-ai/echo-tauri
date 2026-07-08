@@ -7,7 +7,9 @@ import { Help } from "./sections/Help";
 import { History } from "./sections/History";
 import { Home } from "./sections/Home";
 import { Notes } from "./sections/Notes";
+import { Activity } from "./sections/Activity";
 import { Meetings } from "./sections/Meetings";
+import { Learning } from "./sections/Learning";
 import { Intro } from "./intro/Intro";
 import { Settings, type SettingsTab } from "./sections/Settings";
 import { Vocabulary } from "./sections/Vocabulary";
@@ -79,9 +81,11 @@ function Shell() {
           {section === "home" && <Home onStartMeeting={() => openMeeting("cloud", true)} onOpenAccount={() => openSettings("account")} />}
           {section === "notes" && <Notes />}
           {section === "history" && <History />}
+          {section === "activity" && <Activity />}
           {section === "settings" && <Settings tab={settingsTab} onTab={setSettingsTab} />}
           {section === "meetings" && <Meetings tab={meetingTab} onTab={onMeetingTab} autostart={meetingAutostart} />}
           {section === "vocabulary" && <Vocabulary />}
+          {section === "learning" && <Learning />}
           {section === "help" && <Help />}
         </div>
       </main>

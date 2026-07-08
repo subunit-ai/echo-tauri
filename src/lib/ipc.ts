@@ -458,3 +458,92 @@ export const meetLocalGet = (id: string) =>
   invoke<{ meeting: Record<string, unknown>; transcript: string }>("meet_local_get", { id });
 export const onMeetLocal = (cb: (s: MeetLocalSnapshot) => void): Promise<UnlistenFn> =>
   listen<MeetLocalSnapshot>("echo://meet-local", (e) => cb(e.payload));
+
+// ---- Activity & Learning ----
+
+export interface ActivityDay {
+  day: string;
+  transcriptions: number;
+  words: number;
+  audio_seconds: number;
+  time_saved_seconds: number;
+}
+export const activityDaily = (days = 30) => invoke<ActivityDay[]>("activity_daily", { days });
+
+export interface ActivityHour {
+  hour: number;
+  transcriptions: number;
+}
+export const activityHourly = (days = 30) => invoke<ActivityHour[]>("activity_hourly", { days });
+
+export interface WordFreq {
+  word: string;
+  count: number;
+}
+export const activityWordFrequency = (limit = 40, days = 90) =>
+  invoke<WordFreq[]>("activity_word_frequency", { limit, days });
+
+export interface Streak {
+  current: number;
+  longest: number;
+  last_active_day: string | null;
+  active_today: boolean;
+}
+export const activityStreak = () => invoke<Streak>("activity_streak");
+
+export interface ActivityTotals {
+  transcriptions: number;
+  words: number;
+  audio_seconds: number;
+  time_saved_seconds: number;
+}
+export interface PeriodSum {
+  words: number;
+  transcriptions: number;
+  time_saved_seconds: number;
+}
+export interface ActivityOverview {
+  total: ActivityTotals;
+  today: PeriodSum;
+  this_week: PeriodSum;
+  streak: { current: number; longest: number };
+  goals: { daily_word_goal: number; weekly_word_goal: number };
+}
+export const activityOverview = () => invoke<ActivityOverview>("activity_overview");
+
+export interface LearningAnalysis {
+  window_days: number;
+  sample_transcriptions: number;
+  total_words: number;
+  unique_words: number;
+  type_token_ratio: number;
+  avg_sentence_length: number;
+  filler_counts: WordFreq[];
+  top_words: WordFreq[];
+  overused_words: { word: string; count: number; ratio: number }[];
+  weak_words: WordFreq[];
+}
+export const learningAnalysis = (days = 30) => invoke<LearningAnalysis>("learning_analysis", { days });
+
+export interface WordSuggestion {
+  word: string;
+  count: number;
+  alternatives: string[];
+  example?: string;
+}
+export interface LearningSuggestions {
+  source: "local" | "llm";
+  suggestions: WordSuggestion[];
+}
+export const learningSuggestions = (days = 30) =>
+  invoke<LearningSuggestions>("learning_suggestions", { days });
+
+export interface Goals {
+  daily_word_goal: number;
+  weekly_word_goal: number;
+}
+export const goalsGet = () => invoke<Goals>("goals_get");
+export const goalsSet = (goals: Goals) => invoke<void>("goals_set", { goals });
+
+export const activityExport = (kind: "csv" | "json" | "png", filename: string, contentsB64: string) =>
+  invoke<string>("activity_export", { kind, filename, contentsB64 });

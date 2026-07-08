@@ -13,8 +13,10 @@ export type Section =
   | "home"
   | "notes"
   | "history"
+  | "activity"
   | "meetings"
   | "vocabulary"
+  | "learning"
   | "settings"
   | "help";
 
@@ -44,6 +46,8 @@ const ICONS: Record<Section, ReactNode> = {
   // Notizen: Dokument mit Eselsohr + Textzeilen (voice-first Notiz-Ablage)
   notes: <Icon d="M7 3h7l4 4v12.5A1.5 1.5 0 0 1 16.5 21h-9A1.5 1.5 0 0 1 6 19.5V4.5A1.5 1.5 0 0 1 7.5 3ZM14 3v4h4M9 12.5h6M9 16h4" />,
   history: <Icon d="M12 7v5l3 2" extra={<circle cx="12" cy="12" r="9" />} />,
+  // Activity: Balkendiagramm (Analytics)
+  activity: <Icon d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   // Meeting = Offline- + Live-Meeting unter einem Tab (Broadcast-Wellen um einen Punkt)
   meetings: (
     <Icon
@@ -52,6 +56,8 @@ const ICONS: Record<Section, ReactNode> = {
     />
   ),
   vocabulary: <Icon d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />,
+  // Learning: aufgeschlagenes Buch / Graduation
+  learning: <Icon d="M3 7l9-4 9 4-9 4-9-4ZM7 10v5c0 1.5 2.5 3 5 3s5-1.5 5-3v-5" />,
   settings: <Icon d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4" />,
   help: (
     <Icon
@@ -65,8 +71,10 @@ const ITEMS: { key: Section; labelKey: string; pro?: boolean }[] = [
   { key: "home", labelKey: "nav.home" },
   { key: "notes", labelKey: "nav.notes" },
   { key: "history", labelKey: "nav.history" },
+  { key: "activity", labelKey: "nav.activity" },
   { key: "meetings", labelKey: "nav.meetings" },
   { key: "vocabulary", labelKey: "nav.vocabulary" },
+  { key: "learning", labelKey: "nav.learning" },
   { key: "settings", labelKey: "nav.settings" },
   { key: "help", labelKey: "nav.help" },
 ];
