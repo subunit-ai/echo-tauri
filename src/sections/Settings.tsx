@@ -418,6 +418,8 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
   const [demo, setDemo] = useState(true);
   const [previewState, setPreviewState] = useState<EngineState>("idle");
   const [demoPhase, setDemoPhase] = useState<EngineState>("idle");
+  // Bumping this replays the materialize (appear) animation in the preview.
+  const [replayToken, setReplayToken] = useState(0);
 
   const visual: OrbVisual = {
     style: c.orb_overlay_style,
@@ -434,6 +436,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
     idlePulse: true,
     idleMode: "normal",
     speed: c.orb_speed ?? 0.6,
+    appear: c.orb_appear_anim || "bloom",
   };
   // The size slider visibly scales the preview too (clamped to the stage).
   const sizeFactor = c.orb_overlay_size ?? 1;
@@ -472,7 +475,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
         <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label={t("settings.orbStylePrev")} title={styleLabel}>
           ‹
         </button>
-        <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} />
+        <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} replayToken={replayToken} />
         <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label={t("settings.orbStyleNext")} title={styleLabel}>
           ›
         </button>
@@ -481,6 +484,9 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
       <div className="oc-controls">
         <button className={`oc-demo ${demo ? "active" : ""}`} onClick={() => setDemo((d) => !d)}>
           {demo ? `■ ${t("settings.orbDemoStop")}` : `▶ ${t("settings.orbDemoPlay")}`}
+        </button>
+        <button className="oc-demo" onClick={() => setReplayToken((n) => n + 1)}>
+          {`↻ ${t("settings.orbAppearReplay")}`}
         </button>
         <div className="oc-states">
           {STATES.map((s) => (
@@ -1134,6 +1140,18 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             </Row>
             <Row name={t("settings.idleAnimation")} hint={t("settings.idleAnimationHint")}>
               <Toggle checked={c.orb_idle_pulse} onChange={(v) => set("orb_idle_pulse", v)} />
+            </Row>
+            <Row name={t("settings.orbAppear")} hint={t("settings.orbAppearHint")}>
+              <Sel
+                value={["pop", "fade", "none"].includes(c.orb_appear_anim) ? c.orb_appear_anim : "bloom"}
+                onChange={(v) => set("orb_appear_anim", v)}
+                options={[
+                  ["bloom", t("settings.orbAppearBloom")],
+                  ["pop", t("settings.orbAppearPop")],
+                  ["fade", t("settings.orbAppearFade")],
+                  ["none", t("settings.orbAppearNone")],
+                ]}
+              />
             </Row>
           </>
         )}

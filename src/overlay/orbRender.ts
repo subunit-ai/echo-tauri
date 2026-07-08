@@ -21,6 +21,10 @@ export interface OrbVisual {
   idlePulse: boolean;
   idleMode: "normal" | "dim" | "hide";
   speed: number;
+  /** Materialize animation when the orb (re)appears after being hidden:
+   *  "bloom" (light condenses into the orb — the standard) | "pop" (spring
+   *  scale) | "fade" (plain fade-in) | "none". Undefined = "bloom". */
+  appear?: string;
 }
 
 /** Mutable per-canvas animation scratch — advanced in place by `drawOrb`. */
@@ -44,6 +48,11 @@ export interface OrbAnim {
   parts: { d: number; a0: number; sz: number; v: number }[];
   /** Per-spoke peak-hold caps for the ★ Spectra style. */
   caps: number[];
+  /** Materialize envelope (0..1): 0 right after mount or after the orb was
+   *  hidden (idle mode "hide"), ramping to 1 over ~0.65 s. drawOrb resets it
+   *  to 0 on every hidden frame — so the orb re-materializes each time it
+   *  comes back, in the overlay AND the configurator preview alike. */
+  appear: number;
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -59,7 +68,16 @@ export function newOrbAnim(): OrbAnim {
     hist: [],
     parts: [],
     caps: [],
+    appear: 0,
   };
+}
+
+/** easeOutBack: starts at 0, overshoots past 1 (~1.1), settles at 1 — the
+ *  spring feel for materialize scaling. */
+function backOut(p: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
 }
 
 function hexA(hex: string, a: number): string {
@@ -127,9 +145,42 @@ export function drawOrb(
   // draw at reduced opacity (a calm, semi-transparent resting orb instead of
   // vanishing); "normal" → full strength.
   if (st === "idle" && v.idleMode === "hide") {
+    an.appear = 0; // re-materialize the next time the orb shows
     return;
   }
   ctx.globalAlpha = st === "idle" && v.idleMode === "dim" ? 0.32 : 1;
+
+  // ---- Materialize (appear) envelope -----------------------------------------
+  // Plays after mount and every time the orb comes back from hidden (idle mode
+  // "hide" → recording). Fixed cadence (~0.65 s @ 60 fps), deliberately NOT
+  // scaled by v.speed — it's a UI transition, not part of the style's rhythm.
+  const apStyle = v.appear ?? "bloom";
+  an.appear = apStyle === "none" ? 1 : Math.min(1, an.appear + 1 / 40);
+  const ap = an.appear;
+  ctx.save(); // paired with the restore right after the style switch
+  let bloomA = 0; // strength of the additive light flash drawn on top
+  if (ap < 1) {
+    const easeOut = 1 - Math.pow(1 - ap, 3);
+    if (apStyle === "fade") {
+      ctx.globalAlpha *= easeOut;
+    } else if (apStyle === "pop") {
+      const s = 0.55 + 0.45 * backOut(ap);
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha *= Math.min(1, ap * 2.4);
+    } else {
+      // "bloom" — the standard: light condenses into the orb. The body springs
+      // 0.7 → ~1.04 → 1 while a bright flash peaks early and dissolves into
+      // the style's own ambient glow.
+      const s = 0.7 + 0.3 * backOut(ap);
+      ctx.translate(cx, cy);
+      ctx.scale(s, s);
+      ctx.translate(-cx, -cy);
+      ctx.globalAlpha *= Math.min(1, ap * 2.6);
+      bloomA = Math.sin(Math.min(1, ap * 1.35) * Math.PI);
+    }
+  }
 
   // breathing factor for idle / transcribing
   const breathe =
@@ -1283,15 +1334,19 @@ export function drawOrb(
       ctx.fillStyle = body;
       ctx.fill();
 
-      // 3) specular streak (top-left), clipped to the glass
+      // 3) specular streak (top-left), clipped to the glass. While the pill
+      //    materializes, the highlight sweeps in from the left edge — light
+      //    catching the lens — and lands on its resting spot (x0 + 0.26·W).
       ctx.save();
       capsule();
       ctx.clip();
+      const specX =
+        ap < 1 ? x0 + W * (0.08 + 0.18 * (1 - Math.pow(1 - ap, 2))) : cx - W * 0.24;
       const spec = ctx.createRadialGradient(
-        cx - W * 0.24,
+        specX,
         y0 + H * 0.2,
         0,
-        cx - W * 0.24,
+        specX,
         y0 + H * 0.2,
         W * 0.32,
       );
@@ -1330,6 +1385,13 @@ export function drawOrb(
           // echo-eq breathing (phase-offset per bar), frozen when idleStill
           const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 1.15);
           hBar = H * REST[i] * (0.5 + 0.32 + 0.68 * wave * energy);
+        }
+        // Materialize: bars pop in centre-out with a tiny spring, after the
+        // glass itself has condensed (ap > ~0.3).
+        if (ap < 1 && apStyle !== "none" && apStyle !== "fade") {
+          const bs = Math.max(0, Math.min(1, (ap - 0.3 - Math.abs(i - 2) * 0.09) / 0.28));
+          if (bs <= 0) continue;
+          hBar *= backOut(bs);
         }
         const bx = cx - totalW / 2 + i * gap;
         ctx.strokeStyle = hexA(base, 0.92);
@@ -1376,6 +1438,27 @@ export function drawOrb(
       ctx.arc(cx, cy, dotR * (0.85 + energy * 0.3), 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  ctx.restore(); // undo the materialize scale/alpha
+
+  // Bloom flash — additive light ON TOP of the freshly drawn style, so the
+  // orb literally lights up out of nothing and the flare fades into its glow.
+  if (bloomA > 0.01) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const isPill = v.style === "pill";
+    const rx = (isPill ? size * 0.44 : size * 0.36) * (0.6 + 0.7 * ap);
+    const ry = (isPill ? size * 0.21 : size * 0.36) * (0.6 + 0.7 * ap);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(rx, ry));
+    g.addColorStop(0, `rgba(255,255,255,${0.55 * bloomA})`);
+    g.addColorStop(0.35, hexA(base, 0.5 * bloomA));
+    g.addColorStop(1, hexA(base, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   ctx.globalAlpha = 1; // reset after a dimmed idle frame

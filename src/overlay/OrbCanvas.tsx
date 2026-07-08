@@ -22,11 +22,15 @@ interface Props {
   onPhase?: (s: EngineState) => void;
   /** Logical pixel size of the square canvas. */
   size?: number;
+  /** Bump this number to replay the materialize (appear) animation. */
+  replayToken?: number;
   className?: string;
 }
 
-export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size = 220, className }: Props) {
+export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size = 220, replayToken = 0, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // One anim scratch per canvas instance — also the handle for appear-replays.
+  const animRef = useRef(newOrbAnim());
   // Live values the RAF loop reads — synced from props so changing config never
   // restarts the animation (keeps in-flight rings/blips, no flicker).
   const visualRef = useRef(visual);
@@ -51,7 +55,7 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
     canvas.width = px;
     canvas.height = px;
 
-    const anim = newOrbAnim();
+    const anim = animRef.current;
     let raf = 0;
     // Demo state machine: idle → recording (a few seconds of synthetic speech)
     // → done → back to idle. `tick` counts frames; cadence is generous so the
@@ -105,6 +109,11 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
     loop();
     return () => cancelAnimationFrame(raf);
   }, [size]);
+
+  // Replay the materialize animation on demand (Settings "appear" preview).
+  useEffect(() => {
+    animRef.current.appear = 0;
+  }, [replayToken]);
 
   return (
     <canvas

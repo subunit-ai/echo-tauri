@@ -34,6 +34,8 @@ export interface Config {
   orb_overlay_auto_hide: boolean;
   /** Idle behaviour: "normal" | "dim" | "hide". */
   orb_idle_mode: string;
+  /** Materialize animation on (re)appear: "bloom" | "pop" | "fade" | "none". */
+  orb_appear_anim: string;
   /** How the islands are revealed: "hover" | "click". */
   orb_trigger: string;
   orb_speed: number;
