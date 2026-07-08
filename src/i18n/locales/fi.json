@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Muutokset tallennetaan automaattisesti",
     "soundStop": "Vapautusääni",
-    "soundStopHint": "Toistuu kun vapautat näppäimen (tallennuksen loppu) — käännetty käynnistysääni. Itsenäisesti vaihdettavissa."
+    "soundStopHint": "Toistuu kun vapautat näppäimen (tallennuksen loppu) — käännetty käynnistysääni. Itsenäisesti vaihdettavissa.",
+    "soundStopLow": "Matala",
+    "soundStopFade": "Häivytys"
   }
 }

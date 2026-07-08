@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "변경 사항은 자동으로 저장됩니다",
     "soundStop": "릴리스 사운드",
-    "soundStopHint": "키를 놓을 때 재생됩니다(녹음 종료) — 시작 음을 역재생한 소리. 독립적으로 전환 가능합니다."
+    "soundStopHint": "키를 놓을 때 재생됩니다(녹음 종료) — 시작 음을 역재생한 소리. 독립적으로 전환 가능합니다.",
+    "soundStopLow": "저음",
+    "soundStopFade": "페이드"
   }
 }

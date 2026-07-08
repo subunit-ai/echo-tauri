@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Los cambios se guardan automáticamente",
     "soundStop": "Sonido al soltar",
-    "soundStopHint": "Se reproduce al soltar la tecla (fin de la grabación) — el sonido de inicio invertido. Independientemente conmutable."
+    "soundStopHint": "Se reproduce al soltar la tecla (fin de la grabación) — el sonido de inicio invertido. Independientemente conmutable.",
+    "soundStopLow": "Grave",
+    "soundStopFade": "Desvanecimiento"
   }
 }

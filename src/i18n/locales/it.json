@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Le modifiche vengono salvate automaticamente",
     "soundStop": "Suono di rilascio",
-    "soundStopHint": "Riprodotto quando rilasci il tasto (fine registrazione) — lo whoosh di avvio invertito. Indipendentemente attivabile."
+    "soundStopHint": "Riprodotto quando rilasci il tasto (fine registrazione) — lo whoosh di avvio invertito. Indipendentemente attivabile.",
+    "soundStopLow": "Grave",
+    "soundStopFade": "Dissolvenza"
   }
 }

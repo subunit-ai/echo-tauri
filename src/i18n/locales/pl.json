@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Zmiany są zapisywane automatycznie",
     "soundStop": "Dźwięk zwolnienia",
-    "soundStopHint": "Odtwarza się po zwolnieniu klawisza (koniec nagrania) — odwrócony dźwięk startu. Niezależnie przełączalny."
+    "soundStopHint": "Odtwarza się po zwolnieniu klawisza (koniec nagrania) — odwrócony dźwięk startu. Niezależnie przełączalny.",
+    "soundStopLow": "Niski",
+    "soundStopFade": "Wybrzmienie"
   }
 }

@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Spremembe se shranijo samodejno",
     "soundStop": "Zvok spuščanja",
-    "soundStopHint": "Predvaja se, ko spustiš tipko (konec snemanja) — obrnjen zvouk začetka. Neodvisno preklapljivo."
+    "soundStopHint": "Predvaja se, ko spustiš tipko (konec snemanja) — obrnjen zvouk začetka. Neodvisno preklapljivo.",
+    "soundStopLow": "Nizek",
+    "soundStopFade": "Pojemanje"
   }
 }

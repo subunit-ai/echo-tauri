@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Perubahan disimpan otomatis",
     "soundStop": "Suara pelepasan",
-    "soundStopHint": "Diputar saat Anda melepaskan tombol (akhir perekaman) — suara awal terbalik. Dapat dialihkan secara independen."
+    "soundStopHint": "Diputar saat Anda melepaskan tombol (akhir perekaman) — suara awal terbalik. Dapat dialihkan secara independen.",
+    "soundStopLow": "Rendah",
+    "soundStopFade": "Memudar"
   }
 }

@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "A változtatások automatikusan mentődnek",
     "soundStop": "Elengedési hang",
-    "soundStopHint": "Lejátszódik, amikor elengedted a billentyűt (felvétel vége) — megfordított indulási hang. Függetlenül kapcsolható."
+    "soundStopHint": "Lejátszódik, amikor elengedted a billentyűt (felvétel vége) — megfordított indulási hang. Függetlenül kapcsolható.",
+    "soundStopLow": "Mély",
+    "soundStopFade": "Elhalkulás"
   }
 }

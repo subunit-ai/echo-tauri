@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Değişiklikler otomatik olarak kaydedilir",
     "soundStop": "Bırakma sesi",
-    "soundStopHint": "Tuşu bıraktığınızda çalar (kaydın sonu) — ters çevrilmiş başlangıç sesi. Bağımsız olarak açılıp kapatılabilir."
+    "soundStopHint": "Tuşu bıraktığınızda çalar (kaydın sonu) — ters çevrilmiş başlangıç sesi. Bağımsız olarak açılıp kapatılabilir.",
+    "soundStopLow": "Düşük",
+    "soundStopFade": "Sönme"
   }
 }

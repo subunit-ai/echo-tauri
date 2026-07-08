@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Les modifications sont enregistrées automatiquement",
     "soundStop": "Son de relâchement",
-    "soundStopHint": "Joue quand vous relâchez la touche (fin d'enregistrement) — le whoosh de démarrage inversé. Indépendamment activable."
+    "soundStopHint": "Joue quand vous relâchez la touche (fin d'enregistrement) — le whoosh de démarrage inversé. Indépendamment activable.",
+    "soundStopLow": "Grave",
+    "soundStopFade": "Fondu"
   }
 }

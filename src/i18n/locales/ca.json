@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Els canvis es desen automàticament",
     "soundStop": "So de soltar",
-    "soundStopHint": "Sona quan soltes la tecla (fi de la gravació) — l'oscil·lació inicial invertida. Independentment commutable."
+    "soundStopHint": "Sona quan soltes la tecla (fi de la gravació) — l'oscil·lació inicial invertida. Independentment commutable.",
+    "soundStopLow": "Greu",
+    "soundStopFade": "Esvaïment"
   }
 }

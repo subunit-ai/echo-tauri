@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Endringer lagres automatisk",
     "soundStop": "Slipplyd",
-    "soundStopHint": "Avspilles når du slipper tasten (slutt på opptak) — omvendt startlyden. Uavhengig bytting."
+    "soundStopHint": "Avspilles når du slipper tasten (slutt på opptak) — omvendt startlyden. Uavhengig bytting.",
+    "soundStopLow": "Lav",
+    "soundStopFade": "Uttoning"
   }
 }

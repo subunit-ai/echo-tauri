@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Thay đổi được lưu tự động",
     "soundStop": "Âm thanh nhả",
-    "soundStopHint": "Phát ra khi bạn nhả phím (kết thúc ghi âm) — âm thanh khởi động đảo ngược. Có thể chuyển đổi độc lập."
+    "soundStopHint": "Phát ra khi bạn nhả phím (kết thúc ghi âm) — âm thanh khởi động đảo ngược. Có thể chuyển đổi độc lập.",
+    "soundStopLow": "Trầm",
+    "soundStopFade": "Mờ dần"
   }
 }

@@ -1,18 +1,22 @@
 // UI sound presets for the activation (record-start), release (record-stop) and
 // paste (done) cues.
 //
-// "standard" plays the bundled wav for the event; the rest are synthesized on the
-// fly via Web Audio so new options can be added here WITHOUT shipping asset files
-// (TJ: "settings for later sounds you can pick"). Each preset is a short,
-// unobtrusive cue. `playSound` is also used by the Settings preview button.
+// "standard" plays the bundled wav for the event; the rest of the start/paste
+// presets are synthesized on the fly via Web Audio so new options can be added
+// here WITHOUT shipping asset files (TJ: "settings for later sounds you can
+// pick"). Each preset is a short, unobtrusive cue. `playSound` is also used by
+// the Settings preview button.
 //
-// "stop" (v0.5.89) is `start.wav` reversed (+ trimmed to content, faded) — the
-// natural acoustic counterpart to the start cue TJ asked for. It only exists for
-// "standard"; there's no separate preset picker or toggle for it (see sound.rs /
-// SoundFx). The REAL record-stop cue is played natively (sound.rs::play_stop) so
-// it's instant even with the main window hidden — the buffer here exists for
-// parity with the other bundled cues (Settings preview / decode-once pattern),
-// not as the primary playback path.
+// The release/stop cue is different: it has its OWN preset list
+// (`STOP_SOUND_PRESETS`), and all three tones are bundled files, not synth —
+// three purpose-designed counterparts to the start cue (v0.5.93; before that,
+// v0.5.89 shipped a single reversed-start-cue "standard" stop tone). There's no
+// separate toggle here for it (see sound.rs / SoundFx): the toggle is
+// `sound_stop_enabled`, handled in Settings/config like `sound_start_enabled`.
+// The REAL record-stop cue is played natively (sound.rs::play_stop) so it's
+// instant even with the main window hidden — the buffers here exist for parity
+// with the other bundled cues (Settings preview / decode-once pattern), not as
+// the primary playback path.
 //
 // Latency: EVERYTHING goes through one Web Audio context. The bundled wavs are
 // fetched + decoded ONCE into AudioBuffers at startup (`preloadSounds`) and the
@@ -23,7 +27,9 @@
 import doneWav from "../assets/sounds/done.wav";
 import sonarPingMp3 from "../assets/sounds/sonar-ping.mp3";
 import startWav from "../assets/sounds/start.wav";
-import stopWav from "../assets/sounds/stop.wav";
+import stopAusklangWav from "../assets/sounds/stop-ausklang.wav";
+import stopStandardWav from "../assets/sounds/stop-standard.wav";
+import stopTiefWav from "../assets/sounds/stop-tief.wav";
 
 export type SoundEvent = "start" | "stop" | "paste";
 
@@ -38,10 +44,24 @@ export const SOUND_PRESETS: { id: string; labelKey: string }[] = [
   { id: "marimba", labelKey: "settings.soundMarimba" },
 ];
 
+/** Selectable release/stop-cue tones — a separate list from `SOUND_PRESETS`
+ *  because all three are bundled files (no synth stop preset). Ids must match
+ *  `stop_bytes` in src-tauri/src/sound.rs. */
+export const STOP_SOUND_PRESETS: { id: string; labelKey: string }[] = [
+  { id: "standard", labelKey: "settings.soundStandard" },
+  { id: "tief", labelKey: "settings.soundStopLow" },
+  { id: "ausklang", labelKey: "settings.soundStopFade" },
+];
+
 /** File-based presets (real audio files, not synth). Decoded once like the
- *  bundled cues; decodeAudioData handles mp3 in both WebView2 and WKWebView. */
+ *  bundled cues; decodeAudioData handles mp3 in both WebView2 and WKWebView.
+ *  The stop tones are keyed by their `STOP_SOUND_PRESETS` id ("standard" here
+ *  is the stop-specific file, distinct from the start/paste "standard" buffer
+ *  below — `playSound` disambiguates via the `event` argument). */
 const FILE_SOUNDS: Record<string, string> = {
   sonar_ping: sonarPingMp3,
+  tief: stopTiefWav,
+  ausklang: stopAusklangWav,
 };
 /** Decoded file presets, keyed by id (`undefined` = not loaded, `null` = failed). */
 const fileBuffers: Record<string, AudioBuffer | null | undefined> = {};
@@ -104,7 +124,7 @@ export function preloadSounds() {
   }
   if (!("stop" in buffers)) {
     buffers.stop = null;
-    void decode(stopWav).then((b) => (buffers.stop = b));
+    void decode(stopStandardWav).then((b) => (buffers.stop = b));
   }
   if (!("paste" in buffers)) {
     buffers.paste = null;
@@ -161,7 +181,7 @@ export function playSound(id: string, event: SoundEvent, volume: number) {
     // Not decoded yet (very first press right after launch): one-shot HTMLAudio
     // fallback so the cue still plays, and kick off the decode for next time.
     preloadSounds();
-    const url = event === "start" ? startWav : event === "stop" ? stopWav : doneWav;
+    const url = event === "start" ? startWav : event === "stop" ? stopStandardWav : doneWav;
     try {
       const a = new Audio(url);
       a.volume = clamp(volume);

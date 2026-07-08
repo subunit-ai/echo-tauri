@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Modificările se salvează automat",
     "soundStop": "Sunet de eliberare",
-    "soundStopHint": "Se redă atunci când eliberezi tasta (sfârşitul înregistrării) — sunetul de start inversat. Comutabil independent."
+    "soundStopHint": "Se redă atunci când eliberezi tasta (sfârşitul înregistrării) — sunetul de start inversat. Comutabil independent.",
+    "soundStopLow": "Jos",
+    "soundStopFade": "Stingere"
   }
 }

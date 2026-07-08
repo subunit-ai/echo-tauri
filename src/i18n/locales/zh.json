@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "更改会自动保存",
     "soundStop": "释放声音",
-    "soundStopHint": "在您释放按键时播放（录音结束）— 反向的开始音效。可独立切换。"
+    "soundStopHint": "在您释放按键时播放（录音结束）— 反向的开始音效。可独立切换。",
+    "soundStopLow": "低音",
+    "soundStopFade": "淡出"
   }
 }

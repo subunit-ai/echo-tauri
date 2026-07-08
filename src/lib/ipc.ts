@@ -112,9 +112,12 @@ export interface Config {
   sound_paste_enabled: boolean;
   sound_start_id: string;
   sound_paste_id: string;
-  /** Release/stop cue (reversed swoosh on key release) — its own on/off, so it
-   *  no longer rides the start toggle. */
+  /** Release/stop cue on key release — its own on/off, so it no longer rides
+   *  the start toggle. */
   sound_stop_enabled: boolean;
+  /** Which release-cue tone plays ("standard" / "tief" / "ausklang", v0.5.93) —
+   *  ids → lib/sounds.ts `STOP_SOUND_PRESETS`. */
+  sound_stop_id: string;
 
   vocab_enabled: boolean;
   vocabulary: VocabEntry[];

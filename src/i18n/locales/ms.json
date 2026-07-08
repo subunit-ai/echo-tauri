@@ -336,6 +336,8 @@
     "github": "GitHub →",
     "autoSaveNote": "Perubahan disimpan secara automatik",
     "soundStop": "Bunyi Lepasan",
-    "soundStopHint": "Dimainkan apabila anda melepaskan kunci (akhir rakaman) — bunyi awal terbalik. Boleh ditukar secara bebas."
+    "soundStopHint": "Dimainkan apabila anda melepaskan kunci (akhir rakaman) — bunyi awal terbalik. Boleh ditukar secara bebas.",
+    "soundStopLow": "Rendah",
+    "soundStopFade": "Pudar"
   }
 }
