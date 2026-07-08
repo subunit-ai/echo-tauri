@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.96",
+    date: "2026-07-08",
+    title: { de: "Der Orb sitzt über dem Dock — und Abbruch ist kein Fehler", en: "The orb clears the Dock — and cancelling is not an error" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Der Orb (Pille) am unteren Bildschirmrand sitzt jetzt etwas höher und kollidiert nicht mehr mit dem macOS-Dock in Standardgröße. Eigene, per Drag gesetzte Positionen bleiben unverändert.",
+        en: "The orb (pill) anchored at the bottom of the screen now sits slightly higher and no longer collides with a standard-size macOS Dock. Custom drag-set positions are unaffected.",
+      },
+      {
+        kind: "fix",
+        de: "Kurz gedrückt und nichts gesagt? Das ist ein Abbruch — der Orb geht jetzt still zurück in den Ruhezustand statt gelb zu blinken. Die Fehlerfarbe erscheint nur noch, wenn eine echte Aufnahme ohne erkennbare Sprache endet (Mikrofon-Warnung) oder wirklich etwas schiefgeht.",
+        en: "Pressed briefly and said nothing? That's a cancel — the orb now returns quietly to idle instead of flashing yellow. The error color only appears when a real recording ends with no detectable speech (mic warning) or something actually fails.",
+      },
+    ],
+  },
+  {
     version: "0.5.95",
     date: "2026-07-08",
     title: { de: "Das Prompt-Terminal, neu geboren", en: "The Prompt Terminal, reborn" },
