@@ -152,6 +152,11 @@ pub struct Config {
     /// orb. Installs still on the previous default ("sonar") move over ONCE;
     /// any deliberately-chosen style is left untouched.
     pub orb_pill_migrated: bool,
+    /// Materialize animation when the orb (re)appears after being hidden:
+    /// "bloom" (light condenses into the orb — the standard) | "pop" (spring
+    /// scale) | "fade" | "none". New field → container serde(default) hands
+    /// existing installs the default, no migration guard needed.
+    pub orb_appear_anim: String,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
     /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
@@ -401,6 +406,7 @@ impl Default for Config {
             orb_overlay_style: "pill".to_string(),
             orb_style_migrated: false,
             orb_pill_migrated: false,
+            orb_appear_anim: "bloom".to_string(),
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),

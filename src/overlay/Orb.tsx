@@ -210,6 +210,7 @@ export function Orb() {
   const idlePulse = useRef(true);
   const idleMode = useRef<"normal" | "dim" | "hide">("normal");
   const speed = useRef(0.6);
+  const appear = useRef("bloom");
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
   // Which single satellite is expanded (null = just the icon chips). Hovering a
@@ -230,6 +231,7 @@ export function Orb() {
         if (c.orb_idle_mode === "dim" || c.orb_idle_mode === "hide") idleMode.current = c.orb_idle_mode;
         else idleMode.current = "normal";
         if (typeof c.orb_speed === "number") speed.current = c.orb_speed;
+        if (typeof c.orb_appear_anim === "string" && c.orb_appear_anim) appear.current = c.orb_appear_anim;
       })
       .catch(() => {});
     orbQuick().then(setQuick).catch(() => {});
@@ -248,6 +250,7 @@ export function Orb() {
       idlePulse?: boolean;
       idleMode?: "normal" | "dim" | "hide";
       speed?: number;
+      appear?: string;
       quick?: OrbQuick;
     }>("echo://orb-config", (e) => {
       const p = e.payload;
@@ -259,6 +262,7 @@ export function Orb() {
       idlePulse.current = p.idlePulse !== false;
       if (p.idleMode) idleMode.current = p.idleMode;
       if (typeof p.speed === "number") speed.current = p.speed;
+      if (typeof p.appear === "string" && p.appear) appear.current = p.appear;
       if (p.quick) setQuick(p.quick);
     });
     // Engagement from the Rust hit-test loop: shows/hides the islands AND drives
@@ -336,6 +340,7 @@ export function Orb() {
           idlePulse: idlePulse.current,
           idleMode: idleMode.current,
           speed: speed.current,
+          appear: appear.current,
         },
         state.current,
         level.current,

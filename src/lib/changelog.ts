@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.90",
+    date: "2026-07-08",
+    title: { de: "Der Orb leuchtet auf", en: "The orb lights up" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Orb taucht jetzt mit einer Materialize-Animation auf: Licht verdichtet sich zur Pille, die Balken zünden gestaffelt aus dem Aufleuchten — nach dem Start und immer, wenn der Orb aus dem Versteckt-Modus zurückkommt. Vier Varianten unter Einstellungen → Overlay → „Erscheinen“: Aufleuchten (Standard), Pop, Sanft, Aus — mit Test-Button in der Live-Vorschau.",
+        en: "The orb now materializes with an appear animation: light condenses into the pill and the bars ignite out of the bloom — after launch and whenever the orb returns from hidden. Four variants under Settings → Overlay → “Appear”: light bloom (standard), pop, soft fade, off — with a preview button in the live configurator.",
+      },
+      {
+        kind: "improvement",
+        de: "Auch alle anderen Orb-Stile erscheinen jetzt mit dem Aufleuchten statt einfach da zu sein. Orb-Profile speichern die Erscheinen-Einstellung mit.",
+        en: "Every other orb style now materializes with the bloom instead of just being there. Orb profiles store the appear setting too.",
+      },
+    ],
+  },
+  {
     version: "0.5.89",
     date: "2026-07-08",
     title: { de: "Ein Sound zum Loslassen", en: "A sound for letting go" },
