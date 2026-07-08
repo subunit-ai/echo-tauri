@@ -40,6 +40,11 @@ export const CHANGELOG: ChangelogEntry[] = [
         de: "Die Ruhe-Animation der Pille läuft jetzt von links nach rechts (vorher andersherum), und die Farbwechsel zwischen den Zuständen blenden noch weicher über — etwa eine halbe Sekunde statt eines kurzen Schnitts.",
         en: "The pill's idle animation now travels left to right (it ran the other way before), and state color changes cross-fade even more gently — about half a second instead of a quick cut.",
       },
+      {
+        kind: "improvement",
+        de: "Die Pille reagiert jetzt aufs Anfassen: Beim Drüberfahren hebt sie sich dezent an, beim Drücken gibt sie federnd nach. Die Inseln und ihre Menüs übernehmen denselben Liquid-Glass-Stil wie die Pille (neutrales Glas, doppelte Kante) samt Hover- und Klick-Animation — und alles taucht spürbar sanfter auf: das Erscheinen der Pille ist ruhiger geworden, Menüs und Inseln blühen weich auf statt zu schnappen.",
+        en: "The pill now responds to touch: hovering lifts it gently, pressing gives a springy dip. The islands and their menus adopt the pill's liquid-glass style (neutral glass, double edge) along with the same hover and click animations — and everything materializes more softly: the pill's appear is calmer, menus and islands bloom in instead of snapping.",
+      },
     ],
   },
   {

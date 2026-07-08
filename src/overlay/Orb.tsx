@@ -121,18 +121,19 @@ const MODE_COLOR: Record<string, string> = {
 
 // Liquid-Glass (dark, floats over arbitrary screen content). The overlay window
 // is transparent, so `backdrop-filter` blurs the real desktop/app content BEHIND
-// it — a thin translucent navy tint over that blur reads as proper frosted glass
-// (TJ: "noch transparenter, mehr Liquid Glass"). Hairline + top rim keep the edge.
+// it. Pill-v2 vocabulary (TJ: Inseln + Menüs übernehmen den Stil der Pille):
+// NEUTRAL smoke + white 165° gradient — no navy tint; double edge via outer
+// hairline + inner top highlight; soft neutral halo.
 const glassSurface: CSSProperties = {
-  background: "rgba(12,24,46,0.52)",
+  backgroundColor: "rgba(10,14,22,0.34)",
+  backgroundImage:
+    "linear-gradient(165deg, rgba(255,255,255,0.17), rgba(255,255,255,0.035) 48%, rgba(255,255,255,0.07))",
   backdropFilter: "blur(22px) saturate(1.6)",
   WebkitBackdropFilter: "blur(22px) saturate(1.6)",
-  border: "1px solid rgba(165,200,240,0.16)",
+  border: "1px solid rgba(255,255,255,0.28)",
   boxShadow:
-    "inset 0 1px 0 rgba(205,228,255,0.16), 0 16px 38px -18px rgba(0,0,0,0.55)",
+    "inset 0 1px 0 rgba(255,255,255,0.30), inset 0 0 12px rgba(255,255,255,0.04), 0 6px 22px -6px rgba(2,8,20,0.8), 0 16px 38px -18px rgba(0,0,0,0.55)",
 };
-
-const EASE = "cubic-bezier(.2,.8,.2,1)";
 
 const rowStyle = (active: boolean): CSSProperties => ({
   display: "flex",
@@ -478,14 +479,16 @@ export function Orb() {
     cursor: "pointer",
     userSelect: "none",
     padding: 0,
-    transition: `opacity 0.18s ease, transform 0.22s ${EASE}`,
+    // Sanftes Erscheinen (TJ) + Basis für den CSS-Hover-Lift in overlay.css.
+    transition:
+      "opacity 0.26s cubic-bezier(0.22, 1, 0.36, 1), transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s ease",
   };
   // All chips show while engaged and STAY put when their panel opens (the panel
   // blooms beyond the chip, it doesn't replace it) — so the icon you pointed at
   // never disappears and you can hop straight to another chip.
   const chipVis = (vis: boolean): CSSProperties => ({
     opacity: vis ? 1 : 0,
-    transform: vis ? "scale(1)" : "scale(0.7)",
+    transform: vis ? "scale(1)" : "scale(0.86)",
     pointerEvents: vis ? "auto" : "none",
   });
 
@@ -498,7 +501,9 @@ export function Orb() {
     display: "flex",
     flexDirection: "column",
     gap: 2,
-    transition: `opacity 0.22s ${EASE}, transform 0.22s ${EASE}`,
+    // Smooth bloom (TJ: Menüs müssen smooth auftauchen): ease-out-quart,
+    // etwas länger, kleinerer Scale-Sprung — ruhig statt schnappend.
+    transition: "opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)",
   };
   // Only the open panel is visible — keep it mounted so it stays put while the
   // pointer travels from its chip onto it (leaving sets openPanel back to null).
@@ -506,7 +511,7 @@ export function Orb() {
     const on = openPanel === key;
     return {
       opacity: on ? 1 : 0,
-      transform: on ? "scale(1)" : "scale(0.72)",
+      transform: on ? "scale(1)" : "scale(0.88)",
       transformOrigin: origin,
       pointerEvents: on ? "auto" : "none",
     };
@@ -524,11 +529,30 @@ export function Orb() {
           right: GUTTER_X,
           top: GUTTER_TOP,
           bottom: GUTTER_BOTTOM,
+          // Hover-Lift wie ein echtes UI-Element (TJ/Emil): dezent anheben,
+          // schnell und ease-out — Rust-Hover-Poll treibt den State.
+          transform: hover ? "translateY(-3px) scale(1.025)" : "translateY(0) scale(1)",
+          transition: "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1)",
+          willChange: "transform",
         }}
       >
         <canvas
           ref={canvasRef}
           data-tauri-drag-region
+          onPointerDown={() => {
+            // Press-Dip als einmalige Keyframe-Animation statt gehaltenem
+            // State: data-tauri-drag-region kann das pointerup schlucken
+            // (Fenster-Drag) — eine self-completing Animation kann nie
+            // hängen bleiben.
+            canvasRef.current?.animate(
+              [
+                { transform: "scale(1)" },
+                { transform: "scale(0.955)", offset: 0.4 },
+                { transform: "scale(1)" },
+              ],
+              { duration: 240, easing: "cubic-bezier(.3,.7,.3,1)" },
+            );
+          }}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
         />
       </div>
