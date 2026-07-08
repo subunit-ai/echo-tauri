@@ -78,11 +78,15 @@ fn window_size(dim: f64) -> (f64, f64) {
     (dim + 2.0 * GUTTER_X, dim + GUTTER_TOP + GUTTER_BOTTOM)
 }
 
-/// Centre of the orb/pill in LOGICAL screen coordinates — the anchor the prompt
-/// terminal's genie animation flows out of / vanishes into. None while the
-/// overlay isn't up or visible (orb disabled / hidden) — callers fall back to a
-/// plain scale-fade.
-pub fn orb_anchor(app: &AppHandle) -> Option<(f64, f64)> {
+/// Centre of the orb/pill in LOGICAL screen coordinates plus the orb square's
+/// diameter — the anchor the prompt terminal's genie animation flows out of /
+/// vanishes into (the diameter sizes the funnel mouth: the pill capsule is
+/// dim·0.98 wide, see orbRender "pill"). None while the overlay isn't up or
+/// visible (orb disabled / hidden) — callers fall back to a plain scale-fade.
+///
+/// Verified against ground truth 2026-07-08 (CGWindowList: overlay at
+/// 484,601 528×334 → anchor 748,831 = the drawn pill centre on screen).
+pub fn orb_anchor(app: &AppHandle) -> Option<(f64, f64, f64)> {
     let win = app.get_webview_window("overlay")?;
     if !win.is_visible().unwrap_or(false) {
         return None;
@@ -96,7 +100,7 @@ pub fn orb_anchor(app: &AppHandle) -> Option<(f64, f64)> {
     // The orb square sits between the gutters; its centre is the pill centre
     // for every overlay style (the pill renders centred inside the square).
     let dim = (w - 2.0 * GUTTER_X).max(1.0);
-    Some((x + w / 2.0, y + GUTTER_TOP + dim / 2.0))
+    Some((x + w / 2.0, y + GUTTER_TOP + dim / 2.0, dim))
 }
 
 /// Orb diameter (logical px) for a configured size multiplier — the ONE place

@@ -284,8 +284,9 @@ export function Orb() {
       },
     );
     // The prompt terminal genies out of / into the pill — pulse the orb like it
-    // emits/absorbs the window. "out" is delayed so the pulse lands right when
-    // the shrinking window arrives at the pill (flight ≈ 400 ms).
+    // emits/absorbs the window. "out" is delayed so the pulse lands right at
+    // the IMPACT: the magic-lamp flight is ~500 ms and stays fully visible
+    // until it pours into the pill.
     let genieTimer: number | undefined;
     const unGenie = listen<string>("echo://orb-genie", (e) => {
       if (genieTimer) window.clearTimeout(genieTimer);
@@ -301,7 +302,7 @@ export function Orb() {
             { duration: 460, easing: "cubic-bezier(.3,.7,.3,1)" },
           );
         },
-        e.payload === "out" ? 260 : 0,
+        e.payload === "out" ? 400 : 0,
       );
     });
     return () => {

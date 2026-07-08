@@ -302,21 +302,71 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
   );
 }
 
-// ---- Genie animation keyframes ---------------------------------------------
-// A funnel squash: width collapses faster than height on the way down, so the
-// window visibly pours into the pill instead of merely shrinking.
-const GENIE_IN: Keyframe[] = [
-  { transform: "scale(0.02, 0.06)", opacity: 0, easing: "cubic-bezier(.3,.7,.4,1)" },
-  { transform: "scale(0.3, 0.52)", opacity: 0.92, offset: 0.38, easing: "cubic-bezier(.17,.84,.3,1)" },
-  { transform: "scale(1.014, 0.992)", opacity: 1, offset: 0.86, easing: "ease-out" },
-  { transform: "scale(1, 1)", opacity: 1 },
-];
-const GENIE_OUT: Keyframe[] = [
-  { transform: "scale(1, 1)", opacity: 1, easing: "cubic-bezier(.55,.06,.68,.19)" },
-  { transform: "scale(0.44, 0.68)", opacity: 0.94, offset: 0.4, easing: "cubic-bezier(.5,.1,.68,.35)" },
-  { transform: "scale(0.11, 0.26)", opacity: 0.6, offset: 0.78, easing: "ease-in" },
-  { transform: "scale(0.015, 0.05)", opacity: 0 },
-];
+// ---- Genie / magic-lamp animation ------------------------------------------
+// Real suction, not a plain shrink (KDE "Magic Lamp" style): a clip-path
+// polygon morphs the window into a FUNNEL whose mouth sits over the pill
+// (lower points pinch first), then the mass slides down the funnel into it.
+// clip-path applies pre-transform, so the same element carries the funnel
+// morph AND the scale-toward-the-pill — combined they read as the warp.
+//
+// Iron rule learned in v0.5.95 (TJ: "verschwindet im Nichts über der Pille"):
+// opacity stays at 1 essentially ALL the way — an early fade dissolves the
+// window mid-air ~100px short of the pill, because the visible mass only
+// reaches the transform-origin as scale→0. The pill's absorb pulse covers the
+// final snap.
+
+/** Three same-count polygons (14 pts) for the clip morph: full rect → funnel
+ *  (mouth centred over the pill) → thin stream. `py < H/2` flips the funnel
+ *  upward for a pill above the window. */
+function geniePolys(W: number, H: number, px: number, py: number, pillW: number) {
+  const down = py >= H / 2;
+  const cx = Math.min(Math.max(px, 36), W - 36);
+  const mouth1 = Math.max(26, Math.min(pillW * 0.5, 80));
+  const mouth2 = Math.max(10, mouth1 * 0.32);
+  const Y = (y: number) => (down ? y : H - y);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const SIDE_H = [0.3, 0.6, 0.85]; // side sample depths (0 = far edge, 1 = mouth)
+  const build = (k: number, mouth: number) => {
+    const pts: string[] = [];
+    const pinch = (h: number) => Math.pow(h, 1.6) * k; // lower points pull first
+    const push = (x: number, y: number) => pts.push(`${x.toFixed(1)}px ${Y(y).toFixed(1)}px`);
+    // far edge (away from the pill) — narrows mildly, the mass exits mouth-first
+    for (const tx of [0, 0.33, 0.66, 1]) {
+      push(lerp(tx * W, cx + (tx - 0.5) * 2 * (mouth + (W / 2 - mouth) * 0.6), k * 0.5), 0);
+    }
+    for (const h of SIDE_H) push(lerp(W, cx + mouth, pinch(h)), h * H); // right side ↓
+    for (const bx of [1, 0.66, 0.33, 0]) push(lerp(bx * W, cx + (bx - 0.5) * 2 * mouth, k), H); // mouth
+    for (const h of [...SIDE_H].reverse()) push(lerp(0, cx - mouth, pinch(h)), h * H); // left side ↑
+    return `polygon(${pts.join(", ")})`;
+  };
+  return { rect: build(0, mouth1), funnel: build(0.85, mouth1), stream: build(1, mouth2) };
+}
+
+type GeniePoint = { x: number; y: number; w: number };
+
+function genieFrames(dir: "in" | "out", W: number, H: number, p: GeniePoint): Keyframe[] {
+  const polys = geniePolys(W, H, p.x, p.y, p.w);
+  if (dir === "out") {
+    return [
+      { clipPath: polys.rect, transform: "scale(1, 1)", opacity: 1, easing: "cubic-bezier(.55,.06,.68,.19)" },
+      // funnel forms + slight stretch toward the pill (origin sits there)
+      { clipPath: polys.funnel, transform: "scale(0.9, 1.05)", opacity: 1, offset: 0.34, easing: "cubic-bezier(.45,.05,.6,.3)" },
+      // the mass slides down the funnel, accelerating
+      { clipPath: polys.stream, transform: "scale(0.3, 0.56)", opacity: 1, offset: 0.72, easing: "cubic-bezier(.4,.1,.7,.4)" },
+      // …visibly INTO the pill (still fully opaque)
+      { clipPath: polys.stream, transform: "scale(0.035, 0.1)", opacity: 1, offset: 0.96, easing: "linear" },
+      // final 4%: sub-pill-size — a snap the absorb pulse swallows
+      { clipPath: polys.stream, transform: "scale(0.015, 0.04)", opacity: 0 },
+    ];
+  }
+  return [
+    // pours OUT of the pill: visible from the very first frame
+    { clipPath: polys.stream, transform: "scale(0.02, 0.05)", opacity: 1, easing: "cubic-bezier(.2,.7,.35,1)" },
+    { clipPath: polys.funnel, transform: "scale(0.45, 0.7)", opacity: 1, offset: 0.42, easing: "cubic-bezier(.2,.8,.25,1)" },
+    { clipPath: polys.rect, transform: "scale(1.015, 0.985)", opacity: 1, offset: 0.82, easing: "ease-out" },
+    { clipPath: polys.rect, transform: "scale(1, 1)", opacity: 1 },
+  ];
+}
 
 export function PromptConsole() {
   const { t } = useTranslation();
@@ -465,15 +515,23 @@ export function PromptConsole() {
   // whole shell funnels toward the pill. The native vibrancy layer can't follow
   // CSS transforms, so it's switched off for the flight (prompt_set_effects)
   // and back on once the window is at rest.
-  const genieOrigin = async (): Promise<string> => {
+  const genieAnchor = async (): Promise<GeniePoint> => {
+    // No visible orb / lookup failed → funnel to just below the window.
+    const fallback = { x: window.innerWidth / 2, y: window.innerHeight + 150, w: 90 };
     try {
-      const a = await invoke<[number, number] | null>("prompt_genie_anchor");
-      if (!a) return "50% 118%"; // no visible orb → sink softly below the window
+      const a = await invoke<[number, number, number] | null>("prompt_genie_anchor");
+      if (!a) return fallback;
       const win = getCurrentWindow();
       const [pos, sf] = await Promise.all([win.outerPosition(), win.scaleFactor()]);
-      return `${a[0] - pos.x / sf}px ${a[1] - pos.y / sf}px`;
+      // Guard every field: ONE NaN would silently kill the whole clip-path
+      // (the browser drops invalid keyframe values → no funnel, just a shrink).
+      const x = a[0] - pos.x / sf;
+      const y = a[1] - pos.y / sf;
+      const w = a[2];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return fallback;
+      return { x, y, w: Number.isFinite(w) && w > 10 ? w : 90 };
     } catch {
-      return "50% 118%";
+      return fallback;
     }
   };
 
@@ -490,17 +548,16 @@ export function PromptConsole() {
     // entrance; the keyframes own opacity from here on.
     stage.classList.remove("pc-boot");
     stage.classList.add("pc-anim");
-    stage.style.transformOrigin = await genieOrigin();
+    const p = await genieAnchor();
+    stage.style.transformOrigin = `${p.x}px ${p.y}px`;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const frames = reduce
       ? dir === "in"
         ? [{ opacity: 0 }, { opacity: 1 }]
         : [{ opacity: 1 }, { opacity: 0 }]
-      : dir === "in"
-        ? GENIE_IN
-        : GENIE_OUT;
+      : genieFrames(dir, window.innerWidth, window.innerHeight, p);
     const anim = stage.animate(frames, {
-      duration: reduce ? 140 : dir === "in" ? 460 : 400,
+      duration: reduce ? 140 : dir === "in" ? 540 : 500,
       fill: "both",
     });
     genieAnim.current = anim;
