@@ -99,7 +99,15 @@
     "clashCopyPaste": "menee päällekkäin Kopioi/Liitä/Kumoa-toimintojen kanssa",
     "clashWindowSwitch": "menee päällekkäin ikkunan vaihdon kanssa",
     "clashSpotlight": "menee päällekkäin Spotlight/Haku-toiminnon kanssa",
-    "clashTaskManager": "menee päällekkäin Tehtävienhallinnan kanssa"
+    "clashTaskManager": "menee päällekkäin Tehtävienhallinnan kanssa",
+    "pickerTitle": "Valitse pikanäppäin",
+    "pickerBody": "Paina näppäinyhdistelmää — tai napsauta / pidä yhtä näppäintä painettuna (esim. Control tai Option) sanoittamista varten.",
+    "current": "Nykyinen:",
+    "holdDuration": "Pitämisen kesto",
+    "holdDurationHint": "Kuinka kauan yksittäistä näppäintä on pidettävä painettuna ennen kuin sanoittaminen alkaa. Lyhyt napauttaminen ei tee mitään — näppäin pysyy normaalisti käytettävissä.",
+    "permNeeded": "Yksittäisen näppäimen pikanäppäimet vaativat \"Input Monitoring\" -oikeuden. Ota se käyttöön Echo:lle järjestelmäasetuksissa (uudelleenkäynnistys voi olla tarpeen).",
+    "permGrant": "Myönnä pääsy",
+    "done": "Valmis"
   },
   "update": {
     "installing": "Asennetaan päivitystä…",
@@ -326,6 +334,8 @@
     "openFolder": "Avaa kansio",
     "sourceCode": "Lähdekoodi / Julkaisut",
     "github": "GitHub →",
-    "autoSaveNote": "Muutokset tallennetaan automaattisesti"
+    "autoSaveNote": "Muutokset tallennetaan automaattisesti",
+    "soundStop": "Vapautusääni",
+    "soundStopHint": "Toistuu kun vapautat näppäimen (tallennuksen loppu) — käännetty käynnistysääni. Itsenäisesti vaihdettavissa."
   }
 }

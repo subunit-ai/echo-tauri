@@ -99,7 +99,15 @@
     "clashCopyPaste": "entra en conflicte amb Copia/Enganxa/Desfés",
     "clashWindowSwitch": "entra en conflicte amb el canvi de finestra",
     "clashSpotlight": "entra en conflicte amb Spotlight/Cerca",
-    "clashTaskManager": "entra en conflicte amb el Gestor de tasques"
+    "clashTaskManager": "entra en conflicte amb el Gestor de tasques",
+    "pickerTitle": "Trieu una drecera",
+    "pickerBody": "Premeu una combinació de tecles — o feu clic / manteniu premut un sol botó (com Control o Option) per dictar.",
+    "current": "Actual:",
+    "holdDuration": "Durada de la pulsació",
+    "holdDurationHint": "Quant temps es necessita mantenir premesa una tecla individual per a que comenci la dictació. Un toc curt no fa res — la tecla segueix sent usable normalment.",
+    "permNeeded": "Les dreceres d'una sola tecla necessiten el permís \"Monitorig d'entrada\". Activeu-la per a Echo a Configuració del sistema (pot ser necessari reiniciar).",
+    "permGrant": "Concedir accés",
+    "done": "Fet"
   },
   "update": {
     "installing": "S'està instal·lant l'actualització…",
@@ -326,6 +334,8 @@
     "openFolder": "Obre la carpeta",
     "sourceCode": "Codi font / Versions",
     "github": "GitHub →",
-    "autoSaveNote": "Els canvis es desen automàticament"
+    "autoSaveNote": "Els canvis es desen automàticament",
+    "soundStop": "So de soltar",
+    "soundStopHint": "Sona quan soltes la tecla (fi de la gravació) — l'oscil·lació inicial invertida. Independentment commutable."
   }
 }

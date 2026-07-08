@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar } from "../components/Avatar";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyCapture } from "../components/HotkeyCapture";
+import { HotkeyKeyboard } from "../components/HotkeyKeyboard";
 import { ModelManager } from "../components/ModelManager";
 import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
@@ -777,7 +778,12 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                 />
               </Row>
               <Row name={t("settings.hotkey")} hint={t("settings.hotkeyHint")}>
-                <HotkeyCapture value={c.hotkey} onChange={(v) => set("hotkey", v)} />
+                <HotkeyKeyboard
+                  value={c.hotkey}
+                  holdMs={c.hotkey_hold_ms ?? 200}
+                  onChange={(v) => set("hotkey", v)}
+                  onHoldMsChange={(ms) => set("hotkey_hold_ms", ms)}
+                />
               </Row>
               <Row name={t("settings.microphone")}>
                 <Sel
@@ -839,6 +845,18 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                     className="sub-tab"
                     title={t("settings.soundPreview")}
                     onClick={() => playSound(c.sound_paste_id || "standard", "paste", c.sound_volume)}
+                  >
+                    ▶
+                  </button>
+                </div>
+              </Row>
+              <Row name={t("settings.soundStop")} hint={t("settings.soundStopHint")}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle checked={c.sound_stop_enabled} onChange={(v) => set("sound_stop_enabled", v)} />
+                  <button
+                    className="sub-tab"
+                    title={t("settings.soundPreview")}
+                    onClick={() => playSound("standard", "stop", c.sound_volume)}
                   >
                     ▶
                   </button>

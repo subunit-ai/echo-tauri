@@ -99,7 +99,15 @@
     "clashCopyPaste": "krockar med Kopiera/Klistra in/Ångra",
     "clashWindowSwitch": "krockar med fönsterväxling",
     "clashSpotlight": "krockar med Spotlight/Sök",
-    "clashTaskManager": "krockar med Aktivitetshanteraren"
+    "clashTaskManager": "krockar med Aktivitetshanteraren",
+    "pickerTitle": "Välj en genvägstangent",
+    "pickerBody": "Tryck på en tangentbordskombination — eller klicka/håll en enda tangent (t.ex. Control eller Option) för att diktera.",
+    "current": "Aktuell:",
+    "holdDuration": "Hålltid",
+    "holdDurationHint": "Hur länge en enda tangent måste hållas ner innan dikteringen startar. Ett kort tryck gör ingenting — tangenten förblir normalt användbar.",
+    "permNeeded": "Genvägstangenter med en tangent kräver behörigheten \"Input Monitoring\". Aktivera det för Echo i Systeminställningar (omstart kan krävas).",
+    "permGrant": "Bevilja åtkomst",
+    "done": "Klar"
   },
   "update": {
     "installing": "Installerar uppdatering…",
@@ -326,6 +334,8 @@
     "openFolder": "Öppna mapp",
     "sourceCode": "Källkod / Versioner",
     "github": "GitHub →",
-    "autoSaveNote": "Ändringar sparas automatiskt"
+    "autoSaveNote": "Ändringar sparas automatiskt",
+    "soundStop": "Släppljud",
+    "soundStopHint": "Spelas när du släpper tangenten (slutet på inspelningen) — det inverterade startväsandet. Oberoende omväljtbar."
   }
 }

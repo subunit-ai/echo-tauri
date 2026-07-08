@@ -1,0 +1,189 @@
+/* Hotkey picker — the field button + the illuminated-keyboard modal.
+   Leans on the shared design tokens (tokens.css) and reuses .confirm-backdrop. */
+
+.hk-field {
+  min-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--r-chip, 9px);
+  background: var(--fill-weak);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--rim-soft);
+  color: var(--ink, inherit);
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+.hk-field:hover {
+  border-color: color-mix(in srgb, var(--cyan) 45%, var(--glass-edge));
+}
+.hk-empty {
+  opacity: 0.7;
+  font-size: 0.85rem;
+}
+
+.hk-chips {
+  display: inline-flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.hk-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2, inherit);
+  border-radius: var(--r-chip, 8px);
+  background: var(--fill-weak);
+  border: 1px solid var(--glass-edge);
+}
+.hk-chip.is-lit-chip {
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 12%, var(--fill-weak));
+  border-color: color-mix(in srgb, var(--cyan) 55%, transparent);
+}
+
+/* ── Modal card ── */
+.hk-card {
+  width: min(680px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 26px 26px 22px;
+  border-radius: var(--r-card, 18px);
+  background: var(--glass, rgba(28, 30, 36, 0.9));
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+}
+.hk-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--ink, inherit);
+}
+.hk-sub {
+  margin: 0 0 4px;
+  max-width: 46ch;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink3, inherit);
+  opacity: 0.85;
+}
+
+.hk-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+}
+.hk-current-label {
+  font-size: 0.8rem;
+  color: var(--ink3, inherit);
+  opacity: 0.8;
+}
+
+/* ── Hold-duration slider ── */
+.hk-hold {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r, 12px);
+  background: var(--fill-weak);
+  border: 1px solid var(--glass-edge);
+}
+.hk-hold-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--ink2, inherit);
+}
+.hk-hold-val {
+  font-variant-numeric: tabular-nums;
+  color: var(--cyan-ink);
+  font-weight: 600;
+}
+.hk-hold input[type="range"] {
+  width: 100%;
+}
+.hk-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--ink3, inherit);
+  opacity: 0.8;
+}
+
+/* ── Permission notice ── */
+.hk-perm {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r, 12px);
+  background: color-mix(in srgb, #ffc450 12%, var(--fill-weak));
+  border: 1px solid color-mix(in srgb, #ffc450 45%, transparent);
+}
+.hk-perm-msg {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink2, inherit);
+}
+.hk-perm-btn {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: var(--r-chip, 9px);
+  background: color-mix(in srgb, #ffc450 22%, transparent);
+  border: 1px solid color-mix(in srgb, #ffc450 60%, transparent);
+  color: var(--ink, inherit);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.hk-perm-btn:hover {
+  background: color-mix(in srgb, #ffc450 32%, transparent);
+}
+
+.hk-warn {
+  margin: 0;
+  max-width: 46ch;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #ffc450;
+}
+
+.hk-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+.hk-done {
+  padding: 8px 22px;
+  border-radius: var(--r-chip, 10px);
+  background: color-mix(in srgb, var(--cyan) 20%, var(--fill-weak));
+  border: 1px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+  color: var(--cyan-ink);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.hk-done:hover {
+  background: color-mix(in srgb, var(--cyan) 30%, var(--fill-weak));
+}

@@ -99,7 +99,15 @@
     "clashCopyPaste": "Kopyala/Yapıştır/Geri al ile çakışıyor",
     "clashWindowSwitch": "pencere değiştirmeyle çakışıyor",
     "clashSpotlight": "Spotlight/Arama ile çakışıyor",
-    "clashTaskManager": "Görev Yöneticisi ile çakışıyor"
+    "clashTaskManager": "Görev Yöneticisi ile çakışıyor",
+    "pickerTitle": "Kısayol seçin",
+    "pickerBody": "Bir tuş kombinasyonuna basın — veya bir tuşa (örneğin Control veya Option) tıklayın/basılı tutun.",
+    "current": "Mevcut:",
+    "holdDuration": "Basılı tutma süresi",
+    "holdDurationHint": "Dikte başlamadan önce tek bir tuşun ne kadar süre basılı tutulması gerektiği. Kısa bir basış hiçbir şey yapmaz — tuş normal şekilde kullanılabilir kalır.",
+    "permNeeded": "Tek tuşlu kısayollar \"Giriş İzleme\" izni gerektirir. Sistem Ayarları'nda Echo için etkinleştirin (yeniden başlatma gerekebilir).",
+    "permGrant": "Erişim izni ver",
+    "done": "Bitti"
   },
   "update": {
     "installing": "Güncelleme yükleniyor…",
@@ -326,6 +334,8 @@
     "openFolder": "Klasörü aç",
     "sourceCode": "Kaynak / Sürümler",
     "github": "GitHub →",
-    "autoSaveNote": "Değişiklikler otomatik olarak kaydedilir"
+    "autoSaveNote": "Değişiklikler otomatik olarak kaydedilir",
+    "soundStop": "Bırakma sesi",
+    "soundStopHint": "Tuşu bıraktığınızda çalar (kaydın sonu) — ters çevrilmiş başlangıç sesi. Bağımsız olarak açılıp kapatılabilir."
   }
 }

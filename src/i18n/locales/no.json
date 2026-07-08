@@ -99,7 +99,15 @@
     "clashCopyPaste": "kolliderer med Kopier/Lim inn/Angre",
     "clashWindowSwitch": "kolliderer med vindusbytte",
     "clashSpotlight": "kolliderer med Spotlight/Søk",
-    "clashTaskManager": "kolliderer med Oppgavebehandling"
+    "clashTaskManager": "kolliderer med Oppgavebehandling",
+    "pickerTitle": "Velg hurtigtast",
+    "pickerBody": "Trykk på en tastkombinasjon — eller klikk/hold ned en enkelt tast (f.eks. Control eller Option) for å diktere.",
+    "current": "Nåværende:",
+    "holdDuration": "Holdevarighet",
+    "holdDurationHint": "Hvor lenge en enkelt tast må holdes ned før diktatet starter. Et kort trykk gjør ingenting — tasten forblir normalt brukbar.",
+    "permNeeded": "Hurtigtaster med én tast krever \"Input Monitoring\" tillatelse. Aktiver det for Echo i Systeminnstillinger (omstart kan være nødvendig).",
+    "permGrant": "Gi tilgang",
+    "done": "Ferdig"
   },
   "update": {
     "installing": "Installerer oppdatering…",
@@ -326,6 +334,8 @@
     "openFolder": "Åpne mappe",
     "sourceCode": "Kildekode / Utgivelser",
     "github": "GitHub →",
-    "autoSaveNote": "Endringer lagres automatisk"
+    "autoSaveNote": "Endringer lagres automatisk",
+    "soundStop": "Slipplyd",
+    "soundStopHint": "Avspilles når du slipper tasten (slutt på opptak) — omvendt startlyden. Uavhengig bytting."
   }
 }

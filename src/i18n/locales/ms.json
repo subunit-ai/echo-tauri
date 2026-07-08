@@ -99,7 +99,15 @@
     "clashCopyPaste": "bertembung dengan Copy/Paste/Undo",
     "clashWindowSwitch": "bertembung dengan penukaran tetingkap",
     "clashSpotlight": "bertembung dengan Spotlight/Carian",
-    "clashTaskManager": "bertembung dengan Task Manager"
+    "clashTaskManager": "bertembung dengan Task Manager",
+    "pickerTitle": "Pilih pintasan pantas",
+    "pickerBody": "Tekan kombinasi kunci — atau klik / tahan satu kunci (misalnya Control atau Option) untuk mendiktekan.",
+    "current": "Semasa:",
+    "holdDuration": "Tempoh penahanan",
+    "holdDurationHint": "Berapa lama satu kunci harus dipegang sebelum pendiktean dimulai. Ketukan ringkas tidak melakukan apa-apa — kunci tetap dapat digunakan seperti biasa.",
+    "permNeeded": "Pintasan pantas kunci tunggal memerlukan kebenaran \"Input Monitoring\". Dayakan untuk Echo dalam Tetapan Sistem (permulaan semula mungkin diperlukan).",
+    "permGrant": "Berikan akses",
+    "done": "Selesai"
   },
   "update": {
     "installing": "Memasang kemas kini…",
@@ -326,6 +334,8 @@
     "openFolder": "Buka folder",
     "sourceCode": "Sumber / Keluaran",
     "github": "GitHub →",
-    "autoSaveNote": "Perubahan disimpan secara automatik"
+    "autoSaveNote": "Perubahan disimpan secara automatik",
+    "soundStop": "Bunyi Lepasan",
+    "soundStopHint": "Dimainkan apabila anda melepaskan kunci (akhir rakaman) — bunyi awal terbalik. Boleh ditukar secara bebas."
   }
 }

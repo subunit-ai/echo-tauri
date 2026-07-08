@@ -11,6 +11,9 @@ export interface VocabEntry {
 
 export interface Config {
   hotkey: string;
+  /** Hold-duration threshold (ms) before a single-key/-modifier hotkey arms
+   *  dictation. Ignored for multi-key combos, which fire instantly. */
+  hotkey_hold_ms: number;
   mode: string; // local | subunit
   local_model: string;
   local_device: string;
@@ -109,6 +112,9 @@ export interface Config {
   sound_paste_enabled: boolean;
   sound_start_id: string;
   sound_paste_id: string;
+  /** Release/stop cue (reversed swoosh on key release) — its own on/off, so it
+   *  no longer rides the start toggle. */
+  sound_stop_enabled: boolean;
 
   vocab_enabled: boolean;
   vocabulary: VocabEntry[];

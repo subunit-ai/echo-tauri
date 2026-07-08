@@ -7,7 +7,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
 };
@@ -35,9 +35,27 @@ pub fn hotkey_set_suspended(app: AppHandle, suspended: bool) {
     log::info!("hotkey suspended={suspended}");
     if suspended {
         let _ = app.global_shortcut().unregister_all();
+        crate::hold_key::stop();
     } else {
         reregister_from_config(&app);
     }
+}
+
+/// Is the OS Input-Monitoring grant (needed for single-key/-modifier hold
+/// hotkeys) in place? The Settings picker uses this to show a "grant access"
+/// hint when the user chooses a lone key that couldn't be armed.
+#[tauri::command]
+pub fn hotkey_hold_permission() -> bool {
+    crate::hold_key::has_permission()
+}
+
+/// Prompt for Input Monitoring, then re-register so a pending single-key hotkey
+/// arms as soon as the grant lands. Returns whether it's already granted.
+#[tauri::command]
+pub fn hotkey_request_hold_permission(app: AppHandle) -> bool {
+    let granted = crate::hold_key::request_permission();
+    reregister_from_config(&app);
+    granted
 }
 
 fn now_ms() -> u64 {
@@ -48,19 +66,25 @@ fn now_ms() -> u64 {
 }
 
 pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
-    let (combo, prompt_combo) = {
+    let (combo, prompt_combo, hold_ms) = {
         let state = app.state::<AppState>();
         let c = state.config.lock();
-        (c.hotkey.clone(), c.prompt_console_hotkey.clone())
+        (
+            c.hotkey.clone(),
+            c.prompt_console_hotkey.clone(),
+            c.hotkey_hold_ms,
+        )
     };
     let _ = app.global_shortcut().unregister_all();
+    crate::hold_key::stop();
     if SUSPENDED.load(Ordering::SeqCst) {
         return Ok(()); // intro owns the keyboard — stay unregistered
     }
 
     // Prompt-Console hotkey first, best-effort: a bad or conflicting combo must
     // never take the RECORD hotkey down with it. Skipped when it duplicates the
-    // record combo (record wins — see on_event's dispatch).
+    // record combo (record wins — see on_event's dispatch). Always a multi-key
+    // combo, so it uses the OS plugin regardless of the record hotkey's kind.
     if !prompt_combo.trim().is_empty() {
         match parse_shortcut(&prompt_combo) {
             Some(sc) if parse_shortcut(&combo) == Some(sc) => {
@@ -72,6 +96,22 @@ pub fn register_from_config(app: &AppHandle) -> anyhow::Result<()> {
                 }
             }
             None => log::warn!("could not parse prompt-console hotkey: {prompt_combo}"),
+        }
+    }
+
+    // A lone key/modifier (Control, Option, F6, …) can't be an OS accelerator —
+    // and we want it to keep working normally besides — so it rides the
+    // listen-only event tap instead of the plugin.
+    if let Some(target) = crate::hold_key::parse_target(&combo) {
+        match crate::hold_key::start(app, target, hold_ms) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // Almost always: Input Monitoring not granted yet. Tell the UI so
+                // it can prompt; the hotkey arms itself the moment access lands.
+                log::warn!("hold hotkey {combo} not armed: {e}");
+                let _ = app.emit("hold-hotkey-needs-permission", combo.clone());
+                anyhow::bail!("hold hotkey {combo} needs Input Monitoring: {e}");
+            }
         }
     }
 

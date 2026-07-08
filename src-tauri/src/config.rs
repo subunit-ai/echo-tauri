@@ -56,6 +56,13 @@ fn default_true() -> bool {
     true
 }
 
+/// Default hold-duration threshold for single-key hotkeys (ms). Long enough that
+/// an incidental tap of Control/Option never arms dictation, short enough to feel
+/// instant when you mean it.
+fn default_hold_ms() -> u32 {
+    200
+}
+
 /// Bump when adding new default vocab terms/aliases that EXISTING (already-seeded)
 /// users should receive. `merge_default_vocab_updates` runs once per bump and adds
 /// only what's missing — see there. v1 = 2026-05-28 batch (Syncore/Citron/Claude
@@ -106,6 +113,15 @@ fn default_vocabulary() -> Vec<VocabEntry> {
 #[serde(default)]
 pub struct Config {
     pub hotkey: String,
+    /// Hold-duration threshold (ms) for a SINGLE-key/-modifier hotkey: how long
+    /// the lone key (e.g. Control or Option) must be held before dictation arms.
+    /// A shorter tap does nothing (and — because the key is only *observed*, never
+    /// swallowed — still works normally, so Ctrl+C etc. are unaffected). Ignored
+    /// for multi-key combos (`<ctrl>+<space>`), which fire instantly via the OS
+    /// shortcut. Container `#[serde(default)]` seeds existing configs to the
+    /// Default (200); combos never read it, so no migration is needed.
+    #[serde(default = "default_hold_ms")]
+    pub hotkey_hold_ms: u32,
     /// "local" | "subunit". Subunit (the DSGVO cloud) and Local (on-device
     /// whisper.cpp) are the supported engines. The former Groq-proxied
     /// "superfast" tier was removed — that infrastructure was torn down.
@@ -315,6 +331,12 @@ pub struct Config {
     pub sound_paste_enabled: bool,
     pub sound_start_id: String,
     pub sound_paste_id: String,
+    /// Release/stop cue (the reversed "standard" swoosh played natively on key
+    /// release — see sound.rs::play_stop). Its OWN toggle: it used to ride the
+    /// start toggle, so turning off the paste sound left it stuck on. Default true
+    /// preserves the shipped behaviour, but it's now independently silenceable.
+    #[serde(default = "default_true")]
+    pub sound_stop_enabled: bool,
     /// One-time guard: seed the two new toggles from the legacy `sound_enabled` once.
     pub sound_split_migrated: bool,
 
@@ -383,6 +405,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             hotkey: "<ctrl>+<space>".to_string(),
+            hotkey_hold_ms: default_hold_ms(),
             mode: "local".to_string(),
             local_model: "base".to_string(),
             local_fallback_autofetch: true,
@@ -483,6 +506,7 @@ impl Default for Config {
             sound_paste_enabled: true,
             sound_start_id: "standard".to_string(),
             sound_paste_id: "standard".to_string(),
+            sound_stop_enabled: true,
             sound_split_migrated: false,
 
             vocab_enabled: true,

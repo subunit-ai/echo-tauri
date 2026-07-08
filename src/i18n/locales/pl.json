@@ -99,7 +99,15 @@
     "clashCopyPaste": "koliduje z Kopiuj/Wklej/Cofnij",
     "clashWindowSwitch": "koliduje z przełączaniem okien",
     "clashSpotlight": "koliduje ze Spotlight/wyszukiwaniem",
-    "clashTaskManager": "koliduje z Menedżerem zadań"
+    "clashTaskManager": "koliduje z Menedżerem zadań",
+    "pickerTitle": "Wybierz skrót",
+    "pickerBody": "Naciśnij kombinację klawiszy — lub kliknij/przytrzymaj jeden klawisz (np. Control lub Option), aby podyktować.",
+    "current": "Bieżący:",
+    "holdDuration": "Czas przytrzymania",
+    "holdDurationHint": "Jak długo należy przytrzymywać pojedynczy klawisz, zanim zacznie się dyktowanie. Krótkie naciśnięcie nic nie robi — klawisz pozostaje normalnie użyteczny.",
+    "permNeeded": "Skróty z jednym klawiszem wymagają uprawnienia \"Monitorowanie wejścia\". Włącz to dla Echo w Ustawieniach systemowych (może być wymagane ponowne uruchomienie).",
+    "permGrant": "Udziel dostępu",
+    "done": "Gotowe"
   },
   "update": {
     "installing": "Instalowanie aktualizacji…",
@@ -326,6 +334,8 @@
     "openFolder": "Otwórz folder",
     "sourceCode": "Źródła / Wydania",
     "github": "GitHub →",
-    "autoSaveNote": "Zmiany są zapisywane automatycznie"
+    "autoSaveNote": "Zmiany są zapisywane automatycznie",
+    "soundStop": "Dźwięk zwolnienia",
+    "soundStopHint": "Odtwarza się po zwolnieniu klawisza (koniec nagrania) — odwrócony dźwięk startu. Niezależnie przełączalny."
   }
 }

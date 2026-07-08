@@ -15,6 +15,7 @@ mod diarize;
 mod events;
 mod hardware;
 mod help; // "Echo fragen" — grounded help assistant over the Abo backend
+mod hold_key; // lone key/modifier hold-to-dictate via listen-only CGEventTap (macOS)
 mod hotkey;
 mod http; // shared pooled HTTP client + prewarm for the cloud path
 mod inject;
@@ -182,6 +183,8 @@ pub fn run() {
             intro::intro_stream_start,
             intro::intro_stream_stop,
             hotkey::hotkey_set_suspended,
+            hotkey::hotkey_hold_permission,
+            hotkey::hotkey_request_hold_permission,
             presets::list_orb_profiles,
             presets::save_orb_profile,
             presets::apply_orb_profile,

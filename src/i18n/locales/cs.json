@@ -99,7 +99,15 @@
     "clashCopyPaste": "koliduje s Kopírovat/Vložit/Zpět",
     "clashWindowSwitch": "koliduje s přepínáním oken",
     "clashSpotlight": "koliduje se Spotlight/hledáním",
-    "clashTaskManager": "koliduje se Správcem úloh"
+    "clashTaskManager": "koliduje se Správcem úloh",
+    "pickerTitle": "Vyberte klávesovou zkratku",
+    "pickerBody": "Stiskněte kombinaci kláves — nebo klikněte / podržte jednu klávesu (např. Control nebo Option) pro diktování.",
+    "current": "Aktuální:",
+    "holdDuration": "Doba držení",
+    "holdDurationHint": "Jak dlouho se musí jednotlivá klávesa držet, než se spustí diktování. Krátké klepnutí nedělá nic — klávesa zůstává normálně použitelná.",
+    "permNeeded": "Jednoklávisové zkratky vyžadují oprávnění \"Monitorování vstupu\". Povolte je pro Echo v Nastavení systému (může být nutné restartování).",
+    "permGrant": "Udělit přístup",
+    "done": "Hotovo"
   },
   "update": {
     "installing": "Instalace aktualizace…",
@@ -326,6 +334,8 @@
     "openFolder": "Otevřít složku",
     "sourceCode": "Zdroj / Vydání",
     "github": "GitHub →",
-    "autoSaveNote": "Změny se ukládají automaticky"
+    "autoSaveNote": "Změny se ukládají automaticky",
+    "soundStop": "Zvuk uvolnění",
+    "soundStopHint": "Přehraje se při uvolnění klávesy (konec nahrávání) — obrácený úvodní zvuk. Nezávisle přepínatelný."
   }
 }

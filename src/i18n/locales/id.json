@@ -99,7 +99,15 @@
     "clashCopyPaste": "berbenturan dengan Copy/Paste/Undo",
     "clashWindowSwitch": "berbenturan dengan perpindahan jendela",
     "clashSpotlight": "berbenturan dengan Spotlight/Pencarian",
-    "clashTaskManager": "berbenturan dengan Task Manager"
+    "clashTaskManager": "berbenturan dengan Task Manager",
+    "pickerTitle": "Pilih pintasan",
+    "pickerBody": "Tekan kombinasi tombol — atau klik / tahan satu tombol (misalnya Control atau Option) untuk mendikte.",
+    "current": "Saat ini:",
+    "holdDuration": "Durasi tahan",
+    "holdDurationHint": "Berapa lama satu tombol harus ditahan sebelum diktasi dimulai. Tekan singkat tidak melakukan apa pun — tombol tetap dapat digunakan secara normal.",
+    "permNeeded": "Pintasan tombol tunggal memerlukan izin \"Input Monitoring\". Aktifkan untuk Echo di Pengaturan Sistem (restart mungkin diperlukan).",
+    "permGrant": "Berikan akses",
+    "done": "Selesai"
   },
   "update": {
     "installing": "Memasang pembaruan…",
@@ -326,6 +334,8 @@
     "openFolder": "Buka folder",
     "sourceCode": "Sumber / Rilis",
     "github": "GitHub →",
-    "autoSaveNote": "Perubahan disimpan otomatis"
+    "autoSaveNote": "Perubahan disimpan otomatis",
+    "soundStop": "Suara pelepasan",
+    "soundStopHint": "Diputar saat Anda melepaskan tombol (akhir perekaman) — suara awal terbalik. Dapat dialihkan secara independen."
   }
 }

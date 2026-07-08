@@ -99,7 +99,15 @@
     "clashCopyPaste": "entra en conflicto con Copiar/Pegar/Deshacer",
     "clashWindowSwitch": "entra en conflicto con el cambio de ventana",
     "clashSpotlight": "entra en conflicto con Spotlight/Buscar",
-    "clashTaskManager": "entra en conflicto con el Administrador de tareas"
+    "clashTaskManager": "entra en conflicto con el Administrador de tareas",
+    "pickerTitle": "Elige un atajo",
+    "pickerBody": "Pulsa una combinación de teclas — o haz clic / mantén presionada una única tecla (p. ej. Control u Option) para dictar.",
+    "current": "Actual:",
+    "holdDuration": "Duración del pulso",
+    "holdDurationHint": "Cuánto tiempo debe mantenerse presionada una tecla individual antes de que comience el dictado. Una pulsación corta no hace nada — la tecla sigue siendo utilizable normalmente.",
+    "permNeeded": "Los atajos de una sola tecla necesitan el permiso \"Monitoreo de entrada\". Actívalo para Echo en Configuración del sistema (puede ser necesario reiniciar).",
+    "permGrant": "Otorgar acceso",
+    "done": "Hecho"
   },
   "update": {
     "installing": "Instalando actualización…",
@@ -326,6 +334,8 @@
     "openFolder": "Abrir carpeta",
     "sourceCode": "Código / Versiones",
     "github": "GitHub →",
-    "autoSaveNote": "Los cambios se guardan automáticamente"
+    "autoSaveNote": "Los cambios se guardan automáticamente",
+    "soundStop": "Sonido al soltar",
+    "soundStopHint": "Se reproduce al soltar la tecla (fin de la grabación) — el sonido de inicio invertido. Independientemente conmutable."
   }
 }

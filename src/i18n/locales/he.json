@@ -99,7 +99,15 @@
     "clashCopyPaste": "מתנגש עם העתקה/הדבקה/ביטול",
     "clashWindowSwitch": "מתנגש עם החלפת חלונות",
     "clashSpotlight": "מתנגש עם Spotlight/חיפוש",
-    "clashTaskManager": "מתנגש עם מנהל המשימות"
+    "clashTaskManager": "מתנגש עם מנהל המשימות",
+    "pickerTitle": "בחרו קיצור דרך",
+    "pickerBody": "לחצו על שילוב מקשים — או לחצו / החזיקו מקש יחיד (כמו Control או Option) כדי להכתיב.",
+    "current": "נוכחי:",
+    "holdDuration": "משך ההחזקה",
+    "holdDurationHint": "כמה זמן יש להחזיק מקש בודד לפני תחילת הקטעה. הקשה קצרה לא עושה כלום — המקש נשאר שמיש כרגיל.",
+    "permNeeded": "קיצורי דרך בעלי מקש יחיד זקוקים להרשאת \"Input Monitoring\". הפעילו זאת עבור Echo בהגדרות המערכת (ייתכן שנדרשת הפעלה מחדש).",
+    "permGrant": "מתן גישה",
+    "done": "בוצע"
   },
   "update": {
     "installing": "מתקין עדכון…",
@@ -326,6 +334,8 @@
     "openFolder": "פתח תיקייה",
     "sourceCode": "קוד מקור / גרסאות",
     "github": "GitHub →",
-    "autoSaveNote": "השינויים נשמרים אוטומטית"
+    "autoSaveNote": "השינויים נשמרים אוטומטית",
+    "soundStop": "צליל שחרור",
+    "soundStopHint": "מתרגם כשאתה משחרר את המקש (סוף הקלטה) — צליל ההתחלה הפוך. ניתן להחליף באופן עצמאי."
   }
 }

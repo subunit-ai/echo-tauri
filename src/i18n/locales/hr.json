@@ -99,7 +99,15 @@
     "clashCopyPaste": "u koliziji s Kopiraj/Zalijepi/Poništi",
     "clashWindowSwitch": "u koliziji s prebacivanjem prozora",
     "clashSpotlight": "u koliziji sa Spotlight/Pretraživanjem",
-    "clashTaskManager": "u koliziji s Upraviteljem zadataka"
+    "clashTaskManager": "u koliziji s Upraviteljem zadataka",
+    "pickerTitle": "Odaberite prečac",
+    "pickerBody": "Pritisnite kombinaciju tipki — ili kliknite / dugo pritisnite jednu tipku (npr. Control ili Option) za diktiranje.",
+    "current": "Trenutna:",
+    "holdDuration": "Trajanje držanja",
+    "holdDurationHint": "Koliko dugo trebate drži jednu tipku prije nego što počne diktiranje. Kratko dodirivanje ne čini ništa — tipka ostaje normalno upotrebljiva.",
+    "permNeeded": "Prečaci s jednom tipkom trebaju dozvolu \"Nadzor unosa\". Omogućite je za Echo u Postavkama sustava (restart može biti potreban).",
+    "permGrant": "Odobri pristup",
+    "done": "Gotovo"
   },
   "update": {
     "installing": "Instaliranje ažuriranja…",
@@ -326,6 +334,8 @@
     "openFolder": "Otvori mapu",
     "sourceCode": "Izvor / Izdanja",
     "github": "GitHub →",
-    "autoSaveNote": "Promjene se spremaju automatski"
+    "autoSaveNote": "Promjene se spremaju automatski",
+    "soundStop": "Zvuk puštanja",
+    "soundStopHint": "Reproduciraj se kada otpustiš tipku (kraj snimanja) — obrnuti zvuk pokretanja. Samostalno prebacivanje."
   }
 }

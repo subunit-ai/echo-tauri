@@ -444,6 +444,19 @@
     transform 0.12s var(--ease-glass),
     background 0.12s var(--ease-glass);
 }
+.vk-key.is-clickable {
+  cursor: pointer;
+}
+.vk-key.is-clickable:hover {
+  color: var(--cyan-ink);
+  border-color: color-mix(in srgb, var(--cyan) 55%, transparent);
+  background: color-mix(in srgb, var(--cyan) 8%, var(--fill-weak));
+}
+.vk-key.is-clickable:focus-visible {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cyan) 40%, transparent);
+}
 .vk-key.is-pressed {
   color: var(--cyan-ink);
   border-color: var(--cyan);

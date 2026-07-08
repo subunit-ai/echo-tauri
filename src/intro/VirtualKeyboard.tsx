@@ -83,6 +83,7 @@ export function VirtualKeyboard({
   pressed,
   highlighted,
   sweepTick = 0,
+  onKeyPick,
 }: {
   /** Keys physically held right now — bright glow + depress. */
   pressed: Set<string>;
@@ -90,12 +91,21 @@ export function VirtualKeyboard({
   highlighted: Set<string>;
   /** Increment to (re)trigger the light wave sweeping across the keys. */
   sweepTick?: number;
+  /** When set, keys become clickable — clicking one emits its token id (e.g.
+   *  "ctrl", "f6"). Used by the Settings picker so a lone modifier can be chosen
+   *  by pointer. Omitted in the intro, where the keyboard is display-only. */
+  onKeyPick?: (id: string) => void;
 }) {
   const rows = useMemo(() => layoutRows(i18n.language.startsWith("de")), []);
+  const interactive = !!onKeyPick;
 
   // Column position per key (sum of widths to its left) drives the wave delay.
   return (
-    <div className={`vk ${sweepTick > 0 ? "is-sweeping" : ""}`} key={sweepTick} aria-hidden>
+    <div
+      className={`vk ${sweepTick > 0 ? "is-sweeping" : ""} ${interactive ? "is-interactive" : ""}`}
+      key={sweepTick}
+      aria-hidden={!interactive}
+    >
       {rows.map((row, ri) => {
         let col = 0;
         return (
@@ -104,10 +114,12 @@ export function VirtualKeyboard({
               const myCol = col;
               col += k.w ?? 1;
               const decorative = k.id.startsWith("_");
+              const clickable = interactive && !decorative;
               const cls = [
                 "vk-key",
                 !decorative && pressed.has(k.id) ? "is-pressed" : "",
                 !decorative && highlighted.has(k.id) ? "is-lit" : "",
+                clickable ? "is-clickable" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -116,6 +128,19 @@ export function VirtualKeyboard({
                   className={cls}
                   key={`${k.id}-${ki}`}
                   style={{ "--w": k.w ?? 1, "--col": myCol } as React.CSSProperties}
+                  role={clickable ? "button" : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  onClick={clickable ? () => onKeyPick!(k.id) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onKeyPick!(k.id);
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   {k.label}
                 </div>

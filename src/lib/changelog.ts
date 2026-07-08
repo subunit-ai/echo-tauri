@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.91",
+    date: "2026-07-08",
+    title: { de: "Eine einzelne Taste zum Diktieren", en: "A single key to dictate" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Halte jetzt eine einzelne Taste zum Diktieren — Control oder die Wahltaste ganz allein. Klick in den Einstellungen → Diktat auf das Hotkey-Feld, und die leuchtende Tastatur aus dem Intro klappt auf: eine Kombination drücken oder eine einzelne Taste wählen. Dazu ein Regler für die Haltedauer — wie lange du die Taste halten musst, bevor die Aufnahme startet. Kurzes Antippen löst nichts aus, und die Taste bleibt normal nutzbar (Control kopiert weiter). Einzeltasten brauchen einmalig die macOS-Freigabe „Eingabeüberwachung“.",
+        en: "Hold a single key to dictate now — Control or Option all by itself. In Settings → Dictation, click the hotkey field and the illuminated keyboard from the intro drops in: press a combo or pick a single key. Plus a hold-duration slider — how long to hold before recording starts. A short tap does nothing, and the key stays usable as normal (Control still copies). Single keys need the one-time macOS “Input Monitoring” permission.",
+      },
+      {
+        kind: "fix",
+        de: "Der Loslass-Sound lässt sich jetzt eigenständig ausschalten. Er hing vorher am Start-Sound-Schalter — wer den Einfüge-Sound abgeschaltet hatte, hörte ihn trotzdem bei jedem Loslassen. Jetzt hat er seinen eigenen Schalter unter Einstellungen → Sounds.",
+        en: "The release sound can now be turned off on its own. It used to ride the start-sound toggle, so silencing the paste sound still left it playing on every release. It has its own switch now under Settings → Sounds.",
+      },
+    ],
+  },
+  {
     version: "0.5.90",
     date: "2026-07-08",
     title: { de: "Der Orb leuchtet auf", en: "The orb lights up" },

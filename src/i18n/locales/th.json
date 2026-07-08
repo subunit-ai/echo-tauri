@@ -99,7 +99,15 @@
     "clashCopyPaste": "ทับซ้อนกับ Copy/Paste/Undo",
     "clashWindowSwitch": "ทับซ้อนกับการสลับหน้าต่าง",
     "clashSpotlight": "ทับซ้อนกับ Spotlight/Search",
-    "clashTaskManager": "ทับซ้อนกับ Task Manager"
+    "clashTaskManager": "ทับซ้อนกับ Task Manager",
+    "pickerTitle": "เลือกปุ่มลัด",
+    "pickerBody": "กดปุ่มผสม — หรือคลิก/ค้างตัวปุ่มเดียว (เช่น Control หรือ Option) เพื่อใช้คำสั่ง",
+    "current": "ปัจจุบัน:",
+    "holdDuration": "ระยะเวลาการค้าง",
+    "holdDurationHint": "นานเท่าใดที่ต้องค้างตัวปุ่มเดียวก่อนที่คำสั่งจะเริ่มต้น การแตะสั้นๆ ไม่ทำอะไร — ปุ่มยังคงใช้ได้ตามปกติ",
+    "permNeeded": "ปุ่มลัดแบบปุ่มเดียวต้องการสิทธิ \"Input Monitoring\" เปิดใช้งานสำหรับ Echo ในการตั้งค่าระบบ (อาจต้องรีสตาร์ท)",
+    "permGrant": "อนุญาตการเข้าถึง",
+    "done": "เสร็จสิ้น"
   },
   "update": {
     "installing": "กำลังติดตั้งอัปเดต…",
@@ -326,6 +334,8 @@
     "openFolder": "เปิดโฟลเดอร์",
     "sourceCode": "ซอร์ส / รุ่นที่เผยแพร่",
     "github": "GitHub →",
-    "autoSaveNote": "การเปลี่ยนแปลงถูกบันทึกโดยอัตโนมัติ"
+    "autoSaveNote": "การเปลี่ยนแปลงถูกบันทึกโดยอัตโนมัติ",
+    "soundStop": "เสียงปล่อย",
+    "soundStopHint": "เล่นเมื่อคุณปล่อยคีย์ (สิ้นสุดการบันทึก) — เสียงเริ่มต้นที่กลับหัว อาจเปลี่ยนแปลงได้อย่างอิสระ"
   }
 }

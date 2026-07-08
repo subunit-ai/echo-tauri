@@ -209,7 +209,15 @@
     "clashCopyPaste": "kollidiert mit Kopieren/Einfügen/Rückgängig",
     "clashWindowSwitch": "kollidiert mit dem Fensterwechsel",
     "clashSpotlight": "kollidiert mit Spotlight/Suche",
-    "clashTaskManager": "kollidiert mit dem Task-Manager"
+    "clashTaskManager": "kollidiert mit dem Task-Manager",
+    "pickerTitle": "Hotkey wählen",
+    "pickerBody": "Drücke eine Tastenkombination – oder klicke bzw. halte eine einzelne Taste (z. B. Strg oder die Wahltaste) zum Diktieren.",
+    "current": "Aktuell:",
+    "holdDuration": "Haltedauer",
+    "holdDurationHint": "Wie lange die einzelne Taste gehalten werden muss, bevor das Diktat startet. Kurzes Antippen löst nichts aus – die Taste bleibt normal nutzbar.",
+    "permNeeded": "Für einzelne Tasten braucht Echo die Berechtigung „Eingabeüberwachung“. Erlaube sie in den Systemeinstellungen (ggf. Neustart nötig).",
+    "permGrant": "Zugriff erlauben",
+    "done": "Fertig"
   },
   "update": {
     "installing": "Update wird installiert…",
@@ -582,7 +590,9 @@
     "promptFallbackHint": "Kein Textfeld fokussiert? Dein Diktat landet automatisch in der Prompt-Konsole statt zu verpuffen",
     "changelog": "Änderungsprotokoll",
     "changelogHint": "Was in jeder Version neu dazugekommen ist.",
-    "changelogBtn": "Ansehen"
+    "changelogBtn": "Ansehen",
+    "soundStop": "Loslass-Sound",
+    "soundStopHint": "Ton beim Loslassen der Taste (Aufnahme-Ende) — der umgekehrte Start-Sound. Unabhängig abschaltbar."
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",

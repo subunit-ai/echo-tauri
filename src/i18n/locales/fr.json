@@ -99,7 +99,15 @@
     "clashCopyPaste": "entre en conflit avec Copier/Coller/Annuler",
     "clashWindowSwitch": "entre en conflit avec le changement de fenêtre",
     "clashSpotlight": "entre en conflit avec Spotlight/Recherche",
-    "clashTaskManager": "entre en conflit avec le Gestionnaire des tâches"
+    "clashTaskManager": "entre en conflit avec le Gestionnaire des tâches",
+    "pickerTitle": "Choisissez un raccourci",
+    "pickerBody": "Appuyez sur une combinaison de touches — ou cliquez / maintenez une seule touche (par exemple Contrôle ou Option) pour dicter.",
+    "current": "Actuel :",
+    "holdDuration": "Durée du maintien",
+    "holdDurationHint": "Combien de temps appuyer sur une seule touche avant de commencer à dicter. Une brève pression ne fait rien — la touche reste utilisable normalement.",
+    "permNeeded": "Les raccourcis à une seule touche nécessitent la permission \"Monitorage de l'entrée\". Activez-la pour Echo dans les Paramètres système (un redémarrage peut être nécessaire).",
+    "permGrant": "Accorder l'accès",
+    "done": "Fait"
   },
   "update": {
     "installing": "Installation de la mise à jour…",
@@ -326,6 +334,8 @@
     "openFolder": "Ouvrir le dossier",
     "sourceCode": "Source / Versions",
     "github": "GitHub →",
-    "autoSaveNote": "Les modifications sont enregistrées automatiquement"
+    "autoSaveNote": "Les modifications sont enregistrées automatiquement",
+    "soundStop": "Son de relâchement",
+    "soundStopHint": "Joue quand vous relâchez la touche (fin d'enregistrement) — le whoosh de démarrage inversé. Indépendamment activable."
   }
 }

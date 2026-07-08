@@ -99,7 +99,15 @@
     "clashCopyPaste": "va in conflitto con Copia/Incolla/Annulla",
     "clashWindowSwitch": "va in conflitto con il cambio di finestra",
     "clashSpotlight": "va in conflitto con Spotlight/Ricerca",
-    "clashTaskManager": "va in conflitto con Gestione attività"
+    "clashTaskManager": "va in conflitto con Gestione attività",
+    "pickerTitle": "Scegli un collegamento",
+    "pickerBody": "Premi una combinazione di tasti — o fai clic / tieni premuto un singolo tasto (ad es. Control o Option) per dettare.",
+    "current": "Attuale:",
+    "holdDuration": "Durata della pressione",
+    "holdDurationHint": "Quanto a lungo mantenere premuto un singolo tasto prima dell'inizio della dettatura. Una breve pressione non fa nulla — il tasto rimane normalmente utilizzabile.",
+    "permNeeded": "I collegamenti a tasto singolo richiedono l'autorizzazione \"Monitoraggio input\". Abilitalo per Echo in Impostazioni di sistema (potrebbe essere necessario un riavvio).",
+    "permGrant": "Concedi accesso",
+    "done": "Fatto"
   },
   "update": {
     "installing": "Installazione aggiornamento…",
@@ -326,6 +334,8 @@
     "openFolder": "Apri cartella",
     "sourceCode": "Codice / Release",
     "github": "GitHub →",
-    "autoSaveNote": "Le modifiche vengono salvate automaticamente"
+    "autoSaveNote": "Le modifiche vengono salvate automaticamente",
+    "soundStop": "Suono di rilascio",
+    "soundStopHint": "Riprodotto quando rilasci il tasto (fine registrazione) — lo whoosh di avvio invertito. Indipendentemente attivabile."
   }
 }

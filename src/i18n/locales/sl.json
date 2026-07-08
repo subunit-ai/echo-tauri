@@ -99,7 +99,15 @@
     "clashCopyPaste": "se prekriva s Kopiraj/Prilepi/Razveljavi",
     "clashWindowSwitch": "se prekriva s preklapljanjem oken",
     "clashSpotlight": "se prekriva s Spotlight/Iskanjem",
-    "clashTaskManager": "se prekriva z Upraviteljem opravil"
+    "clashTaskManager": "se prekriva z Upraviteljem opravil",
+    "pickerTitle": "Izberite bližnjico",
+    "pickerBody": "Pritisnite kombinacijo tipk — ali kliknite/držite eno tipko (npr. Control ali Option) za diktiranje.",
+    "current": "Sedanja:",
+    "holdDuration": "Trajanje držanja",
+    "holdDurationHint": "Kako dolgo je treba držati eno tipko, preden se začne diktiranje. Kratek pritisk ne naredi ničesar — tipka ostane normalno uporabna.",
+    "permNeeded": "Bližnjice z eno tipko zahtevajo dovoljenje \"Spremljanje vnosa\". Omogočite ga za Echo v Sistemskih nastavitvah (morda bo potreben zagon znova).",
+    "permGrant": "Odobri dostop",
+    "done": "Opravljeno"
   },
   "update": {
     "installing": "Nameščanje posodobitve…",
@@ -326,6 +334,8 @@
     "openFolder": "Odpri mapo",
     "sourceCode": "Izvorna koda / Izdaje",
     "github": "GitHub →",
-    "autoSaveNote": "Spremembe se shranijo samodejno"
+    "autoSaveNote": "Spremembe se shranijo samodejno",
+    "soundStop": "Zvok spuščanja",
+    "soundStopHint": "Predvaja se, ko spustiš tipko (konec snemanja) — obrnjen zvouk začetka. Neodvisno preklapljivo."
   }
 }

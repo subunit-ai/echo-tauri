@@ -99,7 +99,15 @@
     "clashCopyPaste": "복사/붙여넣기/실행 취소와 충돌",
     "clashWindowSwitch": "창 전환과 충돌",
     "clashSpotlight": "Spotlight/검색과 충돌",
-    "clashTaskManager": "작업 관리자와 충돌"
+    "clashTaskManager": "작업 관리자와 충돌",
+    "pickerTitle": "단축키 선택",
+    "pickerBody": "키 조합을 누르거나, 단일 키(예: Control 또는 Option)를 클릭/누르고 있어 받아쓰기를 합니다.",
+    "current": "현재:",
+    "holdDuration": "누르고 있는 시간",
+    "holdDurationHint": "받아쓰기가 시작되기 전에 단일 키를 눌러야 하는 시간입니다. 짧은 탭은 아무것도 하지 않으며, 키는 일반적으로 사용 가능한 상태로 유지됩니다.",
+    "permNeeded": "단일 키 단축키는 \"입력 모니터링\" 권한이 필요합니다. 시스템 설정에서 Echo에 대해 활성화하세요(다시 시작해야 할 수 있음).",
+    "permGrant": "액세스 허용",
+    "done": "완료"
   },
   "update": {
     "installing": "업데이트 설치 중…",
@@ -326,6 +334,8 @@
     "openFolder": "폴더 열기",
     "sourceCode": "소스 / 릴리스",
     "github": "GitHub →",
-    "autoSaveNote": "변경 사항은 자동으로 저장됩니다"
+    "autoSaveNote": "변경 사항은 자동으로 저장됩니다",
+    "soundStop": "릴리스 사운드",
+    "soundStopHint": "키를 놓을 때 재생됩니다(녹음 종료) — 시작 음을 역재생한 소리. 독립적으로 전환 가능합니다."
   }
 }

@@ -99,7 +99,15 @@
     "clashCopyPaste": "trùng với Sao chép/Dán/Hoàn tác",
     "clashWindowSwitch": "trùng với chuyển cửa sổ",
     "clashSpotlight": "trùng với Spotlight/Tìm kiếm",
-    "clashTaskManager": "trùng với Trình quản lý tác vụ"
+    "clashTaskManager": "trùng với Trình quản lý tác vụ",
+    "pickerTitle": "Chọn phím tắt",
+    "pickerBody": "Nhấn tổ hợp phím — hoặc nhấp / giữ một phím (chẳng hạn Control hoặc Option) để ra lệnh.",
+    "current": "Hiện tại:",
+    "holdDuration": "Thời lượng giữ",
+    "holdDurationHint": "Phải giữ một phím trong bao lâu trước khi bắt đầu ra lệnh. Nhấp ngắn không làm gì cả — phím vẫn có thể sử dụng bình thường.",
+    "permNeeded": "Phím tắt một phím cần quyền \"Giám sát Đầu vào\". Bật nó cho Echo trong Cài đặt Hệ thống (có thể cần khởi động lại).",
+    "permGrant": "Cấp quyền truy cập",
+    "done": "Hoàn thành"
   },
   "update": {
     "installing": "Đang cài bản cập nhật…",
@@ -326,6 +334,8 @@
     "openFolder": "Mở thư mục",
     "sourceCode": "Mã nguồn / Bản phát hành",
     "github": "GitHub →",
-    "autoSaveNote": "Thay đổi được lưu tự động"
+    "autoSaveNote": "Thay đổi được lưu tự động",
+    "soundStop": "Âm thanh nhả",
+    "soundStopHint": "Phát ra khi bạn nhả phím (kết thúc ghi âm) — âm thanh khởi động đảo ngược. Có thể chuyển đổi độc lập."
   }
 }

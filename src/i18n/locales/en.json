@@ -209,7 +209,15 @@
     "clashCopyPaste": "clashes with Copy/Paste/Undo",
     "clashWindowSwitch": "clashes with window switching",
     "clashSpotlight": "clashes with Spotlight/Search",
-    "clashTaskManager": "clashes with Task Manager"
+    "clashTaskManager": "clashes with Task Manager",
+    "pickerTitle": "Choose hotkey",
+    "pickerBody": "Press a key combo — or click / hold a single key (e.g. Control or Option) to dictate.",
+    "current": "Current:",
+    "holdDuration": "Hold duration",
+    "holdDurationHint": "How long the single key must be held before dictation starts. A short tap does nothing — the key stays usable as normal.",
+    "permNeeded": "Single-key hotkeys need the “Input Monitoring” permission. Enable it for Echo in System Settings (a restart may be needed).",
+    "permGrant": "Grant access",
+    "done": "Done"
   },
   "update": {
     "installing": "Installing update…",
@@ -580,7 +588,9 @@
     "promptFallbackHint": "No text field focused? Your dictation automatically lands in the Prompt Console instead of vanishing",
     "changelog": "Changelog",
     "changelogHint": "What arrived in each version.",
-    "changelogBtn": "View"
+    "changelogBtn": "View",
+    "soundStop": "Release sound",
+    "soundStopHint": "Plays when you release the key (end of recording) — the reversed start swoosh. Independently toggleable."
   },
   "meetLocal": {
     "cardTitle": "Local meeting",

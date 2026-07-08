@@ -99,7 +99,15 @@
     "clashCopyPaste": "kolliderer med Kopiér/Indsæt/Fortryd",
     "clashWindowSwitch": "kolliderer med vinduesskift",
     "clashSpotlight": "kolliderer med Spotlight/Søgning",
-    "clashTaskManager": "kolliderer med Jobliste"
+    "clashTaskManager": "kolliderer med Jobliste",
+    "pickerTitle": "Vælg genvej",
+    "pickerBody": "Tryk på en kombination af taster — eller klik / hold en enkelt tast (f.eks. Control eller Option) for at diktere.",
+    "current": "Nuværende:",
+    "holdDuration": "Holdvarighed",
+    "holdDurationHint": "Hvor længe du skal holde en enkelt tast nede, før diktatet starter. Et kort tryk gør intet — tasten forbliver brugbar som normalt.",
+    "permNeeded": "Genveje med en enkelt tast kræver \"Input Monitoring\" tilladelse. Aktivér det for Echo i Systemindstillinger (omstart kan være nødvendig).",
+    "permGrant": "Giv adgang",
+    "done": "Udført"
   },
   "update": {
     "installing": "Installerer opdatering…",
@@ -326,6 +334,8 @@
     "openFolder": "Åbn mappe",
     "sourceCode": "Kildekode / Udgivelser",
     "github": "GitHub →",
-    "autoSaveNote": "Ændringer gemmes automatisk"
+    "autoSaveNote": "Ændringer gemmes automatisk",
+    "soundStop": "Slipplyd",
+    "soundStopHint": "Afspilles når du slipper tasten (optageafslutning) — omvendt startlyden. Uafhængigt skifteligt."
   }
 }

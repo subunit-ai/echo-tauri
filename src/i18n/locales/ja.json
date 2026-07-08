@@ -99,7 +99,15 @@
     "clashCopyPaste": "コピー／貼り付け／取り消しと競合します",
     "clashWindowSwitch": "ウィンドウ切り替えと競合します",
     "clashSpotlight": "Spotlight／検索と競合します",
-    "clashTaskManager": "タスクマネージャーと競合します"
+    "clashTaskManager": "タスクマネージャーと競合します",
+    "pickerTitle": "ホットキーを選択",
+    "pickerBody": "キーの組み合わせを押すか、1つのキー(例:ControlまたはOption)をクリック/長押しして指示します。",
+    "current": "現在:",
+    "holdDuration": "長押し時間",
+    "holdDurationHint": "音声入力が開始される前に、単一のキーを押し続ける時間。短いタップは何もしません。キーは通常どおり使用可能なままです。",
+    "permNeeded": "単一キーのホットキーには「入力モニタリング」権限が必要です。システム設定でEchoに対して有効にします(再起動が必要な場合があります)。",
+    "permGrant": "アクセスを許可",
+    "done": "完了"
   },
   "update": {
     "installing": "アップデートをインストール中…",
@@ -326,6 +334,8 @@
     "openFolder": "フォルダを開く",
     "sourceCode": "ソース／リリース",
     "github": "GitHub →",
-    "autoSaveNote": "変更は自動的に保存されます"
+    "autoSaveNote": "変更は自動的に保存されます",
+    "soundStop": "リリースサウンド",
+    "soundStopHint": "キーを離したときに再生されます（録音終了）— 開始時の逆向きのシューッという音。独立して切り替え可能です。"
   }
 }

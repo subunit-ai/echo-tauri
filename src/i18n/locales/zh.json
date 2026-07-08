@@ -99,7 +99,15 @@
     "clashCopyPaste": "与复制/粘贴/撤销冲突",
     "clashWindowSwitch": "与窗口切换冲突",
     "clashSpotlight": "与 Spotlight/搜索冲突",
-    "clashTaskManager": "与任务管理器冲突"
+    "clashTaskManager": "与任务管理器冲突",
+    "pickerTitle": "选择快捷键",
+    "pickerBody": "按下按键组合 — 或点击/长按单个按键(如 Control 或 Option)来进行语音输入。",
+    "current": "当前:",
+    "holdDuration": "按住时长",
+    "holdDurationHint": "单个按键需要被按住的时长,然后语音输入才会开始。短按不会触发任何操作 — 按键仍可正常使用。",
+    "permNeeded": "单按键快捷键需要\"输入监控\"权限。请在系统设置中为 Echo 启用此权限(可能需要重新启动)。",
+    "permGrant": "授予权限",
+    "done": "完成"
   },
   "update": {
     "installing": "正在安装更新…",
@@ -326,6 +334,8 @@
     "openFolder": "打开文件夹",
     "sourceCode": "源代码 / 发布版本",
     "github": "GitHub →",
-    "autoSaveNote": "更改会自动保存"
+    "autoSaveNote": "更改会自动保存",
+    "soundStop": "释放声音",
+    "soundStopHint": "在您释放按键时播放（录音结束）— 反向的开始音效。可独立切换。"
   }
 }

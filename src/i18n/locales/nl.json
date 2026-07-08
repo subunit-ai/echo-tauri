@@ -99,7 +99,15 @@
     "clashCopyPaste": "conflicteert met Kopiëren/Plakken/Ongedaan maken",
     "clashWindowSwitch": "conflicteert met vensterwisseling",
     "clashSpotlight": "conflicteert met Spotlight/Zoeken",
-    "clashTaskManager": "conflicteert met Taakbeheer"
+    "clashTaskManager": "conflicteert met Taakbeheer",
+    "pickerTitle": "Kies een sneltoets",
+    "pickerBody": "Druk op een toetsencombinatie — of klik/houd een enkele toets ingedrukt (bijv. Control of Option) om te dicteren.",
+    "current": "Huidiging:",
+    "holdDuration": "Indrukduur",
+    "holdDurationHint": "Hoe lang een enkele toets moet worden ingedrukt voordat dictatie begint. Een korte druk doet niets — de toets blijft normaal bruikbaar.",
+    "permNeeded": "Sneltoetsen met één toets hebben de machtiging \"Invoerbewaking\" nodig. Schakel deze in voor Echo in Systeeminstellingen (opnieuw opstarten kan nodig zijn).",
+    "permGrant": "Toegang verlenen",
+    "done": "Klaar"
   },
   "update": {
     "installing": "Update installeren…",
@@ -326,6 +334,8 @@
     "openFolder": "Map openen",
     "sourceCode": "Broncode / Releases",
     "github": "GitHub →",
-    "autoSaveNote": "Wijzigingen worden automatisch opgeslagen"
+    "autoSaveNote": "Wijzigingen worden automatisch opgeslagen",
+    "soundStop": "Loslaten geluid",
+    "soundStopHint": "Speelt af wanneer je de toets loslaat (einde opname) — omgekeerde startwosh. Onafhankelijk in- en uitschakelen."
   }
 }

@@ -99,7 +99,15 @@
     "clashCopyPaste": "entra em conflito com Copiar/Colar/Desfazer",
     "clashWindowSwitch": "entra em conflito com a troca de janelas",
     "clashSpotlight": "entra em conflito com o Spotlight/Pesquisa",
-    "clashTaskManager": "entra em conflito com o Gestor de Tarefas"
+    "clashTaskManager": "entra em conflito com o Gestor de Tarefas",
+    "pickerTitle": "Escolha uma tecla de atalho",
+    "pickerBody": "Pressione uma combinação de teclas — ou clique / mantenha pressionada uma única tecla (por exemplo, Control ou Option) para ditar.",
+    "current": "Atual:",
+    "holdDuration": "Duração do pressionamento",
+    "holdDurationHint": "Por quanto tempo uma única tecla deve ser mantida pressionada antes do ditado começar. Um toque breve não faz nada — a tecla permanece normalmente utilizável.",
+    "permNeeded": "As teclas de atalho de uma única tecla precisam da permissão \"Monitoramento de Entrada\". Ative-a para Echo em Configurações do Sistema (um reinício pode ser necessário).",
+    "permGrant": "Conceder acesso",
+    "done": "Pronto"
   },
   "update": {
     "installing": "A instalar atualização…",
@@ -326,6 +334,8 @@
     "openFolder": "Abrir pasta",
     "sourceCode": "Código / Lançamentos",
     "github": "GitHub →",
-    "autoSaveNote": "As alterações são guardadas automaticamente"
+    "autoSaveNote": "As alterações são guardadas automaticamente",
+    "soundStop": "Som de liberação",
+    "soundStopHint": "Reproduz quando você solta a tecla (fim da gravação) — o swoosh de início invertido. Independentemente comutável."
   }
 }

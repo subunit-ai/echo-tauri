@@ -99,7 +99,15 @@
     "clashCopyPaste": "intră în conflict cu Copiere/Lipire/Anulare",
     "clashWindowSwitch": "intră în conflict cu comutarea ferestrelor",
     "clashSpotlight": "intră în conflict cu Spotlight/Căutare",
-    "clashTaskManager": "intră în conflict cu Managerul de activități"
+    "clashTaskManager": "intră în conflict cu Managerul de activități",
+    "pickerTitle": "Alegeți o scurtătură",
+    "pickerBody": "Apăsați o combinație de taste — sau faceți clic / ținuți apăsat o singură tastă (de exemplu, Control sau Option) pentru a dicta.",
+    "current": "Curent:",
+    "holdDuration": "Durata apăsării",
+    "holdDurationHint": "Cât timp trebuie să ținuți apăsat un singur buton înainte de a porni dictarea. O apăsare scurtă nu face nimic — tasta rămâne normalmente utilizabilă.",
+    "permNeeded": "Scurtăturile cu o singură tastă necesită permisiunea \"Input Monitoring\". Activați-o pentru Echo în Setări sistem (ar putea fi necesară o repornire).",
+    "permGrant": "Acordă acces",
+    "done": "Gata"
   },
   "update": {
     "installing": "Se instalează actualizarea…",
@@ -326,6 +334,8 @@
     "openFolder": "Deschide folderul",
     "sourceCode": "Sursă / Versiuni",
     "github": "GitHub →",
-    "autoSaveNote": "Modificările se salvează automat"
+    "autoSaveNote": "Modificările se salvează automat",
+    "soundStop": "Sunet de eliberare",
+    "soundStopHint": "Se redă atunci când eliberezi tasta (sfârşitul înregistrării) — sunetul de start inversat. Comutabil independent."
   }
 }

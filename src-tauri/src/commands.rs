@@ -176,13 +176,15 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
 
     // Release cue, played NATIVELY (sound.rs) for the same reason as the
     // record-start cue: instant regardless of window visibility. This is the
-    // reversed "standard" wav — the acoustic counterpart to the start cue — so it
-    // reuses the START cue's own toggle/id rather than a separate stop setting.
-    // Fired first, before any of the (possibly network-blocking) work below, so it
-    // lands the instant the key is released, not after a token refresh.
+    // reversed "standard" wav — the acoustic counterpart to the start cue.
+    // Gated by its OWN toggle (`sound_stop_enabled`): it used to ride the start
+    // toggle, so a user who silenced the finish/paste sound still heard this on
+    // every release with no way to turn it off. Fired first, before any of the
+    // (possibly network-blocking) work below, so it lands the instant the key is
+    // released, not after a token refresh.
     if state.recorder.is_recording() {
         let c = state.config.lock();
-        if c.sound_start_enabled && c.sound_start_id == "standard" {
+        if c.sound_stop_enabled {
             crate::sound::play_stop(c.sound_volume);
         }
     }

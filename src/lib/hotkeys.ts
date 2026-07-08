@@ -102,10 +102,36 @@ export function parseCombo(combo: string): string[] {
     .filter((t) => t.length > 0);
 }
 
+const MODIFIER_TOKENS = new Set(["ctrl", "shift", "alt", "cmd"]);
+
+/** Is `combo` a single token (one bare modifier or one key)? These take the
+ *  "hold to dictate" path (event tap) instead of the OS combo shortcut — mirrors
+ *  Rust `hold_key::parse_target`. Returns the token kind, or null for combos. */
+export function holdTargetOf(combo: string): { kind: "modifier" | "key"; token: string } | null {
+  const tokens = parseCombo(combo);
+  if (tokens.length !== 1) return null;
+  const token = tokens[0];
+  return { kind: MODIFIER_TOKENS.has(token) ? "modifier" : "key", token };
+}
+
+/** A single modifier held alone → its token ("ctrl"), else null. Lets the picker
+ *  capture a lone Control/Option as a hold hotkey (which `comboFromEvent` — built
+ *  for combos — deliberately rejects). */
+export function bareModifierFromEvent(e: KeyLike): string | null {
+  if (modifierName(e.key) === null) return null; // not a modifier key at all
+  // Exactly one modifier flag may be down (the one being pressed); no others.
+  const mods = modsOf(e);
+  if (mods.length > 1) return null;
+  return modifierName(e.key);
+}
+
 /** Flag obviously-problematic hotkeys before the user commits one. */
 export function conflictWarning(combo: string): string | null {
   if (!combo) return null;
   const c = combo.toLowerCase();
+  // A single key/modifier is an intentional "hold to dictate" hotkey now, not a
+  // mistake — no missing-modifier scolding for it.
+  if (holdTargetOf(combo)) return null;
   const hasModifier = /<ctrl>|<shift>|<alt>|<cmd>/.test(c);
   if (!hasModifier) return i18n.t("hotkey.noModifierWarning");
   // Well-known OS/app shortcuts that would clash badly.
