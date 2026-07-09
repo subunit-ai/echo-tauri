@@ -92,6 +92,11 @@ fn set_native_glass(w: &WebviewWindow, on: bool) {
                     Some(window_vibrancy::NSVisualEffectState::Active),
                     Some(22.0),
                 );
+                // The NSVisualEffectView is now in the hierarchy — tell the
+                // webview so its genie stand-in cover reveals the real frost on
+                // a true signal, not a blind timer (removing the cover before
+                // the blur exists was TJ's one-frame landing flicker).
+                let _ = w2.emit_to(LABEL, "echo://prompt-glass-ready", ());
             }
         });
     }

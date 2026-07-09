@@ -192,8 +192,8 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
  *  The ★ block up front are the premium styles: complex, layered looks driven
  *  by the REAL voice spectrum (mic_features), not just the scalar level. */
 const ORB_STYLES: [string, string][] = [
-  ["pill", "★ Pille (Standard)"],
-  ["pill2", "★ Pille V2 (Dynamik)"],
+  ["pill", "★ Pille V2 (Standard)"],
+  ["pillv1", "★ Pille V1 (Original)"],
   ["nebula", "★ Nebula"],
   ["ferro", "★ Ferrofluid"],
   ["scope", "★ Oscilloscope"],
@@ -438,6 +438,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
     speed: c.orb_speed ?? 0.6,
     appear: c.orb_appear_anim || "bloom",
     pillColorMode: c.orb_pill_color_mode || "color",
+    pillReaction: c.orb_pill_reaction || "dynamik",
   };
   // The size slider visibly scales the preview too (clamped to the stage).
   const sizeFactor = c.orb_overlay_size ?? 1;
@@ -1192,6 +1193,16 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                   ["color", t("settings.pillColorModeColor")],
                   ["idle_glass", t("settings.pillColorModeIdleGlass")],
                   ["glass", t("settings.pillColorModeGlass")],
+                ]}
+              />
+            </Row>
+            <Row name={t("settings.pillReaction")} hint={t("settings.pillReactionHint")}>
+              <Sel
+                value={c.orb_pill_reaction === "klassisch" ? "klassisch" : "dynamik"}
+                onChange={(v) => set("orb_pill_reaction", v)}
+                options={[
+                  ["dynamik", t("settings.pillReactionDynamik")],
+                  ["klassisch", t("settings.pillReactionKlassisch")],
                 ]}
               />
             </Row>

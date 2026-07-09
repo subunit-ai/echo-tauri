@@ -292,13 +292,9 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
         fill={IS_WINDOWS ? "rgba(7,15,27,0.96)" : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`}
         mask="url(#pcNotch)"
       />
-      {/* Dense stand-in glass during the genie flight — the OS blur is off
-          then, so the window carries (almost) the full material itself. TWO
-          paths: the strip band was uncovered before, so the top of the window
-          turned see-through mid-flight and flickered when the blur returned
-          (TJ). Just shy of opaque: a whisper of desktop keeps it glassy. */}
-      <path className="pc-sil-boost" d={stripPath(w)} fill="rgba(6,12,23,0.88)" mask="url(#pcNotch)" />
-      <path className="pc-sil-boost" d={sil} fill="rgba(12,19,32,0.9)" />
+      {/* Genie flight stand-in glass now lives in a GPU-composited .pc-frost
+          DIV (sibling of this SVG), not an opacity-animated SVG path — see
+          runGenie/settleGenie + .pc-frost. */}
       {/* Pane + active tab: ONE shape. The outline IS the tab. */}
       <path className="pc-sil-body" d={sil} fill="url(#pcTint)" />
       <path d={sil} fill="none" stroke="url(#pcRim)" strokeWidth="1" />
@@ -478,6 +474,10 @@ export function PromptConsole() {
   const genieAnim = useRef<Animation | null>(null);
   const genieDir = useRef<"in" | "out" | null>(null);
   const genieRan = useRef(false);
+  // The genie stand-in frost (GPU layer). Its opacity is WAAPI-driven so the
+  // reveal runs on the compositor thread, off the main thread's repaint/attach.
+  const frostRef = useRef<HTMLDivElement>(null);
+  const frostAnim = useRef<Animation | null>(null);
   // Active flight canvas: the pre-flight stage box (its offset inside the
   // ENLARGED window) + the pill point in flight coordinates. While set, the
   // resize listener must not touch winSize — the grow/restore resizes would
@@ -597,6 +597,46 @@ export function PromptConsole() {
     }
   };
 
+  /** Drive the stand-in frost on the compositor thread. ms = 0 snaps. */
+  const setFrost = (to: number, ms: number, easing = "linear") => {
+    const el = frostRef.current;
+    if (!el) return;
+    // Read the LIVE opacity FIRST: cancel() reverts the element to its CSS base
+    // (opacity:0) synchronously, so sampling after cancel would read 0 and make
+    // the melt animate 0→0 (a hard pop instead of the 380ms fade).
+    const from = Number(getComputedStyle(el).opacity) || 0;
+    frostAnim.current?.cancel();
+    if (to > 0) el.style.willChange = "opacity";
+    const a = el.animate([{ opacity: from }, { opacity: to }], {
+      duration: ms,
+      easing,
+      fill: "both",
+    });
+    a.onfinish = () => {
+      if (to === 0) el.style.willChange = "auto";
+    };
+    frostAnim.current = a;
+  };
+
+  /** Register the glass-ready listener, THEN run `attach` (which triggers the
+   *  vibrancy), then resolve when Rust emits echo://prompt-glass-ready (fired
+   *  right after apply_vibrancy returns) or after a fallback timeout. Ordering
+   *  matters: the listener is awaited-registered BEFORE `attach` runs, so the
+   *  emit can never race ahead of it and be dropped. */
+  const attachThenWaitGlass = async (
+    attach: () => void,
+    timeout: number,
+  ): Promise<void> => {
+    let resolve!: () => void;
+    const done = new Promise<void>((r) => (resolve = r));
+    const un = await listen("echo://prompt-glass-ready", () => resolve());
+    attach();
+    const timer = window.setTimeout(resolve, timeout);
+    await done;
+    window.clearTimeout(timer);
+    un();
+  };
+
   /** Post-flight cleanup for either direction (also reached when a reversed
    *  animation lands): release the flight canvas, restore frame/vibrancy. */
   const settleGenie = async (dir: "in" | "out") => {
@@ -608,17 +648,31 @@ export function PromptConsole() {
       flight.current = null;
       await invoke("prompt_console_hide_now").catch(() => {});
       pinStage(stage, null);
+      setFrost(0, 0); // reset the cover while hidden (also the reverse path)
     } else {
       genieAnim.current?.cancel();
       flight.current = null;
+      // The frost is still fully opaque (sealed at flight start). Everything
+      // below happens UNDER it, so no repaint is ever visible:
+      // 1) restore the window frame — its resize repaint lands under the seal;
+      //    give it its OWN frame so it can't compound with the attach hitch.
       await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
       pinStage(stage, null);
-      invoke("prompt_set_effects", { on: true }).catch(() => {});
-      // The vibrancy attaches on the main thread a few frames later; only THEN
-      // melt the stand-in glass (0.34s CSS fade) so the real frost condenses
-      // underneath it — removing the cover before the blur exists was the
-      // one-frame top flicker TJ saw on landing.
-      window.setTimeout(() => stage.classList.remove("pc-anim"), 220);
+      await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      // 2) register the ready-listener, THEN attach the vibrancy behind the
+      //    opaque frost, then wait for the real signal (+ fallback) so the blur
+      //    is provably present and painted before we reveal it.
+      await attachThenWaitGlass(
+        () => invoke("prompt_set_effects", { on: true }).catch(() => {}),
+        150,
+      );
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => r())),
+      );
+      if (genieDir.current !== "in") return; // superseded while waiting
+      // 3) melt a frost that is ALREADY present and tone-matched → one
+      //    continuous frosted material clearing, no flat→blur step.
+      setFrost(0, 380, "cubic-bezier(0.22, 0.61, 0.36, 1)");
     }
   };
 
@@ -653,13 +707,13 @@ export function PromptConsole() {
       return;
     }
     genieDir.current = dir;
-    // .pc-anim pre-arms the extra body tint BEFORE the vibrancy goes so the
-    // material change blends. The stage stays hidden (.pc-boot on first boot,
-    // the previous animation's fill afterwards) through ALL the async prep
-    // below — nothing may flash at full size before the first keyframe owns
-    // the stage (the old order dropped the cover first and let the un-clipped
-    // window peek through for a frame or two: TJ's rough entrance).
-    stage.classList.add("pc-anim");
+    // Seal the window with the opaque stand-in frost BEFORE the vibrancy is
+    // cut, so the material never drops out. The stage stays hidden (.pc-boot on
+    // first boot, the previous animation's fill afterwards) through ALL the
+    // async prep below — nothing may flash at full size before the first
+    // keyframe owns the stage (the old order dropped the cover first and let
+    // the un-clipped window peek through for a frame: TJ's rough entrance).
+    setFrost(1, 0);
     if (dir === "out") {
       // Let the stand-in glass GRIP (two painted frames of its fast fade)
       // before the native blur is cut — cutting first left the window raw
@@ -756,6 +810,7 @@ export function PromptConsole() {
       if (!genieRan.current && stageRef.current) {
         stageRef.current.classList.remove("pc-boot");
         invoke("prompt_set_effects", { on: true }).catch(() => {});
+        setFrost(0, 0); // never leave the cover stuck opaque
       }
     }, 1200);
 
@@ -1349,6 +1404,19 @@ export function PromptConsole() {
       style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}
     >
       <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} />
+      {/* Genie flight frost — clipped to the SAME silhouette string the SVG
+          renders NaN-free (never synthesize a new polygon: one NaN silently
+          drops the whole clip-path — v0.5.99 lesson). Falls back to the DIV's
+          border box if the path is degenerate. */}
+      {(() => {
+        const fp =
+          winSize.w > 0 && winSize.h > 0
+            ? silhouettePath(winSize.w, winSize.h, bumpDraw)
+            : "";
+        const clip =
+          fp && !fp.includes("NaN") ? ({ clipPath: `path("${fp}")` } as CSSProperties) : undefined;
+        return <div ref={frostRef} className="pc-frost" style={clip} aria-hidden="true" />;
+      })()}
 
       <div className="pc-shell">
         {/* ---- Chrome strip: traffic lights (macOS) / window controls (Windows),
