@@ -340,51 +340,37 @@ function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: 
   );
 }
 
-// ---- Pill-matched terminal glass -------------------------------------------
-// The terminal must emerge from the pill in the SAME tone as the pill (TJ), so
-// the stand-in frost (and, when blur is off, the permanent flat glass) is
-// tinted from the pill's accent color + a dark/light base. A faint radial glow
-// in the pill hue at the mouth echoes the pill's own light.
+// ---- Terminal flight / flat glass ------------------------------------------
+// NEUTRAL graphite (dark) or cool-white (light) — see terminalGlassBg. An
+// earlier build tinted this from the pill accent so the terminal "emerged in
+// the pill's tone", but a cyan pill read as a strong green and TJ wanted the
+// plain neutral look back.
 type RGB = { r: number; g: number; b: number };
+// Kept to validate orb_color_idle before it is stored (the terminal glass is
+// neutral now, so the parsed color is no longer folded into the gradient).
 function hexToRgb(hex: string): RGB | null {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex?.trim() ?? "");
   if (!m) return null;
   const n = parseInt(m[1], 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
-const mix = (a: RGB, b: RGB, t: number): RGB => ({
-  r: Math.round(a.r + (b.r - a.r) * t),
-  g: Math.round(a.g + (b.g - a.g) * t),
-  b: Math.round(a.b + (b.b - a.b) * t),
-});
-const rgba = (c: RGB, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
 
-/** The pill-toned glass background for the frost / flat terminal. `theme`
- *  picks the base (dark graphite vs light frost); the pill hue is folded in so
- *  the material reads as the pill's own glass. */
-function terminalGlassBg(pillHex: string, theme: string): string {
-  const pill = hexToRgb(pillHex) ?? { r: 0, g: 253, b: 255 };
+/** The genie flight / flat-terminal glass background. NEUTRAL by design: a
+ *  plain graphite (dark) or cool-white (light) frost — NO pill hue. An earlier
+ *  version tinted it from the pill color, but a cyan pill turned the emerging
+ *  terminal a strong green (TJ: "warum ist das jetzt grün? Das sollte genauso
+ *  sein wie vorher"). The pill accent is not carried into the terminal glass.
+ *  `pillHex` is kept in the signature for call-site stability but unused. */
+function terminalGlassBg(_pillHex: string, theme: string): string {
   if (theme === "light") {
-    // Light frosted glass with a whisper of the pill hue; near-opaque so it
-    // seals the flight and stands alone when blur is off.
-    const top = mix(pill, { r: 244, g: 248, b: 252 }, 0.9);
-    const mid = mix(pill, { r: 236, g: 241, b: 247 }, 0.9);
-    const bot = mix(pill, { r: 228, g: 234, b: 242 }, 0.9);
     return (
-      `radial-gradient(125% 92% at 50% 100%, ${rgba(pill, 0.16)} 0%, transparent 58%), ` +
-      `linear-gradient(160deg, ${rgba(top, 0.94)} 0%, ${rgba(mid, 0.93)} 46%, ${rgba(bot, 0.94)} 100%)`
+      "linear-gradient(160deg, rgba(240, 246, 250, 0.94) 0%, " +
+      "rgba(232, 239, 246, 0.93) 46%, rgba(228, 235, 243, 0.94) 100%)"
     );
   }
-  // Dark graphite base with the pill hue STAGGERED toward the mouth: the top
-  // (tabs/toolbar) stays near-neutral for legibility, the bottom (where it
-  // pours out of the pill) carries more hue + a soft accent glow — so the
-  // emergence clearly reads as the pill's color without tinting the chrome.
-  const top = mix(pill, { r: 28, g: 35, b: 47 }, 0.88);
-  const mid = mix(pill, { r: 20, g: 27, b: 39 }, 0.83);
-  const bot = mix(pill, { r: 15, g: 22, b: 34 }, 0.78);
   return (
-    `radial-gradient(130% 96% at 50% 100%, ${rgba(pill, 0.24)} 0%, transparent 56%), ` +
-    `linear-gradient(160deg, ${rgba(top, 0.93)} 0%, ${rgba(mid, 0.92)} 46%, ${rgba(bot, 0.93)} 100%)`
+    "linear-gradient(160deg, rgba(30, 37, 49, 0.93) 0%, " +
+    "rgba(22, 29, 41, 0.92) 46%, rgba(17, 24, 36, 0.93) 100%)"
   );
 }
 

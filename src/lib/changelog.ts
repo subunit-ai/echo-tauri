@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.118",
+    date: "2026-07-09",
+    title: { de: "Terminal-Glas wieder neutral", en: "Terminal glass back to neutral" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Beim Öffnen und Schließen hatte das Terminal-Glas zuletzt einen Farbstich (bei einer cyanfarbenen Pille wirkte es grünlich). Das Glas ist jetzt wieder komplett neutral — schlichtes dunkles bzw. helles Milchglas, ohne Einfärbung.",
+        en: "On open and close the terminal glass had picked up a color cast (with a cyan pill it looked greenish). The glass is now fully neutral again — plain dark or light frost, no tint.",
+      },
+    ],
+  },
+  {
     version: "0.5.117",
     date: "2026-07-09",
     title: { de: "Helles Prompt-Terminal", en: "Light prompt terminal" },
