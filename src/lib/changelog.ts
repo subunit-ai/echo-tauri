@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.117",
+    date: "2026-07-09",
+    title: { de: "Helles Prompt-Terminal", en: "Light prompt terminal" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Das Prompt-Terminal gibt es jetzt auch in Hell: ein sauberes, helles Milchglas mit dunklem, gut lesbarem Text — im gleichen Farbton wie deine Pille. Umschaltbar in den Einstellungen unter „Erscheinungsbild“ (Dunkel/Hell). Am schönsten in Kombination mit ausgeschaltetem iOS-Milchglas.",
+        en: "The prompt terminal now comes in light too: a clean, light frosted glass with dark, highly legible text — in the same color tone as your pill. Switch it in settings under \u201cAppearance\u201d (Dark/Light). Looks best paired with the iOS frost glass turned off.",
+      },
+    ],
+  },
+  {
     version: "0.5.116",
     date: "2026-07-09",
     title: {
