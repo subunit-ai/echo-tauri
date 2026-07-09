@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.103",
+    date: "2026-07-09",
+    title: { de: "Streaming für alle — ein Schalter weniger", en: "Streaming for everyone — one switch less" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Live-Streaming ist jetzt der Standard für alle: Diktate werden schon während des Sprechens transkribiert und landen beim Loslassen sofort im Zielfenster. Der alte 3-Wege-Schalter (Standard/Schnell/Live) ist weg — niemand muss mehr einen langsameren Modus wählen. Bei Verbindungsproblemen greift wie bisher automatisch der klassische Upload.",
+        en: "Live streaming is now the standard for everyone: dictations are transcribed while you speak and the result lands in the target window the moment you release. The old 3-way switch (Standard/Fast/Live) is gone — nobody has to pick a slower mode anymore. On connection issues the classic upload still kicks in automatically.",
+      },
+      {
+        kind: "improvement",
+        de: "Live-Tippen (Text erscheint Wort für Wort, während du sprichst) bleibt als schlanker Schalter unter Einstellungen → Transkription erhalten.",
+        en: "Live typing (words appear as you speak) remains available as a compact toggle under Settings → Transcription.",
+      },
+    ],
+  },
+  {
     version: "0.5.102",
     date: "2026-07-09",
     title: { de: "Der Genie-Sog erreicht die Pille wirklich", en: "The genie suction truly reaches the pill" },

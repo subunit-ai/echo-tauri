@@ -27,6 +27,36 @@ pub fn vocab_prompt(cfg: &Config) -> String {
     terms.join(" ")
 }
 
+/// Curated bias list for the CLOUD paths (sent as `prompt`, server-side used as
+/// Whisper `hotwords`): only capitalized terms (proper nouns, brands, German
+/// nouns) — lowercase everyday words measurably HURT (WER harness 2026-07-09:
+/// full list 13.7% WER / 15 of 20 jargon terms vs curated 10.4% / 16) — with
+/// brand-ish terms (inner uppercase / multi-word / hyphen, e.g. OpenAI,
+/// Claude Code, KI-Bilder) first so they survive faster-whisper's 223-token
+/// head-truncation. The LOCAL whisper.cpp path keeps the full `vocab_prompt`
+/// (initial_prompt there is unmeasured with this curation).
+pub fn vocab_hotwords(cfg: &Config) -> String {
+    if !cfg.vocab_enabled {
+        return String::new();
+    }
+    let mut seen = HashSet::new();
+    let mut caps: Vec<String> = Vec::new();
+    for e in &cfg.vocabulary {
+        let t = e.write_as.trim();
+        if t.is_empty() || !t.chars().next().is_some_and(|c| c.is_uppercase()) {
+            continue;
+        }
+        if !seen.insert(t.to_lowercase()) {
+            continue;
+        }
+        caps.push(t.to_string());
+    }
+    let (brand, rest): (Vec<String>, Vec<String>) = caps
+        .into_iter()
+        .partition(|t| t.chars().skip(1).any(|c| c.is_uppercase()) || t.contains(' ') || t.contains('-'));
+    brand.into_iter().chain(rest).collect::<Vec<_>>().join(" ")
+}
+
 /// Post-process: replace each `sounds_like`/alias with its `write_as`
 /// (whole-word, case-insensitive) to fix persistent mishears.
 pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {

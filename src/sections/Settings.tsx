@@ -5,7 +5,6 @@ import { Avatar } from "../components/Avatar";
 import { BigModeSwitch } from "../components/BigModeSwitch";
 import { HotkeyKeyboard } from "../components/HotkeyKeyboard";
 import { ModelManager } from "../components/ModelManager";
-import { StreamingSwitch } from "../components/StreamingSwitch";
 import { Toggle } from "../components/Toggle";
 import { useSessionExpired } from "../components/SessionBanner";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -934,27 +933,26 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             </Group>
 
             <Group title={t("settings.secLiveTyping")}>
-              <div className="setting-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 10 }}>
-                <div className="meta">
-                  <div className="name">{t("settings.streaming")}</div>
-                  <div className="hint">{t("settings.streamingHint")}</div>
-                </div>
-                <StreamingSwitch
-                  value={c.streaming_mode}
-                  onChange={(m) => {
-                    set("streaming_mode", m);
+              {/* Streaming (final) is THE standard for everyone — no mode picker
+                  anymore. The only remaining choice is the opt-in live typing
+                  while speaking; off = paste the full final on release. */}
+              <Row name={t("settings.liveTyping")} hint={t("settings.liveTypingHint")}>
+                <Toggle
+                  checked={c.streaming_mode === "live"}
+                  disabled={uiModeOf(c) === "local"}
+                  onChange={(v) => {
+                    set("streaming_mode", v ? "live" : "final");
                     // Streaming-live already types live → clear the redundant
                     // instant-live-typing so the two can't both be active.
-                    if (m === "live") set("instant_live_typing", false);
+                    if (v) set("instant_live_typing", false);
                   }}
-                  disabled={uiModeOf(c) === "local"}
                 />
-                {c.streaming_mode === "live" && c.recording_mode === "hold" && (
-                  <div className="hint" style={{ color: "var(--warn, #f59e0b)" }}>
-                    {t("settings.streamingLiveTapNote")}
-                  </div>
-                )}
-              </div>
+              </Row>
+              {c.streaming_mode === "live" && c.recording_mode === "hold" && (
+                <div className="hint" style={{ color: "var(--warn, #f59e0b)", padding: "0 2px 8px" }}>
+                  {t("settings.streamingLiveTapNote")}
+                </div>
+              )}
               <Row
                 name={t("settings.instantLiveTyping")}
                 hint={

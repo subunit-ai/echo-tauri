@@ -1188,129 +1188,9 @@ button {
   box-shadow: 0 4px 14px rgba(59, 110, 240, 0.38);
 }
 
-/* ---------- StreamingSwitch (Standard / Schnell / Live — 3-way glass slider) ---------- */
-.stream-switch {
-  transition: opacity 0.2s var(--ease-out);
-}
-.stream-switch[data-disabled] {
-  opacity: 0.45;
-  pointer-events: none;
-}
-.stream-rec {
-  position: relative;
-  height: 15px;
-  margin-bottom: 4px;
-}
-.stream-rec-badge {
-  position: absolute;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  color: var(--accent-bright);
-  white-space: nowrap;
-}
-.stream-track {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: var(--fill-weak);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 4px;
-  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim-soft);
-}
-/* Solid, vibrant per-mode pill (same family as the LOCAL/CLOUD switch) so the
-   control reads as colourful, not a washed-out tint. Its colour + glow shift as
-   it slides — Standard = blue, Schnell = cyan, Live = violet — reusing the app's
-   existing mode palette. Width is exactly one column; translateX(idx*100%) snaps
-   it to the active segment. */
-/* The thumb position + colour are driven PURELY by CSS off the hidden radios
-   (:has(:checked)) — no React, no re-render. A native radio click moves it the
-   instant you press, and the CSS transition glides it, completely decoupled from
-   the (heavy) Settings re-render. Base = Standard (blue). */
-.stream-thumb {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  width: calc((100% - 8px) / 3);
-  border-radius: 9px;
-  z-index: 0;
-  transform: translateX(0);
-  background: linear-gradient(180deg, #5b8cff, #3b6ef0);
-  box-shadow: 0 4px 14px -2px rgba(59, 110, 240, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  /* Longer, silkier glide — a native radio click starts it instantly (no React),
-     so a slower curve reads as smooth, not laggy. Strong expo-out: quick off the
-     mark, gentle settle. */
-  transition: transform 0.26s cubic-bezier(0.22, 1, 0.3, 1),
-    background 0.26s var(--ease-out), box-shadow 0.26s var(--ease-out);
-}
-.stream-track:has(.r-final:checked) .stream-thumb {
-  transform: translateX(100%);
-  background: linear-gradient(180deg, #2bd6ee, #06b6d4);
-  box-shadow: 0 4px 14px -2px rgba(6, 182, 212, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-.stream-track:has(.r-live:checked) .stream-thumb {
-  transform: translateX(200%);
-  background: linear-gradient(180deg, #b18cff, #7c5cf0);
-  box-shadow: 0 4px 14px -2px rgba(124, 92, 240, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.42);
-}
-/* visually-hidden radios (kept focusable for keyboard: arrow keys move them) */
-.stream-radio {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  margin: 0;
-}
-.stream-seg {
-  position: relative;
-  z-index: 1;
-  padding: 9px 6px;
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 13px;
-  white-space: nowrap;
-  text-align: center;
-  cursor: pointer;
-  border-radius: 9px;
-  user-select: none;
-  transition: color 0.2s var(--ease-out), transform 0.13s var(--ease-out);
-}
-/* dark ink reads crisply on the bright pill (same as the LOCAL/CLOUD segments) */
-.stream-radio:checked + .stream-seg {
-  color: #07101f;
-  font-weight: 700;
-}
-@media (hover: hover) and (pointer: fine) {
-  .stream-radio:not(:checked) + .stream-seg:hover {
-    color: var(--text);
-  }
-}
-.stream-seg:active {
-  transform: scale(0.94);
-}
-.stream-radio:focus-visible + .stream-seg {
-  outline: 2px solid var(--cyan);
-  outline-offset: 2px;
-}
-
 /* ── Schwarz (no-colour) theme: neutralise the coloured sliders to grey so the
    theme keeps its promise of zero hue. Text on the grey pill goes white (the
    dark ink used on the bright pills would disappear). ── */
-:root[data-theme="black"] .stream-thumb,
-:root[data-theme="black"] .stream-track:has(.r-final:checked) .stream-thumb,
-:root[data-theme="black"] .stream-track:has(.r-live:checked) .stream-thumb {
-  background: linear-gradient(180deg, #56565b, #3a3a3e);
-  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-:root[data-theme="black"] .stream-radio:checked + .stream-seg {
-  color: #f4f4f5;
-}
 :root[data-theme="black"] .mode-ind,
 :root[data-theme="black"] .mode-ind.cloud {
   background: linear-gradient(180deg, #5a5a5f, #3c3c40);
@@ -1886,14 +1766,12 @@ select:hover {
   .help-chip:active,
   .hdr-update:active:not(:disabled),
   .session-banner-btn:active:not(:disabled),
-  .meeting-cta:active:not(:disabled),
-  .stream-seg:active {
+  .meeting-cta:active:not(:disabled) {
     transform: none;
   }
   /* Spring/slide travel → near-instant snap. */
   .mode-ind,
   .toggle .thumb,
-  .stream-thumb,
   .snav-ind,
   .snav-lens-copy {
     transition-duration: 0.01ms;
