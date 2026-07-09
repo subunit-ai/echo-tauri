@@ -78,6 +78,11 @@ export interface Config {
   prompt_fallback_enabled: boolean;
   /** Glass intensity of the Prompt Console: "clear" | "regular" | "rich". */
   prompt_console_glass: string;
+  /** iOS native frost behind the terminal: true = hand over to desktop-blur on
+   *  settle; false = stay in the flat pill-toned glass (no material switch). */
+  prompt_terminal_blur: boolean;
+  /** Prompt Terminal theme: "dark" | "light". */
+  prompt_terminal_theme: string;
   recording_mode: string; // toggle | hold
   account_email: string;
   display_name: string; // full name — auto-seeded from JWT on login, user-editable

@@ -302,6 +302,54 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
   );
 }
 
+// ---- Pill-matched terminal glass -------------------------------------------
+// The terminal must emerge from the pill in the SAME tone as the pill (TJ), so
+// the stand-in frost (and, when blur is off, the permanent flat glass) is
+// tinted from the pill's accent color + a dark/light base. A faint radial glow
+// in the pill hue at the mouth echoes the pill's own light.
+type RGB = { r: number; g: number; b: number };
+function hexToRgb(hex: string): RGB | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex?.trim() ?? "");
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+const mix = (a: RGB, b: RGB, t: number): RGB => ({
+  r: Math.round(a.r + (b.r - a.r) * t),
+  g: Math.round(a.g + (b.g - a.g) * t),
+  b: Math.round(a.b + (b.b - a.b) * t),
+});
+const rgba = (c: RGB, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
+
+/** The pill-toned glass background for the frost / flat terminal. `theme`
+ *  picks the base (dark graphite vs light frost); the pill hue is folded in so
+ *  the material reads as the pill's own glass. */
+function terminalGlassBg(pillHex: string, theme: string): string {
+  const pill = hexToRgb(pillHex) ?? { r: 0, g: 253, b: 255 };
+  if (theme === "light") {
+    // Light frosted glass with a whisper of the pill hue; near-opaque so it
+    // seals the flight and stands alone when blur is off.
+    const top = mix(pill, { r: 244, g: 248, b: 252 }, 0.9);
+    const mid = mix(pill, { r: 236, g: 241, b: 247 }, 0.9);
+    const bot = mix(pill, { r: 228, g: 234, b: 242 }, 0.9);
+    return (
+      `radial-gradient(125% 92% at 50% 100%, ${rgba(pill, 0.16)} 0%, transparent 58%), ` +
+      `linear-gradient(160deg, ${rgba(top, 0.94)} 0%, ${rgba(mid, 0.93)} 46%, ${rgba(bot, 0.94)} 100%)`
+    );
+  }
+  // Dark graphite base with the pill hue STAGGERED toward the mouth: the top
+  // (tabs/toolbar) stays near-neutral for legibility, the bottom (where it
+  // pours out of the pill) carries more hue + a soft accent glow — so the
+  // emergence clearly reads as the pill's color without tinting the chrome.
+  const top = mix(pill, { r: 28, g: 35, b: 47 }, 0.88);
+  const mid = mix(pill, { r: 20, g: 27, b: 39 }, 0.83);
+  const bot = mix(pill, { r: 15, g: 22, b: 34 }, 0.78);
+  return (
+    `radial-gradient(130% 96% at 50% 100%, ${rgba(pill, 0.24)} 0%, transparent 56%), ` +
+    `linear-gradient(160deg, ${rgba(top, 0.93)} 0%, ${rgba(mid, 0.92)} 46%, ${rgba(bot, 0.93)} 100%)`
+  );
+}
+
 // ---- Genie / magic-lamp animation ------------------------------------------
 // Real suction, not a plain shrink (KDE "Magic Lamp" style): a clip-path
 // polygon morphs the window into a FUNNEL whose mouth sits over the pill
@@ -410,6 +458,11 @@ export function PromptConsole() {
   const [onTop, setOnTop] = useState(true);
   const [asTarget, setAsTarget] = useState(false);
   const [glass, setGlass] = useState<GlassLevel>("clear");
+  // Pill-toned frost background + terminal theme, React-managed so re-renders
+  // never clobber them (applyTerminalGlass also sets them imperatively for a
+  // synchronous flight seal — both write the same value).
+  const [frostBg, setFrostBg] = useState(() => terminalGlassBg("#00fdff", "dark"));
+  const [pcTheme, setPcTheme] = useState("dark");
   const [copied, setCopied] = useState(false);
   const [libQuery, setLibQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -478,6 +531,12 @@ export function PromptConsole() {
   // reveal runs on the compositor thread, off the main thread's repaint/attach.
   const frostRef = useRef<HTMLDivElement>(null);
   const frostAnim = useRef<Animation | null>(null);
+  // Terminal appearance (refs so the once-mounted genie/settle closures always
+  // read fresh values): iOS frost on/off, dark/light, and the pill accent hue
+  // the glass is tinted from. Kept in sync by the config read + live listener.
+  const blurOnRef = useRef(true);
+  const termThemeRef = useRef("dark");
+  const pillColorRef = useRef("#00fdff");
   // Active flight canvas: the pre-flight stage box (its offset inside the
   // ENLARGED window) + the pill point in flight coordinates. While set, the
   // resize listener must not touch winSize — the grow/restore resizes would
@@ -597,6 +656,18 @@ export function PromptConsole() {
     }
   };
 
+  /** Paint the frost with the current pill-toned glass + reflect the theme on
+   *  the stage (for the light-theme CSS). Called on config read + live change. */
+  const applyTerminalGlass = () => {
+    const bg = terminalGlassBg(pillColorRef.current, termThemeRef.current);
+    setFrostBg(bg); // React owns it across re-renders
+    setPcTheme(termThemeRef.current);
+    // Also set synchronously so an immediately-following flight seal uses it
+    // this frame (setState is async).
+    if (frostRef.current) frostRef.current.style.background = bg;
+    stageRef.current?.setAttribute("data-pc-theme", termThemeRef.current);
+  };
+
   /** Drive the stand-in frost on the compositor thread. ms = 0 snaps. */
   const setFrost = (to: number, ms: number, easing = "linear") => {
     const el = frostRef.current;
@@ -652,16 +723,21 @@ export function PromptConsole() {
     } else {
       genieAnim.current?.cancel();
       flight.current = null;
-      // The frost is still fully opaque (sealed at flight start). Everything
-      // below happens UNDER it, so no repaint is ever visible:
-      // 1) restore the window frame — its resize repaint lands under the seal;
-      //    give it its OWN frame so it can't compound with the attach hitch.
+      // The frost is still fully opaque (sealed at flight start). Restore the
+      // window frame under the seal (its resize repaint stays invisible); give
+      // it its own frame so it can't compound with a later attach hitch.
       await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
       pinStage(stage, null);
+      if (!blurOnRef.current) {
+        // Blur OFF (TJ's switch): NO handover — the pill-toned frost stays as
+        // the terminal's permanent flat glass. Zero material switch.
+        setFrost(1, 0);
+        return;
+      }
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
-      // 2) register the ready-listener, THEN attach the vibrancy behind the
-      //    opaque frost, then wait for the real signal (+ fallback) so the blur
-      //    is provably present and painted before we reveal it.
+      // Register the ready-listener, THEN attach the vibrancy behind the opaque
+      // frost, then wait for the real signal (+ fallback) so the blur is
+      // provably present and painted before we reveal it.
       await attachThenWaitGlass(
         () => invoke("prompt_set_effects", { on: true }).catch(() => {}),
         150,
@@ -670,8 +746,17 @@ export function PromptConsole() {
         requestAnimationFrame(() => requestAnimationFrame(() => r())),
       );
       if (genieDir.current !== "in") return; // superseded while waiting
-      // 3) melt a frost that is ALREADY present and tone-matched → one
-      //    continuous frosted material clearing, no flat→blur step.
+      // Re-check the blur switch: it may have been toggled OFF during the async
+      // wait above (the live listener already stripped the vibrancy + raised
+      // the frost). Melting now would strand a blank, vibrancy-less window
+      // (review finding). Honour the fresh value instead.
+      if (!blurOnRef.current) {
+        setFrost(1, 0);
+        invoke("prompt_set_effects", { on: false }).catch(() => {});
+        return;
+      }
+      // Melt a frost that is ALREADY present and tone-matched → one continuous
+      // frosted material clearing, no flat→blur step.
       setFrost(0, 380, "cubic-bezier(0.22, 0.61, 0.36, 1)");
     }
   };
@@ -713,6 +798,7 @@ export function PromptConsole() {
     // async prep below — nothing may flash at full size before the first
     // keyframe owns the stage (the old order dropped the cover first and let
     // the un-clipped window peek through for a frame: TJ's rough entrance).
+    applyTerminalGlass(); // pill-toned even on the very first flight
     setFrost(1, 0);
     if (dir === "out") {
       // Let the stand-in glass GRIP (two painted frames of its fast fade)
@@ -760,7 +846,7 @@ export function PromptConsole() {
     }
     const prev = genieAnim.current;
     const anim = stage.animate(frames, {
-      duration: reduce ? 140 : dir === "in" ? 620 : 520,
+      duration: reduce ? 140 : dir === "in" ? 520 : 440,
       fill: "both",
     });
     genieAnim.current = anim;
@@ -787,8 +873,47 @@ export function PromptConsole() {
         setLanguage(c.ui_language || "de");
         setAsTarget(!!c.prompt_console_as_target);
         setGlass(asGlass(c.prompt_console_glass));
+        blurOnRef.current = c.prompt_terminal_blur !== false;
+        termThemeRef.current = c.prompt_terminal_theme === "light" ? "light" : "dark";
+        if (typeof c.orb_color_idle === "string" && hexToRgb(c.orb_color_idle))
+          pillColorRef.current = c.orb_color_idle;
+        applyTerminalGlass();
       })
       .catch(() => {});
+
+    // Live terminal-appearance updates from Settings (blur on/off, dark/light,
+    // pill color) — restyle without reopening; apply the material change now if
+    // the terminal is settled (not mid-flight).
+    const unPromptCfg = listen<{ blur?: boolean; theme?: string; pillColor?: string }>(
+      "echo://prompt-config",
+      async (e) => {
+        const p = e.payload;
+        const wasBlur = blurOnRef.current;
+        if (typeof p.blur === "boolean") blurOnRef.current = p.blur;
+        if (p.theme === "light" || p.theme === "dark") termThemeRef.current = p.theme;
+        if (typeof p.pillColor === "string" && hexToRgb(p.pillColor)) pillColorRef.current = p.pillColor;
+        applyTerminalGlass();
+        // Only re-drive the material live when settled (mid-flight, settleGenie
+        // reads the fresh ref at landing). A blur flip needs attach/strip.
+        if (!flight.current && blurOnRef.current !== wasBlur) {
+          if (blurOnRef.current) {
+            // Attach the vibrancy behind the still-opaque frost, wait for it to
+            // be present (glass-ready + fallback), THEN melt — same no-flash
+            // handover as the genie settle.
+            setFrost(1, 0);
+            await attachThenWaitGlass(
+              () => invoke("prompt_set_effects", { on: true }).catch(() => {}),
+              150,
+            );
+            if (blurOnRef.current && !flight.current)
+              setFrost(0, 380, "cubic-bezier(0.22, 0.61, 0.36, 1)");
+          } else {
+            setFrost(1, 0);
+            invoke("prompt_set_effects", { on: false }).catch(() => {});
+          }
+        }
+      },
+    );
 
     const unTranscript = listen("echo://prompt-transcript", drainPending);
     drainPending(); // anything queued while this webview was booting
@@ -809,8 +934,12 @@ export function PromptConsole() {
     const failsafe = window.setTimeout(() => {
       if (!genieRan.current && stageRef.current) {
         stageRef.current.classList.remove("pc-boot");
-        invoke("prompt_set_effects", { on: true }).catch(() => {});
-        setFrost(0, 0); // never leave the cover stuck opaque
+        if (blurOnRef.current) {
+          invoke("prompt_set_effects", { on: true }).catch(() => {});
+          setFrost(0, 0); // never leave the cover stuck opaque
+        } else {
+          setFrost(1, 0); // blur off → the frost IS the glass
+        }
       }
     }, 1200);
 
@@ -871,6 +1000,7 @@ export function PromptConsole() {
       unTranscript.then((f) => f());
       unPartial.then((f) => f());
       unGenie.then((f) => f());
+      unPromptCfg.then((f) => f());
       window.clearTimeout(failsafe);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
@@ -1401,6 +1531,7 @@ export function PromptConsole() {
       ref={stageRef}
       className="pc-stage pc-boot"
       data-glass={glass}
+      data-pc-theme={pcTheme}
       style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}
     >
       <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} />
@@ -1413,9 +1544,15 @@ export function PromptConsole() {
           winSize.w > 0 && winSize.h > 0
             ? silhouettePath(winSize.w, winSize.h, bumpDraw)
             : "";
-        const clip =
-          fp && !fp.includes("NaN") ? ({ clipPath: `path("${fp}")` } as CSSProperties) : undefined;
-        return <div ref={frostRef} className="pc-frost" style={clip} aria-hidden="true" />;
+        const clip = fp && !fp.includes("NaN") ? `path("${fp}")` : undefined;
+        return (
+          <div
+            ref={frostRef}
+            className="pc-frost"
+            style={{ clipPath: clip, background: frostBg } as CSSProperties}
+            aria-hidden="true"
+          />
+        );
       })()}
 
       <div className="pc-shell">
