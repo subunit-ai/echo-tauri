@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.104",
+    date: "2026-07-09",
+    title: { de: "Der Zeitraum-Schalter greift jetzt überall", en: "The time-range switcher now applies everywhere" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Im Aktivitäts-Bereich folgen jetzt auch die großen Kennzahlen-Karten (Wörter, Diktate, gesparte Zeit, Sprechtempo) dem Zeitraum-Schalter — 7/30/90 Tage zeigen die Summen des Zeitraums, „Alles“ deine Gesamtwerte. Vorher blieben die Karten immer auf Gesamt stehen.",
+        en: "In the Activity section the big stat cards (words, dictations, time saved, speaking pace) now follow the time-range switcher — 7/30/90 days show the sums for that window, \"All\" shows your lifetime totals. Previously the cards were always stuck on lifetime.",
+      },
+      {
+        kind: "improvement",
+        de: "Hinweis: Die Tages-Historie wächst erst seit diesem Update dauerhaft mit. In den ersten Tagen können 7/30/90 daher noch gleich aussehen — mit jedem diktierten Tag werden die Zeiträume aussagekräftiger.",
+        en: "Note: the daily history only accumulates permanently since this update. For the first few days 7/30/90 may still look identical — every dictated day makes the ranges more meaningful.",
+      },
+    ],
+  },
+  {
     version: "0.5.103",
     date: "2026-07-09",
     title: { de: "Streaming für alle — ein Schalter weniger", en: "Streaming for everyone — one switch less" },
