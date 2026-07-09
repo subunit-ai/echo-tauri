@@ -160,7 +160,12 @@ export function drawOrb(
   const cx = w / 2;
   const cy = h / 2;
   const size = Math.min(w, h);
-  const lvl = Math.min(1, level);
+  // NaN-Härtung: ein einziger non-finiter Level-/Band-Frame (CoreAudio-Glitch,
+  // Geräte-Wechsel mitten im Diktat) würde sonst durch JEDE Glättung
+  // (bandEnv/agc/barH/lvlAvg) für immer weitergereicht — der Orb wäre bis zum
+  // App-Neustart tot. Non-finit wird hier und an den Envelope-Sites auf einen
+  // sicheren Wert gesetzt → selbstheilend statt sticky.
+  const lvl = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
   // The pill treats "done" as plain idle: its confirmation is the pasted text
   // itself — the 700 ms all-bars flash in the done color on release read as a
   // glitch (TJ; state colors stay reserved for real working feedback).
@@ -279,7 +284,10 @@ export function drawOrb(
           (1 - (i / 15) * 0.35);
       }
     }
-    const prev = an.bandEnv[i];
+    // Selbstheilung: non-finite Werte (NaN/Inf aus einem Audio-Glitch) niemals
+    // in die Envelope lassen UND eine bereits vergiftete Envelope zurücksetzen.
+    if (!Number.isFinite(raw)) raw = 0;
+    const prev = Number.isFinite(an.bandEnv[i]) ? an.bandEnv[i] : 0;
     raw = Math.min(1, Math.max(0, raw));
     an.bandEnv[i] = raw > prev ? prev * 0.4 + raw * 0.6 : prev * 0.82 + raw * 0.18;
   }
@@ -298,6 +306,7 @@ export function drawOrb(
   if (!an.bandAgc) an.bandAgc = new Array(16).fill(0.18);
   const agc = an.bandAgc;
   for (let i = 0; i < 16; i++) {
+    if (!Number.isFinite(agc[i])) agc[i] = 0.18; // Selbstheilung (Math.max propagiert NaN)
     agc[i] = Math.max(an.bandEnv[i], agc[i] * 0.9955, 0.1);
   }
   /** Auto-gained band value at normalized spectrum position x (0..1). */
@@ -1492,10 +1501,15 @@ export function drawOrb(
         let tH: number;
         if (speaking) {
           // Auto-gained + compressed response: quiet speech still moves the
-          // bars visibly, and the treble bars (right) ride their own dynamic
-          // range instead of staying stuck (TJ). The speech shape is flatter
-          // than the resting dome so the edge bars have real travel too.
-          const resp = Math.pow(bandNormAt((i + 0.5) / N), 0.7);
+          // bars visibly, and every band rides its own dynamic range.
+          // CENTRE-OUT symmetric mapping (TJ 2026-07-09): the pill was a plain
+          // bass→treble spectrum left→right — speech energy lives in the low
+          // bands, so only the LEFT half ever moved. Each bar now samples the
+          // spectrum by its DISTANCE from the centre (centre = bass = the
+          // energy, rims = treble), so both halves deflect evenly and the
+          // pill breathes from the middle out.
+          const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
+          const resp = Math.pow(bandNormAt(d), 0.7);
           const shape = 0.55 + 0.45 * REST[i];
           tH = H * Math.min(0.85, shape * (0.1 + 0.95 * resp));
         } else if (stP === "idle") {
@@ -1517,6 +1531,7 @@ export function drawOrb(
         tH *= domeY;
         // Per-bar smoothing: speech stays snappy (fast follow), every state
         // edge (release → transcribing → idle) morphs instead of jumping.
+        if (!Number.isFinite(an.barH[i])) an.barH[i] = 0; // Selbstheilung
         an.barH[i] += (tH - an.barH[i]) * (speaking ? 0.55 : 0.16);
         let hBar = an.barH[i];
 
