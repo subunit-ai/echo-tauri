@@ -177,6 +177,11 @@ pub struct Config {
     /// (colorless frost at rest, state colors while working) | "glass"
     /// (always colorless liquid glass — only motion tells the state).
     pub orb_pill_color_mode: String,
+    /// Pill REACTION type (governs the V2 dome pill's bars, orthogonal to the
+    /// pill SHAPE): "dynamik" (default — per-bar character) | "klassisch" (the
+    /// v0.5.109 centre-out response). New field → container serde(default)
+    /// hands existing installs the default, no migration guard needed.
+    pub orb_pill_reaction: String,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
     /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
@@ -457,6 +462,7 @@ impl Default for Config {
             orb_pill_migrated: false,
             orb_appear_anim: "bloom".to_string(),
             orb_pill_color_mode: "color".to_string(),
+            orb_pill_reaction: "dynamik".to_string(),
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),
@@ -717,6 +723,14 @@ impl Config {
                 self.orb_overlay_style = "pill".to_string();
             }
             self.orb_pill_migrated = true;
+        }
+        // v0.5.113: the short-lived "pill2" style (v0.5.112) is folded back into
+        // "pill" — the dome pill is now ONE style whose reaction (dynamik vs
+        // klassisch) lives in orb_pill_reaction, not a separate style key.
+        // "pill2" WAS the dynamik reaction, which is the default → the fold is
+        // visually identical. Idempotent cleanup, no guard needed.
+        if self.orb_overlay_style == "pill2" {
+            self.orb_overlay_style = "pill".to_string();
         }
         // v0.4.15: per-state orb colors replace the single theme dropdown. Seed the
         // idle color from the user's previous theme (cyan/violet/mint) ONCE so their
@@ -1051,5 +1065,25 @@ mod tests {
         back.orb_pill_migrated = true;
         back.migrate();
         assert_eq!(back.orb_overlay_style, "sonar", "post-migration sonar choice must stick");
+
+        // v0.5.113: the short-lived "pill2" style folds back into "pill" (the
+        // dome pill is one style; its reaction lives in orb_pill_reaction).
+        let mut p2 = Config::default();
+        p2.orb_overlay_style = "pill2".to_string();
+        p2.orb_pill_migrated = true; // already migrated — only the fold applies
+        p2.migrate();
+        assert_eq!(p2.orb_overlay_style, "pill", "pill2 must fold into pill");
+        assert_eq!(
+            Config::default().orb_pill_reaction,
+            "dynamik",
+            "default reaction is dynamik (what pill2 was)"
+        );
+
+        // The new V1 original pill is a real, selectable style — never migrated away.
+        let mut v1 = Config::default();
+        v1.orb_overlay_style = "pillv1".to_string();
+        v1.orb_pill_migrated = true;
+        v1.migrate();
+        assert_eq!(v1.orb_overlay_style, "pillv1", "pillv1 is a chosen style, must stick");
     }
 }

@@ -41,6 +41,8 @@ export interface Config {
   orb_appear_anim: string;
   /** Pill color mode: "color" | "idle_glass" | "glass" (always colorless). */
   orb_pill_color_mode: string;
+  /** Pill reaction type (V2 dome bars): "dynamik" | "klassisch". */
+  orb_pill_reaction: string;
   /** How the islands are revealed: "hover" | "click". */
   orb_trigger: string;
   orb_speed: number;

@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.113",
+    date: "2026-07-09",
+    title: { de: "Pille V1 & V2, Reaktions-Menü + geschmeidiger Genie-Übergang", en: "Pill V1 & V2, reaction menu + a silkier genie handover" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Die Pillen-Form ist jetzt frei wählbar: „Pille V2“ ist die aktuelle lange Pille (Standard), „Pille V1“ bringt die allererste, kompakte Website-Pille mit fünf Balken zurück ins Menü.",
+        en: "The pill shape is now selectable: “Pill V2” is the current long pill (default), and “Pill V1” brings the very first, compact website pill with five bars back into the menu.",
+      },
+      {
+        kind: "feature",
+        de: "Neues eigenes Menü „Reaktion (Pille)“: „Dynamik“ (Standard) — jeder Balken mit eigenem Charakter und Tempo — oder „Klassisch“ mit kräftiger Mitte und tiefer Dynamik. Getrennt von der Form, jederzeit umschaltbar.",
+        en: "A new dedicated “Reaction (pill)” menu: “Dynamics” (default) — every bar with its own character and tempo — or “Classic” with a strong centre and deep dynamics. Separate from the shape, switchable anytime.",
+      },
+      {
+        kind: "improvement",
+        de: "Der Übergang beim Öffnen des Prompt-Terminals ist jetzt ein Guss: Statt von transparent über flach nach milchig zu springen, trägt das Fenster durchgehend dasselbe Glas und das echte iOS-Milchglas blendet weich darunter ein — kein Haken mehr.",
+        en: "Opening the prompt terminal is now one smooth pour: instead of jumping from transparent to flat to frosted, the window carries the same glass throughout and the real iOS frost fades in softly underneath — no more hitch.",
+      },
+    ],
+  },
+  {
     version: "0.5.112",
     date: "2026-07-09",
     title: { de: "Die Pille im Doppelpack: V1 zurück, V2 zum Ausprobieren", en: "The pill twin pack: V1 back, V2 to try" },

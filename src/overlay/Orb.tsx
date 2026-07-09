@@ -213,6 +213,7 @@ export function Orb() {
   const speed = useRef(0.6);
   const appear = useRef("bloom");
   const pillColorMode = useRef("color");
+  const pillReaction = useRef("dynamik");
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
   // Which single satellite is expanded (null = just the icon chips). Hovering a
@@ -236,6 +237,8 @@ export function Orb() {
         if (typeof c.orb_appear_anim === "string" && c.orb_appear_anim) appear.current = c.orb_appear_anim;
         if (typeof c.orb_pill_color_mode === "string" && c.orb_pill_color_mode)
           pillColorMode.current = c.orb_pill_color_mode;
+        if (typeof c.orb_pill_reaction === "string" && c.orb_pill_reaction)
+          pillReaction.current = c.orb_pill_reaction;
       })
       .catch(() => {});
     orbQuick().then(setQuick).catch(() => {});
@@ -256,6 +259,7 @@ export function Orb() {
       speed?: number;
       appear?: string;
       pillColorMode?: string;
+      pillReaction?: string;
       quick?: OrbQuick;
     }>("echo://orb-config", (e) => {
       const p = e.payload;
@@ -270,6 +274,8 @@ export function Orb() {
       if (typeof p.appear === "string" && p.appear) appear.current = p.appear;
       if (typeof p.pillColorMode === "string" && p.pillColorMode)
         pillColorMode.current = p.pillColorMode;
+      if (typeof p.pillReaction === "string" && p.pillReaction)
+        pillReaction.current = p.pillReaction;
       if (p.quick) setQuick(p.quick);
     });
     // Engagement from the Rust hit-test loop: shows/hides the islands AND drives
@@ -376,6 +382,7 @@ export function Orb() {
           speed: speed.current,
           appear: appear.current,
           pillColorMode: pillColorMode.current,
+          pillReaction: pillReaction.current,
         },
         state.current,
         level.current,

@@ -9,7 +9,8 @@
 
    During the genie animation (materialize out of / vanish into the orb pill)
    the native vibrancy is switched off — it's a full-window slab that ignores
-   CSS transforms — and .pc-anim briefly boosts the pane's own tint instead. */
+   CSS transforms — and .pc-frost (a GPU-composited layer) carries the material
+   instead, melting into the real vibrancy on settle. */
 
 * {
   box-sizing: border-box;
@@ -60,19 +61,33 @@ body {
   filter: drop-shadow(0 -1px 6px rgba(0, 0, 0, 0.28));
 }
 
-/* Dense stand-in glass while the OS blur is off (genie flight) — see
-   Silhouette. Asymmetric fade: it GRIPS fast when the flight starts (the blur
-   is cut right after — nothing may shine through raw), and MELTS slowly on
-   settle so the real vibrancy condenses underneath instead of popping in
-   (TJ: window flew "transparenter" and the top flickered once on landing). */
-.pc-sil-boost {
-  opacity: 0;
-  transition: opacity 0.34s ease;
-}
-
-.pc-anim .pc-sil-boost {
-  opacity: 1;
-  transition: opacity 0.09s ease;
+/* Genie stand-in frost: a dedicated GPU-composited layer that carries the
+   window's material while the native OS blur is off (the vibrancy is a full-
+   window slab that ignores CSS transforms, so it must be off during the
+   flight). Its opacity is WAAPI-driven (runGenie/settleGenie) so the melt runs
+   on the COMPOSITOR thread — decoupled from the SVG repaint, the flight-frame
+   restore resize, AND the vibrancy attach (the old SVG-path opacity fade was
+   CPU-rastered and janked against those repaints; TJ: "hackelig").
+   Near-opaque so it also seals the blur-off flight (no see-through), and
+   NEUTRAL GRAPHITE (not blue) so it matches the settled HudWindow tone — the
+   reveal of the real blur underneath is then imperceptible, not a flat→blur
+   step. Clipped to the silhouette in JS (path()), painted over the SVG tint,
+   under .pc-shell (content stays on top throughout). */
+.pc-frost {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0; /* at rest invisible — must never dim the real vibrancy */
+  will-change: opacity;
+  transform: translateZ(0); /* own backing layer */
+  backface-visibility: hidden;
+  background: linear-gradient(
+    160deg,
+    rgba(30, 37, 49, 0.93) 0%,
+    rgba(22, 29, 41, 0.92) 46%,
+    rgba(17, 24, 36, 0.93) 100%
+  );
 }
 
 .pc-shell {

@@ -29,6 +29,11 @@ export interface OrbVisual {
    *  at rest, colors while working) | "glass" (always colorless liquid
    *  glass — only the motion tells the state). */
   pillColorMode?: string;
+  /** Pill reaction type (governs the V2 dome pill's bars): "dynamik" (default —
+   *  per-bar character: own frequency colouring + own attack/release) |
+   *  "klassisch" (the v0.5.109 centre-out response). Orthogonal to the pill
+   *  SHAPE (pill = V2 dome, pillv1 = original 5-bar). */
+  pillReaction?: string;
 }
 
 /** Neutral frost tone for the colorless pill modes. */
@@ -169,7 +174,8 @@ export function drawOrb(
   // The pill treats "done" as plain idle: its confirmation is the pasted text
   // itself — the 700 ms all-bars flash in the done color on release read as a
   // glitch (TJ; state colors stay reserved for real working feedback).
-  const isPillStyle = v.style === "pill" || v.style === "pill2";
+  const isPillStyle =
+    v.style === "pill" || v.style === "pill2" || v.style === "pillv1";
   const stP = isPillStyle && st === "done" ? "idle" : st;
   // idle → idle · recording/transcribing → working · done → done · error → error.
   const stateColor =
@@ -1369,6 +1375,123 @@ export function drawOrb(
       ctx.fill();
       break;
     }
+    case "pillv1": {
+      // ★ Pille V1 — the ORIGINAL liquid-glass capsule from the Echo website's
+      // speed race, exactly as it first migrated into Echo (v0.5.88): a static
+      // glass pill with a specular streak, a gradient hairline border, a soft
+      // state-colored ambient glow and FIVE voice-reactive EQ bars inside
+      // (driven by the real spectrum via bandAt). Short capsule (H = W·0.4),
+      // no dome lens — the nostalgic standard. Kept alongside the V2 dome pill
+      // (TJ 2026-07-09: "die alte V1 Pille soll noch mit ins Menü").
+      an.lvlAvg = an.lvlAvg * 0.9 + lvl * 0.1;
+      const onset = speaking && lvl > 0.12 && lvl > an.lvlAvg * 1.3;
+      an.pulse = idleStill
+        ? an.pulse
+        : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.4 + lvl * 0.6) : 0);
+
+      const W = size * 0.94;
+      const H = W * 0.4;
+      const x0 = cx - W / 2;
+      const y0 = cy - H / 2;
+      const capsule = () => {
+        const r = H / 2;
+        ctx.beginPath();
+        ctx.moveTo(x0 + r, y0);
+        ctx.lineTo(x0 + W - r, y0);
+        ctx.arc(x0 + W - r, y0 + r, r, -Math.PI / 2, Math.PI / 2);
+        ctx.lineTo(x0 + r, y0 + H);
+        ctx.arc(x0 + r, y0 + r, r, Math.PI / 2, (3 * Math.PI) / 2);
+        ctx.closePath();
+      };
+
+      // 1) ambient glow — breathes with the voice, flares on syllable onsets
+      ctx.save();
+      ctx.shadowColor = hexA(base, 0.38 + 0.3 * energy + 0.25 * an.pulse);
+      ctx.shadowBlur = size * (0.08 + 0.05 * energy + 0.04 * an.pulse);
+      ctx.fillStyle = hexA(base, 0.08);
+      capsule();
+      ctx.fill();
+      ctx.restore();
+
+      // 2) glass body — dark smoke for contrast on any desktop, then the
+      //    website's 165° white→transparent→tint gradient on top
+      capsule();
+      ctx.fillStyle = "rgba(8,14,26,0.42)";
+      ctx.fill();
+      const gDir = { x: Math.cos(1.31), y: Math.sin(1.31) }; // ~165° like the site
+      const body = ctx.createLinearGradient(
+        cx - gDir.x * W * 0.5,
+        cy - gDir.y * H * 0.9,
+        cx + gDir.x * W * 0.5,
+        cy + gDir.y * H * 0.9,
+      );
+      body.addColorStop(0, "rgba(255,255,255,0.20)");
+      body.addColorStop(0.48, "rgba(255,255,255,0.045)");
+      body.addColorStop(1, hexA(base, 0.13));
+      capsule();
+      ctx.fillStyle = body;
+      ctx.fill();
+
+      // 3) specular streak (top-left), clipped to the glass
+      ctx.save();
+      capsule();
+      ctx.clip();
+      const spec = ctx.createRadialGradient(
+        cx - W * 0.24,
+        y0 + H * 0.2,
+        0,
+        cx - W * 0.24,
+        y0 + H * 0.2,
+        W * 0.32,
+      );
+      spec.addColorStop(0, "rgba(255,255,255,0.30)");
+      spec.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = spec;
+      ctx.fillRect(x0, y0, W, H);
+      ctx.restore();
+
+      // 4) hairline border — bright top edge sinking to a faint bottom
+      const rim = ctx.createLinearGradient(cx, y0, cx, y0 + H);
+      rim.addColorStop(0, `rgba(255,255,255,${0.42 + 0.2 * an.pulse})`);
+      rim.addColorStop(1, "rgba(255,255,255,0.10)");
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = Math.max(1.1, size * 0.011);
+      capsule();
+      ctx.stroke();
+
+      // 5) five EQ bars — the website's echo-eq, fed by the real voice spectrum
+      //    (bass→sibilance across the pill); calm breathing at rest
+      const REST = [0.34, 0.55, 0.68, 0.47, 0.3];
+      const POS = [0.12, 0.35, 0.55, 0.75, 0.92];
+      const barW = Math.max(1.6, H * 0.085);
+      const gap = barW * 1.7;
+      const totalW = 4 * gap;
+      ctx.lineCap = "round";
+      ctx.save();
+      ctx.shadowColor = hexA(base, 0.7);
+      ctx.shadowBlur = Math.max(3, H * 0.16);
+      for (let i = 0; i < 5; i++) {
+        let hBar: number;
+        if (speaking) {
+          // wide dynamic range: whisper = small ticks, loud = near full height
+          hBar = H * Math.min(0.78, REST[i] * (0.3 + 1.35 * bandAt(POS[i])));
+        } else {
+          // echo-eq breathing (phase-offset per bar), frozen when idleStill
+          const wave = idleStill ? 0.35 : 0.5 + 0.5 * Math.sin(ph * 0.11 + i * 1.15);
+          hBar = H * REST[i] * (0.5 + 0.32 + 0.68 * wave * energy);
+        }
+        const bx = cx - totalW / 2 + i * gap;
+        ctx.strokeStyle = hexA(base, 0.92);
+        ctx.lineWidth = barW;
+        ctx.beginPath();
+        ctx.moveTo(bx, cy - hBar / 2);
+        ctx.lineTo(bx, cy + hBar / 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.lineCap = "butt";
+      break;
+    }
     case "pill":
     case "pill2": {
       // ★ Pille v2 — a NEUTRAL liquid-glass capsule with a dome lens: the
@@ -1503,12 +1626,14 @@ export function drawOrb(
       // its own attack/release speed — that desync is the "playful" motion.
       const PHI = [0.93, 0.18, 0.66, 0.41, 1, 0.29, 0.74, 0.12, 0.55];
       const DET = [-0.02, 0.045, -0.035, 0.02, 0, -0.03, 0.04, -0.045, 0.015];
-      // TWO selectable temperaments (TJ): "pill" = V1, the v0.5.109 response
-      // he liked — strong centre arc, deep dynamics — with ONLY the rims
-      // gently livened; "pill2" = V2, the per-bar-character rework below.
-      const pillV2 = v.style === "pill2";
+      // TWO selectable REACTION types on the SAME dome pill, chosen in the
+      // separate "Reaktion" menu (orb_pill_reaction), NOT the style picker:
+      // "dynamik" (default) = the per-bar-character response below; "klassisch"
+      // = the v0.5.109 centre-out response (strong centre arc, deep dynamics)
+      // with only the rims gently livened. Shape is orthogonal to reaction.
+      const reactionDyn = (v.pillReaction ?? "dynamik") !== "klassisch";
       let spk: number[] | null = null;
-      if (speaking && pillV2) {
+      if (speaking && reactionDyn) {
         const raw = new Array(N).fill(0);
         for (let i = 0; i < N; i++) {
           const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
@@ -1549,13 +1674,13 @@ export function drawOrb(
 
         let tH: number;
         if (speaking && spk) {
-          // V2 "Dynamik": per-bar frequency colouring + flatter shape + more
+          // "Dynamik": per-bar frequency colouring + flatter shape + more
           // contrast — every bar plays its own game (see the block above).
           const resp = Math.pow(spk[i], 0.85);
           const shape = 0.68 + 0.32 * REST[i];
           tH = H * Math.min(0.85, shape * (0.08 + 0.92 * resp));
         } else if (speaking) {
-          // V1 = the v0.5.109 response, verbatim — centre-out spectrum,
+          // "Klassisch" = the v0.5.109 response, verbatim — centre-out spectrum,
           // centre-tall shape, deep dynamics — plus ONE gentle touch: the
           // rims get a small voice-following lift (they sampled sibilance
           // land and sat dead between 's' sounds; TJ: "wenn nur die außen
@@ -1590,11 +1715,11 @@ export function drawOrb(
         // State edges (release → transcribing → idle) keep the slow morph.
         if (!Number.isFinite(an.barH[i])) an.barH[i] = 0; // Selbstheilung
         const kBar = speaking
-          ? pillV2
+          ? reactionDyn
             ? tH > an.barH[i]
               ? 0.32 + 0.42 * PHI[i]
               : 0.14 + 0.16 * PHI[i]
-            : 0.55 // V1: the v0.5.109 uniform snap
+            : 0.55 // klassisch: the v0.5.109 uniform snap
           : 0.16;
         an.barH[i] += (tH - an.barH[i]) * kBar;
         let hBar = an.barH[i];
