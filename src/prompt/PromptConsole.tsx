@@ -255,18 +255,38 @@ function stripPath(w: number): string {
 /** The window body as SVG: recessed strip + (pane ⋃ active tab) silhouette with
  *  a gradient rim. Fills scale with the glass level; Windows gets solid fills
  *  (no OS vibrancy to shine through). */
-function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: number; w: number } | null; glass: number }) {
+function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: { x: number; w: number } | null; glass: number; theme: string }) {
   if (w <= 0 || h <= 0) return null;
   const sil = silhouettePath(w, h, bump);
+  // CSS can't reach SVG gradient stops, so the window BODY (pcTint/strip/rim)
+  // is flipped here for the light theme. Light stops carry a LIGHT FLOOR
+  // (0.34+0.40·glass) — unlike the dark stops (pure α·glass) — because on light
+  // we can't assume a dark desktop behind the native vibrancy, so the surface
+  // must stay light-and-legible even at "clear" glass.
+  const light = theme === "light";
   return (
     <svg className="pc-sil" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
       <defs>
         <linearGradient id="pcTint" x1="0" y1="0" x2="0.4" y2="1">
           {IS_WINDOWS ? (
+            light ? (
+              <>
+                <stop offset="0" stopColor="#f2f6fb" />
+                <stop offset="0.5" stopColor="#eaf1f8" />
+                <stop offset="1" stopColor="#e4ecf5" />
+              </>
+            ) : (
+              <>
+                <stop offset="0" stopColor="#18293f" />
+                <stop offset="0.5" stopColor="#0e1c30" />
+                <stop offset="1" stopColor="#0b1626" />
+              </>
+            )
+          ) : light ? (
             <>
-              <stop offset="0" stopColor="#18293f" />
-              <stop offset="0.5" stopColor="#0e1c30" />
-              <stop offset="1" stopColor="#0b1626" />
+              <stop offset="0" stopColor={`rgba(247,250,253,${Math.min(1, 0.36 + 0.4 * glass)})`} />
+              <stop offset="0.46" stopColor={`rgba(238,243,249,${Math.min(1, 0.32 + 0.36 * glass)})`} />
+              <stop offset="1" stopColor={`rgba(232,238,246,${Math.min(1, 0.34 + 0.4 * glass)})`} />
             </>
           ) : (
             <>
@@ -277,9 +297,19 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
           )}
         </linearGradient>
         <linearGradient id="pcRim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="rgba(200,225,250,0.42)" />
-          <stop offset="0.16" stopColor="rgba(170,205,240,0.2)" />
-          <stop offset="1" stopColor="rgba(160,195,235,0.13)" />
+          {light ? (
+            <>
+              <stop offset="0" stopColor="rgba(255,255,255,0.9)" />
+              <stop offset="0.16" stopColor="rgba(120,150,190,0.22)" />
+              <stop offset="1" stopColor="rgba(60,95,135,0.18)" />
+            </>
+          ) : (
+            <>
+              <stop offset="0" stopColor="rgba(200,225,250,0.42)" />
+              <stop offset="0.16" stopColor="rgba(170,205,240,0.2)" />
+              <stop offset="1" stopColor="rgba(160,195,235,0.13)" />
+            </>
+          )}
         </linearGradient>
         <mask id="pcNotch">
           <rect x="0" y="0" width={w} height={h} fill="white" />
@@ -289,7 +319,15 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
       {/* Recessed titlebar strip — darker, tucked BEHIND the pane+tab shape. */}
       <path
         d={stripPath(w)}
-        fill={IS_WINDOWS ? "rgba(7,15,27,0.96)" : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`}
+        fill={
+          IS_WINDOWS
+            ? light
+              ? "rgba(224,231,240,0.98)"
+              : "rgba(7,15,27,0.96)"
+            : light
+              ? `rgba(214,223,234,${Math.min(1, 0.5 + 0.35 * glass)})`
+              : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`
+        }
         mask="url(#pcNotch)"
       />
       {/* Genie flight stand-in glass now lives in a GPU-composited .pc-frost
@@ -1534,7 +1572,7 @@ export function PromptConsole() {
       data-pc-theme={pcTheme}
       style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}
     >
-      <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} />
+      <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} theme={pcTheme} />
       {/* Genie flight frost — clipped to the SAME silhouette string the SVG
           renders NaN-free (never synthesize a new polygon: one NaN silently
           drops the whole clip-path — v0.5.99 lesson). Falls back to the DIV's

@@ -819,6 +819,16 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
               <Row name={t("settings.promptBlur")} hint={t("settings.promptBlurHint")}>
                 <Toggle checked={c.prompt_terminal_blur !== false} onChange={(v) => set("prompt_terminal_blur", v)} />
               </Row>
+              <Row name={t("settings.promptTheme")} hint={t("settings.promptThemeHint")}>
+                <Sel
+                  value={c.prompt_terminal_theme === "light" ? "light" : "dark"}
+                  onChange={(v) => set("prompt_terminal_theme", v)}
+                  options={[
+                    ["dark", t("settings.promptThemeDark")],
+                    ["light", t("settings.promptThemeLight")],
+                  ]}
+                />
+              </Row>
             </Group>
 
             <Group title={t("settings.secFeedback")}>

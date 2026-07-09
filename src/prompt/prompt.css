@@ -1251,3 +1251,159 @@ body {
     animation-duration: 1.4s;
   }
 }
+
+/* ═══════════════ LIGHT THEME — dark ink on light frosted glass ═══════════════
+   The prompt terminal runs on the DARK :root tokens; light is delivered by
+   re-declaring tokens + flipping every dark-assuming hardcoded value, scoped to
+   the stage. The SVG window body (pcTint/strip/pcRim) is flipped in JS — see
+   Silhouette. Traffic lights + recording-red dots/pulses are universal (kept). */
+.pc-stage[data-pc-theme="light"] {
+  color-scheme: light;
+
+  /* ── Ink: was light-on-navy → dark-on-frost ── */
+  --ink:  #0b1b30;              /* was #eaf1fa — 16:1 on the pale body: editor, active tab, wordmark, titles */
+  --ink2: #45586f;              /* was #9fb2c9 — ~6.6:1: PROMPT TERMINAL title, tab labels, footer, btn text, prose */
+  --ink3: #556983;              /* was #6b809b — ~5.2:1 on body / ~4.4:1 on recessed strip: inactive tabs, placeholder, count, icon rest */
+
+  /* ── Accent: pure light cyan is invisible on white → deep teal-cyan (same pill
+       hue family), legible as TEXT (score-num, refine-title, glyph, .on, caret) ── */
+  --cyan:     #0e7490;          /* was #22d3ee — 5.0:1 as text on the pale body (AA) */
+  --cyan-d:   #0a5f78;          /* was #22d3ee */
+  --cyan-ink: #0a6980;          /* was #67e8f9 — undo-btn text */
+
+  /* ── Hairlines / glass edges: pale-steel rims vanish on white → faint DARK ── */
+  --line:        rgba(18, 40, 72, 0.10);   /* was rgba(150,180,220,0.12) */
+  --line2:       rgba(18, 40, 72, 0.16);   /* was rgba(150,180,220,0.20) */
+  --glass-edge:  rgba(20, 48, 78, 0.13);   /* was rgba(150,185,225,0.16) — used as BORDERS in the terminal */
+  --glass-edge2: rgba(20, 48, 78, 0.20);   /* was rgba(150,185,225,0.18) */
+
+  /* ── Specular rims: on light glass the top sheen is WHITE ── */
+  --rim-soft: rgba(255, 255, 255, 0.55);   /* was rgba(190,215,245,0.12) */
+  --rim-cta:  rgba(255, 255, 255, 0.55);   /* was rgba(255,255,255,0.28) — raise for the solid CTA gloss */
+
+  /* ── Translucent fills ── */
+  --fill-focus:       #ffffff;              /* was rgba(12,26,46,0.92) — .pc-rename field bg */
+  --fill-ghost-hover: rgba(16, 40, 72, 0.09); /* was rgba(28,50,80,0.7) — hover raise + SELECTED states (palette-row.active, seg.on, menu hover) */
+  --fill-weak:        rgba(16, 40, 72, 0.06); /* was rgba(20,38,64,0.5) — recessed wells: score track, coach-row, seg track, lib-row hover */
+
+  /* ── Depth: soft, cool, restrained (Apple-like), not black ── */
+  --shadow:    0 24px 60px -30px rgba(16, 44, 86, 0.28);  /* was ...rgba(0,0,0,0.66) */
+  --shadow-sm: 0 12px 30px -18px rgba(16, 44, 86, 0.22);  /* was ...rgba(0,0,0,0.60) */
+
+  /* ── Status green, legible on the pale body ── */
+  --ok: #15803d;               /* was #34d399 — 4.7:1 as text (check, coach-all) */
+}
+
+/* ── (A) SVG body drop-shadow: black is harsh under light glass ── */
+.pc-stage[data-pc-theme="light"] .pc-sil-body {
+  filter: drop-shadow(0 -1px 6px rgba(16, 44, 86, 0.18));   /* was rgba(0,0,0,0.28) */
+}
+
+/* ── (B) .pc-frost cold-open fallback (JS frostBg overrides once config loads,
+       but initial state is "dark" @PromptConsole:464 → guard the first frame) ── */
+.pc-stage[data-pc-theme="light"] .pc-frost {
+  background: linear-gradient(160deg,
+    rgba(240, 246, 250, 0.94) 0%, rgba(232, 239, 246, 0.93) 46%, rgba(228, 235, 243, 0.94) 100%);
+}
+
+/* ── (C) rgba(150,185,225,x) "lift on dark" fills → faint DARK tints ── */
+.pc-stage[data-pc-theme="light"] .pc-winctl button:hover           { background: rgba(18, 30, 52, 0.08); } /* was .14 */
+.pc-stage[data-pc-theme="light"] .pc-tab:hover                     { background: rgba(18, 30, 52, 0.06); } /* was .09 */
+.pc-stage[data-pc-theme="light"] .pc-tab-x:hover                   { background: rgba(18, 30, 52, 0.10); color: var(--ink); } /* was .18 */
+.pc-stage[data-pc-theme="light"] .pc-tab-add:hover                 { background: rgba(18, 30, 52, 0.07); color: var(--cyan); } /* was .10 */
+.pc-stage[data-pc-theme="light"] .pc-icon:hover                    { background: rgba(18, 30, 52, 0.07); color: var(--ink); } /* was .10 */
+.pc-stage[data-pc-theme="light"] .pc-btn.ghost:hover:not(:disabled){ background: rgba(18, 30, 52, 0.07); } /* was .10 */
+.pc-stage[data-pc-theme="light"] .pc-dots i                        { background: rgba(18, 40, 72, 0.20); } /* was rgba(150,185,225,0.28) */
+.pc-stage[data-pc-theme="light"] .pc-spinner                       { border-color: rgba(18, 40, 72, 0.16); border-top-color: var(--cyan); } /* track was rgba(150,185,225,0.25) */
+
+/* ── (D) Accent glows / text-shadows: only bloom on dark → drop or deepen ── */
+.pc-stage[data-pc-theme="light"] .pc-glyph {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);              /* was 0 0 16px rgba(34,211,238,.75), 0 0 36px rgba(34,211,238,.35) — embossed lip instead of halo */
+}
+.pc-stage[data-pc-theme="light"] .pc-icon.on      { filter: none; }  /* was drop-shadow(0 0 6px rgba(34,211,238,.55)) — deep-cyan color alone reads */
+.pc-stage[data-pc-theme="light"] .pc-btn.ghost.on { filter: none; }  /* was drop-shadow(0 0 6px rgba(34,211,238,.4)) */
+.pc-stage[data-pc-theme="light"] .pc-flash {
+  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.5), inset 0 0 26px -8px rgba(14, 116, 144, 0.28); /* was rgba(34,211,238,.55/.5) */
+}
+.pc-stage[data-pc-theme="light"] .pc-dots i.on {
+  background: var(--cyan);
+  box-shadow: 0 0 4px rgba(14, 116, 144, 0.35);              /* was rgba(34,211,238,.6) */
+}
+.pc-stage[data-pc-theme="light"] .pc-score-fill {
+  background: linear-gradient(90deg, #0e7490, #0891b2);       /* was #0891b2 → #22d3ee */
+  box-shadow: 0 0 8px rgba(14, 116, 144, 0.25);              /* was rgba(34,211,238,.5) */
+}
+
+/* ── (E) Cyan borders baked with the DARK cyan → deep cyan ── */
+.pc-stage[data-pc-theme="light"] .pc-rename                    { border-color: rgba(14, 116, 144, 0.5);  } /* was rgba(34,211,238,.4) */
+.pc-stage[data-pc-theme="light"] .pc-lib-search:focus-within   { border-color: rgba(14, 116, 144, 0.45); } /* was rgba(34,211,238,.4) */
+.pc-stage[data-pc-theme="light"] .pc-btn.on                    { border-color: rgba(14, 116, 144, 0.45); } /* was rgba(34,211,238,.45) */
+.pc-stage[data-pc-theme="light"] .pc-dictate                   { border-color: rgba(14, 116, 144, 0.40); } /* was rgba(34,211,238,.35) */
+
+/* ── (F) Dark-navy panel substrates rgb(10 22 42/…) → light frost (keep --pc-glass scaling) ── */
+.pc-stage[data-pc-theme="light"] .pc-lib,
+.pc-stage[data-pc-theme="light"] .pc-coach   { background: rgb(246 249 252 / calc(0.60 + 0.30 * var(--pc-glass))); } /* was rgb(10 22 42 / calc(.35+.3·)) */
+.pc-stage[data-pc-theme="light"] .pc-refine  { background: rgb(246 249 252 / calc(0.70 + 0.30 * var(--pc-glass))); } /* was calc(.45+.3·) */
+.pc-stage[data-pc-theme="light"] .pc-menu    { background: rgb(249 251 253 / 0.90); } /* was rgb(10 22 42 / .86) */
+.pc-stage[data-pc-theme="light"] .pc-palette { background: rgb(249 251 253 / 0.93); } /* was rgb(10 22 42 / .9) */
+.pc-stage[data-pc-theme="light"] .pc-undo,
+.pc-stage[data-pc-theme="light"] .pc-dictate { background: rgb(249 251 253 / 0.93); } /* was rgb(10 22 42 / .92/.9) */
+
+/* ── (G) Fields/buttons: dark wells rgb(28 48 78/…) → bright white wells ── */
+.pc-stage[data-pc-theme="light"] .pc-btn        { background: rgb(255 255 255 / calc(0.42 + 0.24 * var(--pc-glass))); } /* was rgb(28 48 78 / calc(.3·)) */
+.pc-stage[data-pc-theme="light"] .pc-lib-search { background: rgb(18 40 72 / calc(0.04 + 0.03 * var(--pc-glass))); }    /* recessed well; was rgb(28 48 78 / calc(.3·)) */
+
+/* ── (H) Primary CTA: dark used translucent-cyan + near-white text #d9f6fd
+       (invisible on light) → SOLID deep-cyan fill + white bold text ── */
+.pc-stage[data-pc-theme="light"] .pc-btn.primary {
+  background: linear-gradient(180deg, #0e8aa6, #0a6480);      /* was linear-gradient(180deg, rgba(34,211,238,.32), rgba(8,145,178,.38)) */
+  border-color: rgba(14, 116, 144, 0.6);                     /* was rgba(34,211,238,.5) */
+  color: #ffffff;                                            /* was #d9f6fd */
+  box-shadow: 0 6px 16px -8px rgba(14, 116, 144, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.35); /* was ...rgba(34,211,238,.45)... */
+}
+.pc-stage[data-pc-theme="light"] .pc-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #13a0bd, #0c7290);      /* was rgba(34,211,238,.42) → rgba(8,145,178,.48) */
+}
+
+/* ── (I) Undo toast accent button ── */
+.pc-stage[data-pc-theme="light"] .pc-undo-btn {
+  background: rgba(14, 116, 144, 0.12); border-color: rgba(14, 116, 144, 0.4); color: var(--cyan-ink); /* was rgba(34,211,238,.16/.45) */
+}
+.pc-stage[data-pc-theme="light"] .pc-undo-btn:hover { background: rgba(14, 116, 144, 0.2); color: #084a5c; } /* hover color was #d9f6fd */
+
+/* ── (J) Diff add/del: pale fills + near-white text #d7f7e9/#fecdd3 (invisible)
+       → deep tinted ink on light tinted chips ── */
+.pc-stage[data-pc-theme="light"] .pc-d-add {
+  background: rgba(22, 163, 74, 0.16); color: #14532d;        /* was rgba(52,211,153,.18) / #d7f7e9 */
+}
+.pc-stage[data-pc-theme="light"] .pc-d-del {
+  background: rgba(225, 29, 72, 0.12); color: #9f1239;        /* was rgba(244,63,94,.16) / #fecdd3 */
+  text-decoration-color: rgba(225, 29, 72, 0.5);             /* was rgba(244,63,94,.6) */
+}
+
+/* ── (K) Red / danger states baked with #fecdd3 pink text → deep-red ink.
+       (Red is meaningful — kept red, only the on-dark text tuned for light.) ── */
+.pc-stage[data-pc-theme="light"] .pc-menu button.danger:hover {
+  background: rgba(225, 29, 72, 0.10); color: #b01739;        /* was rgba(244,63,94,.18) / #fecdd3 */
+}
+.pc-stage[data-pc-theme="light"] .pc-btn.mic.rec {
+  color: #be123c; background: rgba(225, 29, 72, 0.12);        /* was #fecdd3 / rgba(244,63,94,.18) */
+  box-shadow: 0 0 12px -3px rgba(225, 29, 72, 0.35);         /* was rgba(244,63,94,.5) */
+}
+.pc-stage[data-pc-theme="light"] .pc-dictate-stop {
+  color: #be123c; background: rgba(225, 29, 72, 0.12); border-color: rgba(225, 29, 72, 0.4); /* was #fecdd3 / rgba(244,63,94,.16/.45) */
+}
+.pc-stage[data-pc-theme="light"] .pc-dictate-stop:hover { background: rgba(225, 29, 72, 0.2); } /* was rgba(244,63,94,.26) */
+
+/* ── (L) Windows (no OS vibrancy → the base .is-windows block hardcodes dark
+       solids @1215-1232; mirror them light. .is-windows is on <html>, an
+       ANCESTOR of the stage → specificity 0,3,0 cleanly beats the 0,2,0 base). ── */
+.is-windows .pc-stage[data-pc-theme="light"] :is(.pc-lib, .pc-coach, .pc-refine, .pc-dictate) {
+  background: #eef3f8;                                        /* was #0e1c30 */
+}
+.is-windows .pc-stage[data-pc-theme="light"] :is(.pc-btn:not(.ghost):not(.primary), .pc-lib-search) {
+  background: rgba(255, 255, 255, 0.66);                      /* was rgba(28,48,78,.45) */
+}
+.is-windows .pc-stage[data-pc-theme="light"] :is(.pc-tab:hover:not(.active), .pc-icon:hover, .pc-tab-add:hover, .pc-btn.ghost:hover:not(:disabled)) {
+  background: rgba(18, 30, 52, 0.07);                         /* was rgba(150,185,225,.12) */
+}
