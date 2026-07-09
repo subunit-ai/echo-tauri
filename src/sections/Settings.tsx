@@ -193,6 +193,7 @@ const ORB_PRESETS: { key: string; label: string; idle: string; working: string; 
  *  by the REAL voice spectrum (mic_features), not just the scalar level. */
 const ORB_STYLES: [string, string][] = [
   ["pill", "★ Pille (Standard)"],
+  ["pill2", "★ Pille V2 (Dynamik)"],
   ["nebula", "★ Nebula"],
   ["ferro", "★ Ferrofluid"],
   ["scope", "★ Oscilloscope"],

@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.112",
+    date: "2026-07-09",
+    title: { de: "Die Pille im Doppelpack: V1 zurück, V2 zum Ausprobieren", en: "The pill twin pack: V1 back, V2 to try" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Pille V1 ist zurück — der gewohnte Charakter mit kräftiger Mitte und tiefer Dynamik, den die letzte Version überschrieben hatte. Einzige Änderung: die äußeren Balken atmen jetzt sanft mit der Stimme mit, statt still zu bleiben. V1 bleibt der Standard.",
+        en: "Pill V1 is back — the familiar character with a strong centre and deep dynamics that the last version had overwritten. Only change: the outer bars now breathe gently with your voice instead of sitting still. V1 stays the default.",
+      },
+      {
+        kind: "feature",
+        de: "Neuer wählbarer Stil „Pille V2 (Dynamik)\u201c: jeder Balken mit eigenem Charakter — eigene Frequenz-Färbung, eigenes Anschwell- und Abkling-Tempo, Mitte mit Spielraum statt Dauervollausschlag. Umschaltbar in den Overlay-Einstellungen — direkt vergleichen und den Favoriten behalten.",
+        en: "New selectable style \u201ePill V2 (Dynamics)\u201c: every bar with its own character — its own frequency colouring, its own attack and release tempo, a centre with headroom instead of constant full deflection. Switch in the overlay settings — compare directly and keep your favourite.",
+      },
+    ],
+  },
+  {
     version: "0.5.111",
     date: "2026-07-09",
     title: {
