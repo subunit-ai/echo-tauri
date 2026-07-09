@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.116",
+    date: "2026-07-09",
+    title: {
+      de: "Vokabular: zuletzt hinzugefügte Begriffe oben",
+      en: "Vocabulary: most recently added terms on top",
+    },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Das Wörterbuch zeigt neue Begriffe jetzt oben statt ganz unten — du siehst sofort, was du zuletzt hinzugefügt hast, ohne zu scrollen. Auch ein neuer Eintrag erscheint direkt an erster Stelle. An der Erkennung ändert sich nichts.",
+        en: "The dictionary now lists new terms at the top instead of the very bottom — you immediately see what you added last, without scrolling. A newly added entry also appears in first place. Recognition behaviour is unchanged.",
+      },
+    ],
+  },
+  {
     version: "0.5.115",
     date: "2026-07-09",
     title: { de: "Terminal im Pillen-Ton, Milchglas-Schalter + zügigerer Genie", en: "Terminal in the pill's tone, frost toggle + a quicker genie" },

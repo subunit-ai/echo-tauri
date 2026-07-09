@@ -152,6 +152,16 @@ function Dictionary() {
   const rows = draft ?? config.vocabulary;
   const dirty = draft !== null;
 
+  // Newest first: the store keeps plain insertion order (every add path appends
+  // — `add()` here, Learning's "add to vocabulary", Rust's `vocabulary.push`),
+  // so the freshest term is LAST. We reverse only the VIEW and carry each row's
+  // real storage index along, so edit/delete still address the right entry.
+  //
+  // The stored array is deliberately NOT reversed: `apply_vocab_replace` sorts
+  // patterns by length with a STABLE sort, so insertion order breaks ties
+  // between equal-length patterns — flipping it could change transcripts.
+  const view = rows.map((entry, idx) => ({ entry, idx })).reverse();
+
   const setField = (i: number, f: "sounds_like" | "write_as" | "category", v: string) =>
     setDraft(rows.map((e, idx) => (idx === i ? { ...e, [f]: v } : e)));
   const setAliases = (i: number, v: string) =>
@@ -217,30 +227,30 @@ function Dictionary() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((e, i) => (
-            <tr key={i}>
+          {view.map(({ entry: e, idx }) => (
+            <tr key={idx}>
               <td>
                 <input
                   value={e.sounds_like}
-                  onChange={(ev) => setField(i, "sounds_like", ev.target.value)}
+                  onChange={(ev) => setField(idx, "sounds_like", ev.target.value)}
                 />
               </td>
               <td>
                 <input
                   value={e.write_as}
-                  onChange={(ev) => setField(i, "write_as", ev.target.value)}
+                  onChange={(ev) => setField(idx, "write_as", ev.target.value)}
                 />
               </td>
               <td>
                 <input
                   value={e.aliases.join(", ")}
-                  onChange={(ev) => setAliases(i, ev.target.value)}
+                  onChange={(ev) => setAliases(idx, ev.target.value)}
                 />
               </td>
               <td>
                 <select
                   value={e.category}
-                  onChange={(ev) => setField(i, "category", ev.target.value)}
+                  onChange={(ev) => setField(idx, "category", ev.target.value)}
                 >
                   {CATS.map((c) => (
                     <option key={c} value={c}>
@@ -250,7 +260,7 @@ function Dictionary() {
                 </select>
               </td>
               <td>
-                <button className="rowdel" onClick={() => del(i)} title={t("common.delete")}>
+                <button className="rowdel" onClick={() => del(idx)} title={t("common.delete")}>
                   ✕
                 </button>
               </td>
