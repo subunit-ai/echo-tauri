@@ -169,7 +169,8 @@ export function drawOrb(
   // The pill treats "done" as plain idle: its confirmation is the pasted text
   // itself — the 700 ms all-bars flash in the done color on release read as a
   // glitch (TJ; state colors stay reserved for real working feedback).
-  const stP = v.style === "pill" && st === "done" ? "idle" : st;
+  const isPillStyle = v.style === "pill" || v.style === "pill2";
+  const stP = isPillStyle && st === "done" ? "idle" : st;
   // idle → idle · recording/transcribing → working · done → done · error → error.
   const stateColor =
     stP === "recording" || stP === "transcribing"
@@ -183,7 +184,7 @@ export function drawOrb(
   // "idle_glass" = frost at rest, state colors only while working.
   const pillMode = v.pillColorMode ?? "color";
   const colTarget =
-    v.style === "pill" &&
+    isPillStyle &&
     (pillMode === "glass" || (pillMode === "idle_glass" && stP === "idle"))
       ? FROST
       : stateColor;
@@ -1368,7 +1369,8 @@ export function drawOrb(
       ctx.fill();
       break;
     }
-    case "pill": {
+    case "pill":
+    case "pill2": {
       // ★ Pille v2 — a NEUTRAL liquid-glass capsule with a dome lens: the
       // glass itself carries no state color (chic, transparent — TJ), only
       // the nine spectrum bars inside glow. The lens look follows the SCAI
@@ -1487,25 +1489,51 @@ export function drawOrb(
       const barW = Math.max(1.8, H * 0.1);
       const span = W - H * 1.15; // usable width between the rounded ends
       if (!an.barH || an.barH.length !== N) an.barH = new Array(N).fill(0);
-      // Balance pass (TJ 2026-07-09, after the sensitivity fix): normal speech
-      // moved mostly the 3-4 MIDDLE bars, hard — the rims sat dead. Three
-      // stacked causes, three counters: (1) the rim bars sampled the TOP
-      // octave (sibilance-land, silent between 's' sounds) — the spectral walk
-      // now ends at ~upper-mid (d^1.3 * 0.82), where consonants and formants
-      // actually live; (2) every bar gets a small share of the broadband
-      // level, so the whole pill breathes with the voice; (3) neighbour
-      // smoothing melts single-bar spikes into a wave.
+      // Balance pass (TJ 2026-07-09): rims listen to living speech frequencies
+      // (walk ends ~upper-mid), every bar keeps a small broadband share so
+      // none sits dead. Dynamics pass (TJ, same day, after v0.5.110): that
+      // version opened ALL bars almost fully on every word, like a round fan —
+      // the 25% broadband moved every bar in lockstep, the pure per-band AGC
+      // pinned each band near its own peak, and mirror bars were pixel-
+      // identical twins. Counters: mostly-AGC is blended with the ABSOLUTE
+      // envelope (bass really is bigger than treble → bars get identity
+      // back), broadband drops to 10%, and each side detunes its sampling a
+      // touch so left and right stop moving as one.
+      // Per-bar character (fixed, not random): each bar follows the voice at
+      // its own attack/release speed — that desync is the "playful" motion.
+      const PHI = [0.93, 0.18, 0.66, 0.41, 1, 0.29, 0.74, 0.12, 0.55];
+      const DET = [-0.02, 0.045, -0.035, 0.02, 0, -0.03, 0.04, -0.045, 0.015];
+      // TWO selectable temperaments (TJ): "pill" = V1, the v0.5.109 response
+      // he liked — strong centre arc, deep dynamics — with ONLY the rims
+      // gently livened; "pill2" = V2, the per-bar-character rework below.
+      const pillV2 = v.style === "pill2";
       let spk: number[] | null = null;
-      if (speaking) {
+      if (speaking && pillV2) {
         const raw = new Array(N).fill(0);
         for (let i = 0; i < N; i++) {
           const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
-          raw[i] = 0.75 * bandNormAt(Math.pow(d, 1.35) * 0.78) + 0.25 * Math.min(1, lvl);
+          // Fixed per-bar detune (breaks BOTH mirror pairs and neighbours —
+          // a plain left/right split muted whichever rim drew the quiet side,
+          // and parity tricks keep mirrors in sync). Scaled by d so the
+          // centre stays pure bass; every position lands in living speech
+          // frequencies (max walk 0.78 + 0.045 ≈ upper-mid, not sibilance).
+          const pos = Math.min(1, Math.max(0, Math.pow(d, 1.35) * 0.78 + DET[i] * d));
+          // d-weighted blend: rims lean on the auto-gain (their absolute
+          // energy is tiny — pure absolute would mute them again), the centre
+          // leans on the absolute envelope (it HAS energy — pure auto-gain
+          // pinned it at full). Small broadband share keeps a common breath.
+          const agcW = 0.5 + 0.2 * d;
+          const absW = 0.42 - 0.3 * d;
+          const bbW = 0.06 + 0.1 * d; // rims get more common breath — their
+          // absolute energy is tiny; the centre barely any (it pumps itself)
+          raw[i] = agcW * bandNormAt(pos) + absW * bandAt(pos) + bbW * Math.min(1, lvl);
         }
+        // Gentler cohesion than v0.5.110 — enough to melt lone spikes, not
+        // enough to iron the wave flat.
         spk = raw.map((_, i) => {
           const a = raw[Math.max(0, i - 1)];
           const b = raw[Math.min(N - 1, i + 1)];
-          return 0.2 * a + 0.6 * raw[i] + 0.2 * b;
+          return 0.08 * a + 0.84 * raw[i] + 0.08 * b;
         });
       }
       ctx.lineCap = "round";
@@ -1521,13 +1549,22 @@ export function drawOrb(
 
         let tH: number;
         if (speaking && spk) {
-          // Auto-gained + compressed response over the CENTRE-OUT spectrum
-          // (centre = bass = the energy, rims = upper-mid). Flatter shape
-          // than REST: the resting profile is centre-tall by design, and
-          // multiplying it in stacked ANOTHER centre boost on the already
-          // bass-heavy spectrum (part of TJ's "nur die mittleren 3-4").
-          const resp = Math.pow(spk[i], 0.7);
-          const shape = 0.8 + 0.2 * REST[i];
+          // V2 "Dynamik": per-bar frequency colouring + flatter shape + more
+          // contrast — every bar plays its own game (see the block above).
+          const resp = Math.pow(spk[i], 0.85);
+          const shape = 0.68 + 0.32 * REST[i];
+          tH = H * Math.min(0.85, shape * (0.08 + 0.92 * resp));
+        } else if (speaking) {
+          // V1 = the v0.5.109 response, verbatim — centre-out spectrum,
+          // centre-tall shape, deep dynamics — plus ONE gentle touch: the
+          // rims get a small voice-following lift (they sampled sibilance
+          // land and sat dead between 's' sounds; TJ: "wenn nur die außen
+          // bisschen mehr reagieren würden"). Centre bars are untouched.
+          const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
+          const dd = d * d * d * d; // only the outermost pair really feels the lift
+          const bn = Math.min(1, bandNormAt(d) + 0.2 * dd * Math.min(1, lvl));
+          const resp = Math.pow(bn, 0.7);
+          const shape = 0.55 + 0.45 * REST[i];
           tH = H * Math.min(0.85, shape * (0.1 + 0.95 * resp));
         } else if (stP === "idle") {
           // resting = DOTS; the idle-animation toggle makes them breathe.
@@ -1546,11 +1583,20 @@ export function drawOrb(
           tH = H * REST[i] * amp;
         }
         tH *= domeY;
-        // Per-bar smoothing: speech stays snappy (fast follow), every state
-        // edge (release → transcribing → idle) morphs instead of jumping.
-        // 0.55 → 0.46: a touch more glide between syllables (TJ: "smoother").
+        // Per-bar smoothing: while speaking every bar has its OWN attack and
+        // release speed (PHI) — syllables pop different bars at different
+        // moments and each sinks on its own clock. That fixed desync is what
+        // makes the pill "play" instead of opening as one synced fan (TJ).
+        // State edges (release → transcribing → idle) keep the slow morph.
         if (!Number.isFinite(an.barH[i])) an.barH[i] = 0; // Selbstheilung
-        an.barH[i] += (tH - an.barH[i]) * (speaking ? 0.46 : 0.16);
+        const kBar = speaking
+          ? pillV2
+            ? tH > an.barH[i]
+              ? 0.32 + 0.42 * PHI[i]
+              : 0.14 + 0.16 * PHI[i]
+            : 0.55 // V1: the v0.5.109 uniform snap
+          : 0.16;
+        an.barH[i] += (tH - an.barH[i]) * kBar;
         let hBar = an.barH[i];
 
         // Materialize: bars ignite centre-out after the glass has condensed.
@@ -1628,7 +1674,7 @@ export function drawOrb(
   if (bloomA > 0.01) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    const isPill = v.style === "pill";
+    const isPill = isPillStyle;
     const flashCol = isPill && pillMode === "glass" ? FROST : v.colors.idle;
     const rx = (isPill ? size * 0.44 : size * 0.36) * (0.6 + 0.7 * ap);
     const ry = (isPill ? size * 0.19 : size * 0.36) * (0.6 + 0.7 * ap);
