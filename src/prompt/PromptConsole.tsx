@@ -292,9 +292,13 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
         fill={IS_WINDOWS ? "rgba(7,15,27,0.96)" : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`}
         mask="url(#pcNotch)"
       />
-      {/* Extra body during the genie flight — the OS blur is off then, so the
-          pane briefly carries more of its own tint (see .pc-anim). */}
-      <path className="pc-sil-boost" d={sil} fill="rgba(9,18,34,0.6)" />
+      {/* Dense stand-in glass during the genie flight — the OS blur is off
+          then, so the window carries (almost) the full material itself. TWO
+          paths: the strip band was uncovered before, so the top of the window
+          turned see-through mid-flight and flickered when the blur returned
+          (TJ). Just shy of opaque: a whisper of desktop keeps it glassy. */}
+      <path className="pc-sil-boost" d={stripPath(w)} fill="rgba(6,12,23,0.88)" mask="url(#pcNotch)" />
+      <path className="pc-sil-boost" d={sil} fill="rgba(12,19,32,0.9)" />
       {/* Pane + active tab: ONE shape. The outline IS the tab. */}
       <path className="pc-sil-body" d={sil} fill="url(#pcTint)" />
       <path d={sil} fill="none" stroke="url(#pcRim)" strokeWidth="1" />
@@ -610,9 +614,11 @@ export function PromptConsole() {
       await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
       pinStage(stage, null);
       invoke("prompt_set_effects", { on: true }).catch(() => {});
-      // Crossfade the boost tint OUT while the vibrancy comes in — dropping
-      // both in the same frame reads as a visible material pop.
-      window.setTimeout(() => stage.classList.remove("pc-anim"), 120);
+      // The vibrancy attaches on the main thread a few frames later; only THEN
+      // melt the stand-in glass (0.34s CSS fade) so the real frost condenses
+      // underneath it — removing the cover before the blur exists was the
+      // one-frame top flicker TJ saw on landing.
+      window.setTimeout(() => stage.classList.remove("pc-anim"), 220);
     }
   };
 
@@ -654,6 +660,14 @@ export function PromptConsole() {
     // the stage (the old order dropped the cover first and let the un-clipped
     // window peek through for a frame or two: TJ's rough entrance).
     stage.classList.add("pc-anim");
+    if (dir === "out") {
+      // Let the stand-in glass GRIP (two painted frames of its fast fade)
+      // before the native blur is cut — cutting first left the window raw
+      // and see-through for a beat at suction start.
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => r())),
+      );
+    }
     invoke("prompt_set_effects", { on: false }).catch(() => {});
 
     // Flight canvas: the animation is clipped to the WINDOW, and the pill sits

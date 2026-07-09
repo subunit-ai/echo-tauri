@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.109",
+    date: "2026-07-09",
+    title: { de: "Ein Glas, ein Guss — der Genie-Flug im vollen Material", en: "One glass, one pour — the genie flight in full material" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Das Prompt-Terminal flog heller und durchsichtiger als es steht — und beim Landen flackerte die Titelleiste einmal, wenn das Milchglas zurückkam. Das Fenster trägt jetzt während des gesamten Flugs ein dichtes Glas in seinem normalen Look (inklusive der Tab-Leiste oben, die vorher ungedeckt war), und das echte Milchglas kondensiert beim Ankommen weich darunter statt aufzupoppen.",
+        en: "The prompt terminal flew brighter and more see-through than it looks at rest — and on landing the title bar flickered once as the frosted glass returned. The window now wears dense glass in its normal look for the whole flight (including the previously uncovered tab strip on top), and the real frost condenses softly underneath on arrival instead of popping in.",
+      },
+    ],
+  },
+  {
     version: "0.5.108",
     date: "2026-07-09",
     title: { de: "Dein Wortschatz zahlt sich aus", en: "Your vocabulary pays off" },
