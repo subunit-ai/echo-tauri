@@ -158,6 +158,7 @@ pub fn run() {
             prompt_console::prompt_console_hide_now,
             prompt_console::prompt_genie_anchor,
             prompt_console::prompt_set_effects,
+            prompt_console::prompt_genie_frame,
             prompt_console::prompts_load,
             prompt_console::prompts_save,
             prompt_console::prompt_take_pending,

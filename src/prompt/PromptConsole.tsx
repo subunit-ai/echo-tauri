@@ -315,57 +315,84 @@ function Silhouette({ w, h, bump, glass }: { w: number; h: number; bump: { x: nu
 // reaches the transform-origin as scale→0. The pill's absorb pulse covers the
 // final snap.
 
-/** Three same-count polygons (14 pts) for the clip morph: full rect → funnel
- *  (mouth centred over the pill) → thin stream. `py < H/2` flips the funnel
- *  upward for a pill above the window. */
-function geniePolys(W: number, H: number, px: number, py: number, pillW: number) {
-  const down = py >= H / 2;
-  const cx = Math.min(Math.max(px, 36), W - 36);
-  const mouth1 = Math.max(26, Math.min(pillW * 0.5, 80));
-  const mouth2 = Math.max(10, mouth1 * 0.32);
-  const Y = (y: number) => (down ? y : H - y);
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-  const SIDE_H = [0.3, 0.6, 0.85]; // side sample depths (0 = far edge, 1 = mouth)
-  const build = (k: number, mouth: number) => {
-    const pts: string[] = [];
-    const pinch = (h: number) => Math.pow(h, 1.6) * k; // lower points pull first
-    const push = (x: number, y: number) => pts.push(`${x.toFixed(1)}px ${Y(y).toFixed(1)}px`);
-    // far edge (away from the pill) — narrows mildly, the mass exits mouth-first
-    for (const tx of [0, 0.33, 0.66, 1]) {
-      push(lerp(tx * W, cx + (tx - 0.5) * 2 * (mouth + (W / 2 - mouth) * 0.6), k * 0.5), 0);
-    }
-    for (const h of SIDE_H) push(lerp(W, cx + mouth, pinch(h)), h * H); // right side ↓
-    for (const bx of [1, 0.66, 0.33, 0]) push(lerp(bx * W, cx + (bx - 0.5) * 2 * mouth, k), H); // mouth
-    for (const h of [...SIDE_H].reverse()) push(lerp(0, cx - mouth, pinch(h)), h * H); // left side ↑
-    return `polygon(${pts.join(", ")})`;
-  };
-  return { rect: build(0, mouth1), funnel: build(0.85, mouth1), stream: build(1, mouth2) };
-}
-
 type GeniePoint = { x: number; y: number; w: number };
 
-function genieFrames(dir: "in" | "out", W: number, H: number, p: GeniePoint): Keyframe[] {
-  const polys = geniePolys(W, H, p.x, p.y, p.w);
-  if (dir === "out") {
-    return [
-      { clipPath: polys.rect, transform: "scale(1, 1)", opacity: 1, easing: "cubic-bezier(.55,.06,.68,.19)" },
-      // funnel forms + slight stretch toward the pill (origin sits there)
-      { clipPath: polys.funnel, transform: "scale(0.9, 1.05)", opacity: 1, offset: 0.34, easing: "cubic-bezier(.45,.05,.6,.3)" },
-      // the mass slides down the funnel, accelerating
-      { clipPath: polys.stream, transform: "scale(0.3, 0.56)", opacity: 1, offset: 0.72, easing: "cubic-bezier(.4,.1,.7,.4)" },
-      // …visibly INTO the pill (still fully opaque)
-      { clipPath: polys.stream, transform: "scale(0.035, 0.1)", opacity: 1, offset: 0.96, easing: "linear" },
-      // final 4%: sub-pill-size — a snap the absorb pulse swallows
-      { clipPath: polys.stream, transform: "scale(0.015, 0.04)", opacity: 0 },
-    ];
+/** One clip polygon (14 pts, same count at every k) for the funnel morph:
+ *  k = 0 → full rect, k = 1 → funneled onto a `mouth`-halfwidth opening
+ *  centred over the pill; lower points pinch first (h^1.6) — the lamp look.
+ *  `py < H/2` flips the funnel upward for a pill above the window. */
+function genieClip(W: number, H: number, px: number, py: number, k: number, mouth: number): string {
+  const down = py >= H / 2;
+  const cx = Math.min(Math.max(px, 36), W - 36);
+  const Y = (y: number) => (down ? y : H - y);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const pts: string[] = [];
+  const push = (x: number, y: number) => pts.push(`${x.toFixed(1)}px ${Y(y).toFixed(1)}px`);
+  // far edge (away from the pill) — narrows mildly, the mass exits mouth-first
+  for (const tx of [0, 0.33, 0.66, 1]) {
+    push(lerp(tx * W, cx + (tx - 0.5) * 2 * (mouth + (W / 2 - mouth) * 0.6), k * 0.5), 0);
   }
-  return [
-    // pours OUT of the pill: visible from the very first frame
-    { clipPath: polys.stream, transform: "scale(0.02, 0.05)", opacity: 1, easing: "cubic-bezier(.2,.7,.35,1)" },
-    { clipPath: polys.funnel, transform: "scale(0.45, 0.7)", opacity: 1, offset: 0.42, easing: "cubic-bezier(.2,.8,.25,1)" },
-    { clipPath: polys.rect, transform: "scale(1.015, 0.985)", opacity: 1, offset: 0.82, easing: "ease-out" },
-    { clipPath: polys.rect, transform: "scale(1, 1)", opacity: 1 },
-  ];
+  const SIDE_H = [0.3, 0.6, 0.85]; // side sample depths (0 = far edge, 1 = mouth)
+  const pinch = (h: number) => Math.pow(h, 1.6) * k;
+  for (const h of SIDE_H) push(lerp(W, cx + mouth, pinch(h)), h * H); // right side ↓
+  for (const bx of [1, 0.66, 0.33, 0]) push(lerp(bx * W, cx + (bx - 0.5) * 2 * mouth, k), H); // mouth
+  for (const h of [...SIDE_H].reverse()) push(lerp(0, cx - mouth, pinch(h)), h * H); // left side ↑
+  return `polygon(${pts.join(", ")})`;
+}
+
+/** Dense keyframes sampled from ONE continuous parametric motion — no easing
+ *  seams between hand-set segments (they read as tiny jolts, TJ: "blätscht").
+ *  18 samples, linear between them: funnel formation, travel, squash and clip
+ *  all stay phase-locked. */
+function genieFrames(dir: "in" | "out", W: number, H: number, p: GeniePoint): Keyframe[] {
+  const mouth1 = Math.max(26, Math.min(p.w * 0.5, 80));
+  const mouth2 = Math.max(10, mouth1 * 0.32);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  const N = 18;
+  const frames: Keyframe[] = [];
+  for (let i = 0; i <= N; i++) {
+    const T = i / N;
+    let k: number, u: number, sx: number, sy: number, opacity: number;
+    if (dir === "out") {
+      // funnel fully formed by 42%; travel starts gently at 16% and accelerates
+      k = smooth(clamp01(T / 0.42));
+      u = T < 0.16 ? 0 : Math.pow((T - 0.16) / 0.84, 1.9);
+      sx = lerp(1, 0.02, clamp01(u * 1.06));
+      // taffy: a soft stretch toward the pill while the funnel forms, then the
+      // height collapses a touch slower than the width
+      sy = lerp(1, 0.045, Math.pow(u, 1.3)) * (1 + 0.05 * Math.sin(Math.PI * clamp01(T / 0.45)));
+      opacity = T > 0.965 ? (1 - T) / 0.035 : 1; // visible ALL the way in
+    } else {
+      // pour out fast, decelerate, unfold; funnel dissolves on the way up
+      const v = 1 - Math.pow(1 - T, 2.6);
+      k = 1 - smooth(clamp01((T - 0.3) / 0.55));
+      u = 1 - v;
+      sx = lerp(0.02, 1, v) * (1 + 0.014 * Math.sin(Math.PI * clamp01((T - 0.55) / 0.45)));
+      sy = lerp(0.045, 1, v) * (1 - 0.012 * Math.sin(Math.PI * clamp01((T - 0.55) / 0.45)));
+      opacity = 1; // visible from the very first frame — it grows OUT of the pill
+    }
+    frames.push({
+      clipPath: genieClip(W, H, p.x, p.y, k, lerp(mouth1, mouth2, clamp01(u))),
+      transform: `scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`,
+      opacity,
+    });
+  }
+  return frames;
+}
+
+/** The flight canvas: the animation renders inside the WINDOW, so it is
+ *  clipped to it — and the pill usually sits BELOW the window (that is why
+ *  v0.5.99 visually stopped at the window edge, TJ). Union of the current
+ *  rect and a pad around the pill, as offsets for `prompt_genie_frame`. */
+function flightFrame(W: number, H: number, p: GeniePoint) {
+  const pad = Math.max(120, p.w);
+  const left = Math.min(0, p.x - pad);
+  const top = Math.min(0, p.y - pad);
+  const right = Math.max(W, p.x + pad);
+  const bottom = Math.max(H, p.y + pad);
+  return { dx: left, dy: top, w: right - left, h: bottom - top };
 }
 
 export function PromptConsole() {
@@ -439,6 +466,11 @@ export function PromptConsole() {
   const stageRef = useRef<HTMLDivElement>(null);
   const genieAnim = useRef<Animation | null>(null);
   const genieRan = useRef(false);
+  // Active flight canvas: the pre-flight stage box (its offset inside the
+  // ENLARGED window) + the pill point in flight coordinates. While set, the
+  // resize listener must not touch winSize — the grow/restore resizes would
+  // re-layout the silhouette mid-flight.
+  const flight = useRef<{ box: { dx: number; dy: number; w: number; h: number }; p: GeniePoint } | null>(null);
   const booted = useRef(false);
   // Green light / zoom: remember the pre-zoom frame to restore on toggle.
   const zoomPrev = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -535,6 +567,24 @@ export function PromptConsole() {
     }
   };
 
+  /** Pin the stage to the pre-flight rect (so growing the window moves NOTHING
+   *  visually) or release it back to filling the window. */
+  const pinStage = (stage: HTMLDivElement, box: { dx: number; dy: number; w: number; h: number } | null) => {
+    if (box) {
+      stage.style.position = "absolute";
+      stage.style.left = `${-box.dx}px`;
+      stage.style.top = `${-box.dy}px`;
+      stage.style.width = `${box.w}px`;
+      stage.style.height = `${box.h}px`;
+    } else {
+      stage.style.position = "";
+      stage.style.left = "";
+      stage.style.top = "";
+      stage.style.width = "";
+      stage.style.height = "";
+    }
+  };
+
   const runGenie = async (dir: "in" | "out") => {
     const stage = stageRef.current;
     if (!stage) {
@@ -543,21 +593,39 @@ export function PromptConsole() {
     }
     genieAnim.current?.cancel();
     genieRan.current = true;
-    invoke("prompt_set_effects", { on: false }).catch(() => {});
     // The stage boots hidden (.pc-boot) so nothing flashes before the first
-    // entrance; the keyframes own opacity from here on.
+    // entrance; the keyframes own opacity from here on. .pc-anim pre-arms the
+    // extra body tint BEFORE the vibrancy goes so the material change blends.
     stage.classList.remove("pc-boot");
     stage.classList.add("pc-anim");
-    const p = await genieAnchor();
+    invoke("prompt_set_effects", { on: false }).catch(() => {});
+
+    // Flight canvas: the animation is clipped to the WINDOW, and the pill sits
+    // outside it — grow the transparent window over the pill for the flight
+    // (restored on settle/hide). Re-entry mid-flight reuses the existing
+    // canvas: window and stage are already in flight coordinates.
+    let W: number, H: number, p: GeniePoint;
+    if (flight.current) {
+      ({ w: W, h: H } = flight.current.box);
+      p = flight.current.p;
+    } else {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      p = await genieAnchor();
+      const ff = flightFrame(W, H, p);
+      flight.current = { box: { dx: ff.dx, dy: ff.dy, w: W, h: H }, p };
+      pinStage(stage, flight.current.box);
+      await invoke("prompt_genie_frame", { expand: true, ...ff }).catch(() => {});
+    }
     stage.style.transformOrigin = `${p.x}px ${p.y}px`;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const frames = reduce
       ? dir === "in"
         ? [{ opacity: 0 }, { opacity: 1 }]
         : [{ opacity: 1 }, { opacity: 0 }]
-      : genieFrames(dir, window.innerWidth, window.innerHeight, p);
+      : genieFrames(dir, W, H, p);
     const anim = stage.animate(frames, {
-      duration: reduce ? 140 : dir === "in" ? 540 : 500,
+      duration: reduce ? 140 : dir === "in" ? 560 : 520,
       fill: "both",
     });
     genieAnim.current = anim;
@@ -568,11 +636,19 @@ export function PromptConsole() {
     }
     if (dir === "out") {
       // Stay collapsed (fill: both) while hidden — no flash on the next show.
-      invoke("prompt_console_hide_now").catch(() => {});
+      // hide_now also restores the window frame; release the pin while hidden.
+      flight.current = null;
+      await invoke("prompt_console_hide_now").catch(() => {});
+      pinStage(stage, null);
     } else {
       anim.cancel();
-      stage.classList.remove("pc-anim");
+      flight.current = null;
+      await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
+      pinStage(stage, null);
       invoke("prompt_set_effects", { on: true }).catch(() => {});
+      // Crossfade the boost tint OUT while the vibrancy comes in — dropping
+      // both in the same frame reads as a visible material pop.
+      window.setTimeout(() => stage.classList.remove("pc-anim"), 120);
     }
   };
 
@@ -611,7 +687,10 @@ export function PromptConsole() {
       }
     }, 1200);
 
-    const onResize = () => setWinSize({ w: window.innerWidth, h: window.innerHeight });
+    const onResize = () => {
+      if (flight.current) return; // flight-canvas grow/restore, not a real resize
+      setWinSize({ w: window.innerWidth, h: window.innerHeight });
+    };
     window.addEventListener("resize", onResize);
 
     // Global keyboard map (terminal muscle memory). The palette owns its own
