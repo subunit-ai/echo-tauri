@@ -9,8 +9,11 @@
 //!   - Percent + common units, same conservative number rule:
 //!     "fünfzig Prozent" → "50 %", "zehn Kilometer" → "10 km",
 //!     "500 Gramm" → "500 g" (km/cm/mm/m/kg/g/l).
+//!   - Digit-attached units Whisper occasionally glues on: "5kg" → "5 kg",
+//!     "10€" → "10 €", "50%" → "50 %", "20°C" → "20 °C", "5GB" → "5 GB".
 //!   - Abbreviation spacing: "z.B." → "z. B.".
-//!   - Punctuation spacing: "Hallo  ,  Welt" → "Hallo, Welt".
+//!   - Punctuation spacing: "Hallo  ,  Welt" → "Hallo, Welt" (language-neutral,
+//!     the `normalize_spacing` subset is safe for every language).
 //!   - German curly quotes: "Hallo" → „Hallo".
 
 use once_cell::sync::Lazy;
@@ -152,6 +155,24 @@ static MEASURE: Lazy<Regex> = Lazy::new(|| {
     .expect("invalid MEASURE regex pattern")
 });
 
+// Digit-attached units Whisper sometimes glues to the number ("5kg", "10€",
+// "50%", "20°C", "5GB", "5kWh"). Case-SENSITIVE, whole-token whitelist:
+//   - the number must sit at a word boundary (`\b`), so glued codes and IDs are
+//     never split — "MP3"/"H2O"/"v2"/"0x1F" keep the digits inside a word, and
+//     "5G"/"4K"/"5W-40" survive because bare "G"/"K"/"W"/"t" are deliberately NOT
+//     units (network gens, resolutions and oil grades must not become "5 G" …);
+//   - the unit must be followed by a non-word char or end (`([^\w]|$)`, re-emitted),
+//     so "5kgs"/"5min"/"5gb" stay intact AND the trailing boundary forces the
+//     longest unit ("5kWh" can't stop at "kW").
+// Only a SUFFIX unit is spaced, so English prefix currency ("$10") is untouched.
+// Longer alternatives come first as a belt to the trailing-boundary suspenders.
+static ATTACHED_UNIT: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"\b(\d+(?:[.,]\d+)?)(kWh|MWh|GHz|MHz|kHz|°C|°F|km|cm|mm|kg|mg|ml|cl|dl|TB|GB|MB|KB|kW|MW|Wh|Hz|m²|m³|m|g|l|%|€|\$|£)([^\w]|$)",
+    )
+    .expect("invalid ATTACHED_UNIT regex pattern")
+});
+
 /// Scale words that must never stand alone as "the number" — "tausend Euro" is
 /// too ambiguous (e.g. "Aktien für tausend Euro") so we leave it untouched.
 fn is_scale_only(w: &str) -> bool {
@@ -263,24 +284,42 @@ static ABBREVIATIONS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
 
 static PUNCT_BEFORE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+([,.;:!?])").expect("invalid PUNCT_BEFORE regex pattern"));
 // Lookahead-free port of `([,;:!?])(?=[^\s\d])`: capture + re-emit the next char.
-static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d])").expect("invalid PUNCT_AFTER regex pattern"));
+// The next char also excludes sentence punctuation and `/`, so a punctuation run
+// ("!!!", "?!") is never split into "! ! !" (also makes the pass idempotent) and
+// URL scheme separators ("https://…") are never mangled into "https: //…".
+static PUNCT_AFTER: Lazy<Regex> = Lazy::new(|| Regex::new(r"([,;:!?])([^\s\d,.;:!?/])").expect("invalid PUNCT_AFTER regex pattern"));
 static MULTISPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r" {2,}").expect("invalid MULTISPACE regex pattern"));
 static QUOTES: Lazy<Regex> = Lazy::new(|| Regex::new("\"([^\"\n]+?)\"").expect("invalid QUOTES regex pattern"));
 
+/// Language-neutral spacing normalisation — the subset of the DACH pass that is
+/// safe for EVERY language (German, English, mixed, code): strip whitespace
+/// before `,.;:!?`, guarantee exactly one space after `,;:!?` (never after `.` —
+/// that would break decimals, URLs, file names and abbreviations), collapse runs
+/// of spaces, and trim. No German-specific transform lives here, so it can run on
+/// any transcript without risk of corrupting correct text. Idempotent.
+fn normalize_spacing(text: &str) -> String {
+    let mut s = PUNCT_BEFORE.replace_all(text, "$1").into_owned();
+    s = PUNCT_AFTER.replace_all(&s, "$1 $2").into_owned();
+    s = MULTISPACE.replace_all(&s, " ").into_owned();
+    s.trim().to_string()
+}
+
 /// Apply the full DACH pipeline. Order matters: currency first (expects
-/// unmangled number words), then abbreviations, punctuation, finally quotes.
+/// unmangled number words), then measure/attached units, abbreviations, the
+/// language-neutral spacing pass, finally quotes.
 pub fn dach_format(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
     let mut s = CURRENCY.replace_all(text, format_currency).into_owned();
     s = MEASURE.replace_all(&s, format_measure).into_owned();
+    s = ATTACHED_UNIT
+        .replace_all(&s, |c: &Captures| format!("{} {}{}", &c[1], &c[2], &c[3]))
+        .into_owned();
     for (re, repl) in ABBREVIATIONS.iter() {
         s = re.replace_all(&s, *repl).into_owned();
     }
-    s = PUNCT_BEFORE.replace_all(&s, "$1").into_owned();
-    s = PUNCT_AFTER.replace_all(&s, "$1 $2").into_owned();
-    s = MULTISPACE.replace_all(&s, " ").into_owned();
+    s = normalize_spacing(&s);
     s = QUOTES.replace_all(&s, "„$1“").into_owned();
     s.trim().to_string()
 }
@@ -345,5 +384,168 @@ mod tests {
     fn punctuation_spacing() {
         assert_eq!(dach_format("Hallo , Welt"), "Hallo, Welt");
         assert_eq!(dach_format("eins,zwei"), "eins, zwei");
+    }
+
+    #[test]
+    fn attached_units_get_spaced() {
+        assert_eq!(dach_format("das wiegt 5kg"), "das wiegt 5 kg");
+        assert_eq!(dach_format("das kostet 10€"), "das kostet 10 €");
+        assert_eq!(dach_format("genau 50% fertig"), "genau 50 % fertig");
+        assert_eq!(dach_format("wir fahren 100km"), "wir fahren 100 km");
+        assert_eq!(dach_format("50km/h schnell"), "50 km/h schnell");
+        assert_eq!(dach_format("es sind 20°C"), "es sind 20 °C");
+        assert_eq!(dach_format("die Datei ist 5GB"), "die Datei ist 5 GB");
+        assert_eq!(dach_format("nur 250MB frei"), "nur 250 MB frei");
+        assert_eq!(dach_format("verbraucht 5kWh"), "verbraucht 5 kWh");
+        assert_eq!(dach_format("500mg Wirkstoff"), "500 mg Wirkstoff");
+        assert_eq!(dach_format("1,5l Wasser"), "1,5 l Wasser");
+        assert_eq!(dach_format("3.5kg Mehl"), "3.5 kg Mehl");
+        assert_eq!(dach_format("eine Fläche von 20m²"), "eine Fläche von 20 m²");
+        assert_eq!(dach_format("Takt 3GHz"), "Takt 3 GHz");
+        // Two attached tokens separated by a single space both fire.
+        assert_eq!(dach_format("5kg und 10€"), "5 kg und 10 €");
+    }
+
+    #[test]
+    fn attached_units_never_corrupt_codes() {
+        // Bare G/K/W/t are NOT units → network gens, resolutions, oil grades safe.
+        assert_eq!(dach_format("das 5G Netz"), "das 5G Netz");
+        assert_eq!(dach_format("ein 4K Display"), "ein 4K Display");
+        assert_eq!(dach_format("Motoröl 5W-40"), "Motoröl 5W-40");
+        // Alphanumeric codes / versions / formulas: digit is inside a word.
+        assert_eq!(dach_format("der MP3 Player"), "der MP3 Player");
+        assert_eq!(dach_format("Formel H2O"), "Formel H2O");
+        assert_eq!(dach_format("Version v2 kommt"), "Version v2 kommt");
+        assert_eq!(dach_format("Adresse 0x1F"), "Adresse 0x1F");
+        // Unit glued to more letters is a code, not a measurement.
+        assert_eq!(dach_format("Code 5kg7x"), "Code 5kg7x");
+        assert_eq!(dach_format("in 5min fertig"), "in 5min fertig");
+        // English ordinals and clock times stay verbatim.
+        assert_eq!(dach_format("the 5th time"), "the 5th time");
+        assert_eq!(dach_format("um 10:30 Uhr"), "um 10:30 Uhr");
+        // Prefix currency (English convention) is never touched.
+        assert_eq!(dach_format("it costs $10"), "it costs $10");
+        // A percent glued to a following word (in-word) is left alone.
+        assert_eq!(dach_format("50%ige Lösung"), "50%ige Lösung");
+    }
+
+    #[test]
+    fn url_and_punctuation_runs_survive() {
+        // URL scheme separators must not gain a space after the colon.
+        assert_eq!(
+            dach_format("siehe https://example.com/path"),
+            "siehe https://example.com/path"
+        );
+        assert_eq!(
+            dach_format("Rabatt unter https://shop.de/50%off jetzt"),
+            "Rabatt unter https://shop.de/50%off jetzt"
+        );
+        // Emphatic punctuation runs stay glued (and idempotent, not "! ! !").
+        assert_eq!(dach_format("wirklich!!!"), "wirklich!!!");
+        assert_eq!(dach_format("echt?!"), "echt?!");
+    }
+
+    #[test]
+    fn spacing_is_language_agnostic() {
+        // The spacing subset fixes English/mixed text just like German.
+        assert_eq!(dach_format("Hello ,world"), "Hello, world");
+        assert_eq!(dach_format("wait;then go"), "wait; then go");
+        assert_eq!(dach_format("done  .  ready"), "done. ready");
+        assert_eq!(dach_format("a , b , c"), "a, b, c");
+    }
+
+    #[test]
+    fn malformed_inputs_do_not_panic() {
+        assert_eq!(dach_format(""), "");
+        assert_eq!(dach_format("   "), "");
+        assert_eq!(dach_format("...!?"), "...!?");
+        assert_eq!(dach_format("5"), "5");
+        assert_eq!(dach_format("€"), "€");
+        assert_eq!(dach_format("1 2 3 4 5"), "1 2 3 4 5");
+    }
+
+    #[test]
+    fn dach_format_is_idempotent() {
+        let cases = [
+            "das wiegt 5kg und kostet 10€",
+            "genau 50% bei 20°C",
+            "wirklich!!! echt?!",
+            "siehe https://example.com/path",
+            "Hello ,world; wait,then go",
+            "5G Netz, 4K Display, 5W-40 Öl",
+            "zweihundert Euro für zehn Kilometer",
+            "er sagte \"Hallo\" und ging",
+            "",
+            "...!?",
+        ];
+        for c in cases {
+            let once = dach_format(c);
+            assert_eq!(dach_format(&once), once, "not idempotent for {c:?}");
+        }
+    }
+
+    /// Norm-correct German + English sentences (already properly spaced/punctuated
+    /// and free of the German-specific triggers) must pass through the FULL
+    /// deterministic pipeline (comma insertion → DACH format, the exact order
+    /// commands.rs uses) UNCHANGED — the hard guarantee that the zero-latency
+    /// layer never corrupts correct text.
+    #[test]
+    fn identity_corpus_untouched() {
+        use crate::de_comma::insert_commas;
+        let corpus = [
+            // German — plain declaratives.
+            "Wir treffen uns morgen im Büro.",
+            "Der Bericht ist fertig und liegt auf dem Tisch.",
+            "Das Wetter war gestern sehr schön.",
+            "Ich habe die E-Mail an das Team geschickt.",
+            "Die neue Version läuft stabil und schnell.",
+            // German — already-correct commas (idempotent).
+            "Ich denke, dass es funktioniert.",
+            "Wir warten, weil der Server noch startet.",
+            "Er ging, ohne zu zahlen.",
+            "Sie sparen, damit sie reisen können.",
+            "Nicht heute, sondern morgen.",
+            // German — units already spaced (the units pass must not double-space).
+            "Das Paket wiegt 5 kg.",
+            "Wir sind 100 km gefahren.",
+            "Der Akku hält 5 kWh.",
+            "Es sind genau 50 % fertig.",
+            "Im Raum sind 20 °C.",
+            "Die Datei ist 5 GB groß.",
+            "Das kostet 200 €.",
+            "Ein Tempo von 30 km/h ist erlaubt.",
+            // German — numbers and dates that must not be reshaped.
+            "Der Termin ist am 10.03.2026 um 14:30 Uhr.",
+            "Die IP ist 192.168.0.1 im Netzwerk.",
+            "Das Ergebnis lautet 3,14 exakt.",
+            "Wir brauchen 1.000 Einheiten pro Woche.",
+            // German — URLs and codes.
+            "Mehr dazu unter https://example.com/info heute.",
+            "Der Code lautet 0x1F im Register.",
+            "Das 5G Netz ist schnell.",
+            "Ein 4K Display sieht scharf aus.",
+            // English — plain declaratives.
+            "The server is running smoothly today.",
+            "We shipped the release yesterday afternoon.",
+            "Please review the document before the meeting.",
+            "The build passed all tests on the first try.",
+            "She opened the file and started working.",
+            // English — with correct commas and numbers.
+            "The file is 5 GB, so it uploads slowly.",
+            "It costs $10 for a single license.",
+            "The room is at 20 °C right now.",
+            "We ran 5 km before breakfast.",
+            "The report covers 50 % of the market.",
+            // Mixed and technical.
+            "Der Download war 250 MB groß.",
+            "Wir nutzen 3 GHz Taktrate im Test.",
+            "The MP3 file plays in every browser.",
+            "Version v2 ships next Monday.",
+            "Bitte an support@example.com schreiben.",
+        ];
+        for s in corpus {
+            let out = dach_format(&insert_commas(s));
+            assert_eq!(out, s, "identity broken for {s:?}");
+        }
     }
 }
