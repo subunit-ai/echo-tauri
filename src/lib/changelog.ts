@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.107",
+    date: "2026-07-09",
+    title: { de: "Der Genie-Austritt, jetzt so weich wie der Sog", en: "The genie exit, now as smooth as the suction" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Beim Öffnen blitzte das Prompt-Terminal für einen Augenblick in voller Größe auf, bevor die Animation aus der Pille startete. Das Fenster bleibt jetzt lückenlos verdeckt, bis der erste Animations-Frame es übernimmt — kein Aufblitzen mehr.",
+        en: "On open, the prompt terminal flashed at full size for a split second before the animation out of the pill started. The window now stays seamlessly covered until the first animation frame owns it — no more flash.",
+      },
+      {
+        kind: "improvement",
+        de: "Das Herauswachsen aus der Pille ist jetzt so geschmeidig wie das Einsaugen: sanfte Zündung statt Vollgas im ersten Frame, weiche Landung, und der Trichter löst sich im Takt der Bewegung auf. Der Start wartet zudem zwei Frames, bis die Grafik-Pipeline warm ist.",
+        en: "Growing out of the pill is now as smooth as the suction: gentle ignition instead of full speed on frame one, a soft landing, and the funnel dissolves in step with the motion. The start also waits two frames for the graphics pipeline to warm up.",
+      },
+      {
+        kind: "improvement",
+        de: "Wer das Terminal mitten im Flug wieder schließt (oder öffnet), sieht jetzt eine saubere Umkehr entlang desselben Pfads statt eines Sprungs.",
+        en: "Closing (or opening) the terminal mid-flight now reverses cleanly along the same path instead of jumping.",
+      },
+    ],
+  },
+  {
     version: "0.5.106",
     date: "2026-07-09",
     title: { de: "Die Pille hört jetzt auch leise Stimmen", en: "The pill now hears quiet voices too" },

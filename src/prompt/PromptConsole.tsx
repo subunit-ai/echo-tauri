@@ -365,9 +365,16 @@ function genieFrames(dir: "in" | "out", W: number, H: number, p: GeniePoint): Ke
       sy = lerp(1, 0.045, Math.pow(u, 1.3)) * (1 + 0.05 * Math.sin(Math.PI * clamp01(T / 0.45)));
       opacity = T > 0.965 ? (1 - T) / 0.035 : 1; // visible ALL the way in
     } else {
-      // pour out fast, decelerate, unfold; funnel dissolves on the way up
-      const v = 1 - Math.pow(1 - T, 2.6);
-      k = 1 - smooth(clamp01((T - 0.3) / 0.55));
+      // Smoothstep time-warp: the raw ease-out (1-(1-T)^2.6) hits MAX velocity
+      // at T=0 — the fastest stretch of the flight landed exactly in the
+      // compositor's warmup frames and read as a jolt (TJ: entrance rougher
+      // than the suction). Warped, the mass ignites softly out of the pill,
+      // whooshes through the middle and settles with a double-flat tail.
+      const Tw = T * T * (3 - 2 * T);
+      const v = 1 - Math.pow(1 - Tw, 2.6);
+      // funnel dissolves with TRAVEL (not raw time) — stays phase-locked to
+      // the mass: holds while emerging, melts as the window unfolds past 45%.
+      k = 1 - smooth(clamp01((v - 0.45) / 0.5));
       u = 1 - v;
       sx = lerp(0.02, 1, v) * (1 + 0.014 * Math.sin(Math.PI * clamp01((T - 0.55) / 0.45)));
       sy = lerp(0.045, 1, v) * (1 - 0.012 * Math.sin(Math.PI * clamp01((T - 0.55) / 0.45)));
@@ -465,6 +472,7 @@ export function PromptConsole() {
   // Genie animation plumbing.
   const stageRef = useRef<HTMLDivElement>(null);
   const genieAnim = useRef<Animation | null>(null);
+  const genieDir = useRef<"in" | "out" | null>(null);
   const genieRan = useRef(false);
   // Active flight canvas: the pre-flight stage box (its offset inside the
   // ENLARGED window) + the pill point in flight coordinates. While set, the
@@ -585,18 +593,66 @@ export function PromptConsole() {
     }
   };
 
+  /** Post-flight cleanup for either direction (also reached when a reversed
+   *  animation lands): release the flight canvas, restore frame/vibrancy. */
+  const settleGenie = async (dir: "in" | "out") => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (dir === "out") {
+      // Stay collapsed (fill: both) while hidden — no flash on the next show.
+      // hide_now also restores the window frame; release the pin while hidden.
+      flight.current = null;
+      await invoke("prompt_console_hide_now").catch(() => {});
+      pinStage(stage, null);
+    } else {
+      genieAnim.current?.cancel();
+      flight.current = null;
+      await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
+      pinStage(stage, null);
+      invoke("prompt_set_effects", { on: true }).catch(() => {});
+      // Crossfade the boost tint OUT while the vibrancy comes in — dropping
+      // both in the same frame reads as a visible material pop.
+      window.setTimeout(() => stage.classList.remove("pc-anim"), 120);
+    }
+  };
+
   const runGenie = async (dir: "in" | "out") => {
     const stage = stageRef.current;
     if (!stage) {
       if (dir === "out") invoke("prompt_console_hide_now").catch(() => {});
       return;
     }
-    genieAnim.current?.cancel();
     genieRan.current = true;
-    // The stage boots hidden (.pc-boot) so nothing flashes before the first
-    // entrance; the keyframes own opacity from here on. .pc-anim pre-arms the
-    // extra body tint BEFORE the vibrancy goes so the material change blends.
-    stage.classList.remove("pc-boot");
+
+    // Direction change MID-FLIGHT: reverse the running animation instead of
+    // cancelling + restarting. Cancel drops the WAAPI fill for a beat (full-
+    // size flash) and keyframe 0 would teleport the half-grown window back
+    // into the pill — reverse retreats exactly along the path it came.
+    const running = genieAnim.current;
+    if (
+      running &&
+      genieDir.current &&
+      genieDir.current !== dir &&
+      running.playState === "running"
+    ) {
+      genieDir.current = dir;
+      running.reverse();
+      try {
+        await running.finished;
+      } catch {
+        return; // superseded by a newer genie
+      }
+      if (genieDir.current !== dir) return;
+      await settleGenie(dir);
+      return;
+    }
+    genieDir.current = dir;
+    // .pc-anim pre-arms the extra body tint BEFORE the vibrancy goes so the
+    // material change blends. The stage stays hidden (.pc-boot on first boot,
+    // the previous animation's fill afterwards) through ALL the async prep
+    // below — nothing may flash at full size before the first keyframe owns
+    // the stage (the old order dropped the cover first and let the un-clipped
+    // window peek through for a frame or two: TJ's rough entrance).
     stage.classList.add("pc-anim");
     invoke("prompt_set_effects", { on: false }).catch(() => {});
 
@@ -624,32 +680,34 @@ export function PromptConsole() {
         ? [{ opacity: 0 }, { opacity: 1 }]
         : [{ opacity: 1 }, { opacity: 0 }]
       : genieFrames(dir, W, H, p);
+    if (dir === "in" && !reduce) {
+      // The window was shown moments ago and WKWebView's first frames after
+      // show() are the ones the compositor drops. Hold the (still invisible)
+      // stage for two PAINTED frames so the entrance starts on a live
+      // pipeline instead of losing its opening stretch to warmup.
+      await new Promise<void>((r) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => r())),
+      );
+      if (genieDir.current !== dir) return; // superseded while waiting
+    }
+    const prev = genieAnim.current;
     const anim = stage.animate(frames, {
-      duration: reduce ? 140 : dir === "in" ? 560 : 520,
+      duration: reduce ? 140 : dir === "in" ? 620 : 520,
       fill: "both",
     });
     genieAnim.current = anim;
+    // Zero-gap handover: the new animation already holds the stage (first
+    // keyframe = collapsed at the pill), so dropping the old fill and the
+    // boot cover now cannot expose an unstyled frame.
+    prev?.cancel();
+    stage.classList.remove("pc-boot");
     try {
       await anim.finished;
     } catch {
       return; // cancelled — a newer genie superseded this one
     }
-    if (dir === "out") {
-      // Stay collapsed (fill: both) while hidden — no flash on the next show.
-      // hide_now also restores the window frame; release the pin while hidden.
-      flight.current = null;
-      await invoke("prompt_console_hide_now").catch(() => {});
-      pinStage(stage, null);
-    } else {
-      anim.cancel();
-      flight.current = null;
-      await invoke("prompt_genie_frame", { expand: false }).catch(() => {});
-      pinStage(stage, null);
-      invoke("prompt_set_effects", { on: true }).catch(() => {});
-      // Crossfade the boost tint OUT while the vibrancy comes in — dropping
-      // both in the same frame reads as a visible material pop.
-      window.setTimeout(() => stage.classList.remove("pc-anim"), 120);
-    }
+    if (genieDir.current !== dir) return;
+    await settleGenie(dir);
   };
 
   useEffect(() => {
