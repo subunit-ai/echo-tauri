@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.119",
+    date: "2026-07-09",
+    title: { de: "Lange Diktate brechen nicht mehr ab", en: "Long dictations no longer cut out" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Beim Einfügen eines Transkripts meldet Echo dem System kurz, dass alle Sondertasten losgelassen sind. Hältst du die Aufnahmetaste, während noch eingefügt wird, hat Echo das für dein Loslassen gehalten und die laufende Aufnahme mitten im Satz beendet. Jetzt zählt der echte Zustand der Taste — die Aufnahme läuft, solange du sie gedrückt hältst.",
+        en: "While pasting a transcript, Echo briefly tells the system that all modifier keys are up. If you held the record key while a paste was still running, Echo mistook that for you letting go and ended the take mid-sentence. It now checks the key's real hardware state — recording continues for as long as you hold it.",
+      },
+    ],
+  },
+  {
     version: "0.5.118",
     date: "2026-07-09",
     title: { de: "Terminal-Glas wieder neutral", en: "Terminal glass back to neutral" },

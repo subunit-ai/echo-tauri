@@ -199,6 +199,35 @@ mod macos {
     };
     use tauri::AppHandle;
 
+    /// Virtual keycodes of both physical keys behind each modifier. The flags in a
+    /// FlagsChanged event say "some Control is down"; only these say *which key*,
+    /// and only they can be queried for real hardware state.
+    fn keycodes_of(kind: ModKind) -> [u16; 2] {
+        match kind {
+            ModKind::Ctrl => [0x3B, 0x3E],
+            ModKind::Alt => [0x3A, 0x3D],
+            ModKind::Cmd => [0x37, 0x36],
+            ModKind::Shift => [0x38, 0x3C],
+            ModKind::Fn => [0x3F, 0x3F],
+        }
+    }
+
+    /// Is the modifier still physically held, according to the HID layer?
+    ///
+    /// This is the ground truth an event can't give us. Echo itself posts synthetic
+    /// FlagsChanged events that CLEAR every modifier right before it types a
+    /// transcript (see `inject::mac`) — indistinguishable, by flags alone, from the
+    /// user letting go. Trusting those aborts the take the user is still speaking.
+    fn physically_down(target: HoldTarget) -> bool {
+        let codes: Vec<u16> = match target {
+            HoldTarget::Modifier(kind) => keycodes_of(kind).to_vec(),
+            HoldTarget::Key(code) => vec![code],
+        };
+        codes
+            .iter()
+            .any(|&c| unsafe { CGEventSourceKeyState(HID_SYSTEM_STATE, c) })
+    }
+
     // Input-Monitoring (TCC) gates event taps. These CoreGraphics calls (10.15+)
     // check and request that grant; a listen-only tap simply fails to create
     // without it.
@@ -207,7 +236,14 @@ mod macos {
         fn CGEventTapEnable(tap: *const c_void, enable: bool);
         fn CGPreflightListenEventAccess() -> bool;
         fn CGRequestListenEventAccess() -> bool;
+        /// Real hardware state of a key, independent of any event. `core-graphics`
+        /// 0.23 doesn't wrap this, so bind it directly.
+        fn CGEventSourceKeyState(state_id: i32, key: u16) -> bool;
     }
+
+    /// kCGEventSourceStateHIDSystemState — the physical keyboard, not a synthetic
+    /// event stream.
+    const HID_SYSTEM_STATE: i32 = 1;
 
     pub fn has_permission() -> bool {
         unsafe { CGPreflightListenEventAccess() }
@@ -252,6 +288,9 @@ mod macos {
         // For modifier targets: last-seen down state, so a shared FlagsChanged
         // event (fired for ANY modifier) is turned into per-binding transitions.
         down: AtomicBool,
+        // A watchdog is polling for the real release after a synthetic one was
+        // ignored; keeps us to one poller per binding.
+        watchdog: AtomicBool,
     }
 
     struct HoldState {
@@ -297,8 +336,29 @@ mod macos {
             b.arm_gen.fetch_add(1, Ordering::SeqCst);
         }
 
-        /// Binding `i` was released.
-        fn release(&self, i: usize) {
+        /// Binding `i` was released — as far as the event says. Verify against the
+        /// hardware before believing it: a synthetic FlagsChanged (Echo's own
+        /// inject path clears all modifiers before typing) looks exactly like a
+        /// real release and would cut the take off mid-sentence. If the key is
+        /// still down, keep recording and let a watchdog finish the take the
+        /// moment it actually comes up.
+        fn release(self: &Arc<Self>, i: usize) {
+            let b = &self.bindings[i];
+            if b.active.load(Ordering::SeqCst) && physically_down(b.target) {
+                log::warn!(
+                    "hold-key: release event for {:?} while the key is still physically down — \
+                     ignoring (synthetic event) and watching for the real release",
+                    b.target
+                );
+                b.down.store(true, Ordering::SeqCst); // event lied; keep our state true
+                self.watch_for_real_release(i);
+                return;
+            }
+            self.release_now(i);
+        }
+
+        /// Unconditional release: end the session and (for Dictate) transcribe.
+        fn release_now(&self, i: usize) {
             let b = &self.bindings[i];
             let was_active = b.active.swap(false, Ordering::SeqCst);
             b.armed.store(false, Ordering::SeqCst);
@@ -308,9 +368,36 @@ mod macos {
             if was_active && b.action == HoldAction::Dictate {
                 let app = self.app.clone();
                 std::thread::spawn(move || {
+                    log::info!("transcribe trigger: hold-key release");
                     let _ = crate::commands::do_transcribe(&app);
                 });
             }
+        }
+
+        /// Poll the hardware until the still-held key really comes up, then finish
+        /// the take. Without this, swallowing a synthetic release could strand a
+        /// recording forever if the genuine release event were ever missed too.
+        /// One watchdog per binding; it exits as soon as the session ends by any path.
+        fn watch_for_real_release(self: &Arc<Self>, i: usize) {
+            if self.bindings[i].watchdog.swap(true, Ordering::SeqCst) {
+                return; // already watching
+            }
+            let st = self.clone();
+            std::thread::spawn(move || {
+                let b = &st.bindings[i];
+                loop {
+                    std::thread::sleep(Duration::from_millis(30));
+                    if !b.active.load(Ordering::SeqCst) {
+                        break; // ended some other way (real event, cancel, …)
+                    }
+                    if !physically_down(b.target) {
+                        log::info!("hold-key: real release observed — finishing the take");
+                        st.release_now(i);
+                        break;
+                    }
+                }
+                b.watchdog.store(false, Ordering::SeqCst);
+            });
         }
     }
 
@@ -436,6 +523,7 @@ mod macos {
                     armed: AtomicBool::new(false),
                     active: AtomicBool::new(false),
                     down: AtomicBool::new(false),
+                    watchdog: AtomicBool::new(false),
                 })
                 .collect(),
             tap_port: AtomicUsize::new(0),

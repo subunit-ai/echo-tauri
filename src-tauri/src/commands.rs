@@ -1641,6 +1641,7 @@ pub fn cancel_recording(app: AppHandle) {
 
 #[tauri::command]
 pub fn stop_and_transcribe(app: AppHandle) -> Result<TranscriptResult, EngineError> {
+    log::info!("transcribe trigger: ipc (frontend button)");
     do_transcribe(&app)
 }
 

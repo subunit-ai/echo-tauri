@@ -377,6 +377,7 @@ pub fn run() {
                         if st.recorder.is_recording() {
                             let a = app.clone();
                             std::thread::spawn(move || {
+                                log::info!("transcribe trigger: tray menu");
                                 let _ = commands::do_transcribe(&a);
                             });
                         } else {
