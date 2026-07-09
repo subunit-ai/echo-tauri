@@ -188,14 +188,34 @@ export function Activity() {
     [t, overview, daily, hourly, analysis],
   );
 
+  // Range-scoped totals: the stat row follows the range switcher (summed from
+  // the already-fetched daily buckets). "Alles" uses the lifetime account
+  // totals instead — they reach further back than daily_stats, which was
+  // backfilled only from the retained history window.
+  const rangeTotals = useMemo(() => {
+    if (range === "all") return null;
+    let words = 0;
+    let transcriptions = 0;
+    let audio_seconds = 0;
+    let time_saved_seconds = 0;
+    for (const d of daily) {
+      words += d.words;
+      transcriptions += d.transcriptions;
+      audio_seconds += d.audio_seconds;
+      time_saved_seconds += d.time_saved_seconds;
+    }
+    return { words, transcriptions, audio_seconds, time_saved_seconds };
+  }, [daily, range]);
+
   if (!overview) return null;
 
-  const saved = fmtSaved(overview.total.time_saved_seconds);
-  // Ø speaking pace (§12a): total words / total audio minutes, guarded — "–"
+  const cardTotals = rangeTotals ?? overview.total;
+  const saved = fmtSaved(cardTotals.time_saved_seconds);
+  // Ø speaking pace (§12a): words / audio minutes in the window, guarded — "–"
   // instead of a division by zero when nothing has been dictated yet.
   const avgWpm =
-    overview.total.audio_seconds > 0
-      ? Math.round(overview.total.words / (overview.total.audio_seconds / 60))
+    cardTotals.audio_seconds > 0
+      ? Math.round(cardTotals.words / (cardTotals.audio_seconds / 60))
       : null;
 
   const dailyGoal = overview.goals.daily_word_goal;
@@ -284,11 +304,11 @@ export function Activity() {
           >
             <div className="card stat-card">
               <div className="label">{t("activity.statWords")}</div>
-              <div className="value">{overview.total.words.toLocaleString(lang)}</div>
+              <div className="value">{cardTotals.words.toLocaleString(lang)}</div>
             </div>
             <div className="card stat-card">
               <div className="label">{t("activity.statTranscriptions")}</div>
-              <div className="value">{overview.total.transcriptions.toLocaleString(lang)}</div>
+              <div className="value">{cardTotals.transcriptions.toLocaleString(lang)}</div>
             </div>
             <div className="card stat-card">
               <div className="label">{t("activity.statTimeSaved")}</div>
