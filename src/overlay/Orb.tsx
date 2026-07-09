@@ -302,7 +302,7 @@ export function Orb() {
             { duration: 460, easing: "cubic-bezier(.3,.7,.3,1)" },
           );
         },
-        e.payload === "out" ? 400 : 0,
+        e.payload === "out" ? 450 : 0,
       );
     });
     return () => {

@@ -107,6 +107,26 @@ fn notify_orb(app: &AppHandle, dir: &str) {
     let _ = app.emit_to("overlay", "echo://orb-genie", dir);
 }
 
+/// The window frame saved before a genie flight enlarged it (physical px).
+/// The animation renders inside the webview, so it is CLIPPED to the window —
+/// with the pill sitting below the window, the suction used to end at the
+/// window edge instead of in the pill (TJ). For the flight the transparent
+/// window is briefly grown to cover the pill, then restored here.
+static SAVED_FRAME: std::sync::Mutex<
+    Option<(tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>)>,
+> = std::sync::Mutex::new(None);
+
+/// Restore the pre-flight frame (no-op when not expanded). Called from the
+/// webview on settle, and from every hide path — a wedged webview must never
+/// leave a giant invisible window behind.
+fn restore_frame(w: &WebviewWindow) {
+    let saved = SAVED_FRAME.lock().unwrap_or_else(|p| p.into_inner()).take();
+    if let Some((pos, size)) = saved {
+        let _ = w.set_size(size);
+        let _ = w.set_position(pos);
+    }
+}
+
 /// Show/hide the console (orb satellite + global hotkey). Hiding never loses
 /// content — the webview stays alive and the draft is persisted anyway.
 ///
@@ -124,13 +144,14 @@ pub fn toggle(app: &AppHandle) {
                 notify_orb(app, "out");
                 let app2 = app.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(900));
+                    std::thread::sleep(std::time::Duration::from_millis(1100));
                     if GENIE_GEN.load(Ordering::SeqCst) != gen {
                         return; // re-opened (or already handled) meanwhile
                     }
                     if let Some(w) = app2.get_webview_window(LABEL) {
                         if w.is_visible().unwrap_or(false) {
                             let _ = w.hide();
+                            restore_frame(&w);
                         }
                     }
                 });
@@ -198,13 +219,61 @@ pub async fn prompt_console_toggle(app: AppHandle) {
 
 /// Immediate hide — the webview calls this once its genie-out animation has
 /// finished (the animated half of the `toggle` handshake). Bumping the
-/// generation retires the pending fallback force-hide.
+/// generation retires the pending fallback force-hide. Restores the pre-flight
+/// frame while hidden, so the next show starts from the normal window.
 #[tauri::command]
 pub async fn prompt_console_hide_now(app: AppHandle) {
     GENIE_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(w) = app.get_webview_window(LABEL) {
         let _ = w.hide();
+        restore_frame(&w);
     }
+}
+
+/// Flight canvas for the genie: the animation lives in the webview, so it is
+/// clipped to the window — grow the (transparent, undecorated) window to also
+/// cover the pill for the flight, and restore afterwards. `dx/dy` are the new
+/// frame's top-left relative to the CURRENT one in logical px (≤ 0), `w/h` the
+/// new logical size. The webview pins its stage to the old rect first, so
+/// nothing moves visually. Idempotent: only the FIRST expand saves the frame;
+/// restore clears it.
+#[tauri::command]
+pub async fn prompt_genie_frame(
+    app: AppHandle,
+    expand: bool,
+    dx: Option<f64>,
+    dy: Option<f64>,
+    w: Option<f64>,
+    h: Option<f64>,
+) {
+    let Some(win) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    if !expand {
+        restore_frame(&win);
+        return;
+    }
+    let (Some(dx), Some(dy), Some(nw), Some(nh)) = (dx, dy, w, h) else {
+        return;
+    };
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else {
+        return;
+    };
+    {
+        let mut saved = SAVED_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+        if saved.is_none() {
+            *saved = Some((pos, size));
+        }
+    }
+    // Grow first, then move: both orders paint one intermediate frame, but
+    // size-then-position keeps the visible content anchored when dx/dy is 0
+    // (the common case — the pill sits below the window).
+    let _ = win.set_size(tauri::LogicalSize::new(nw, nh));
+    let _ = win.set_position(tauri::PhysicalPosition::new(
+        pos.x + (dx * sf).round() as i32,
+        pos.y + (dy * sf).round() as i32,
+    ));
 }
 
 /// Pill centre in LOGICAL screen coordinates — the webview turns this into the

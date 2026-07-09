@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.102",
+    date: "2026-07-09",
+    title: { de: "Der Genie-Sog erreicht die Pille wirklich", en: "The genie suction truly reaches the pill" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Genie-Animation endete bisher hart an der Fensterkante — die Pille liegt ja unterhalb des Terminals, und gezeichnet werden konnte nur im Fenster. Jetzt wächst die unsichtbare Zeichenfläche für den Flug kurz über die Pille hinaus: der Sog fließt sichtbar bis hinein und die Fläche schrumpft danach zurück.",
+        en: "The genie animation used to stop hard at the window edge — the pill sits below the terminal, and drawing was only possible inside the window. The invisible canvas now briefly grows over the pill for the flight: the suction visibly pours all the way in, then the canvas shrinks back.",
+      },
+      {
+        kind: "improvement",
+        de: "Die Bewegung ist deutlich geschmeidiger: statt weniger Eckpunkte mit spürbaren Übergängen läuft der ganze Flug jetzt auf einer durchgehenden Kurve — Trichter, Zug und Stauchung bleiben perfekt im Takt, ohne Ruckeln. Auch der Glas-Wechsel am Anfang und Ende blendet jetzt weich über.",
+        en: "The motion is much smoother: instead of a few waypoints with felt seams, the whole flight runs on one continuous curve — funnel, pull and squash stay perfectly in phase, no judder. The glass switch at start and end now cross-fades softly too.",
+      },
+    ],
+  },
+  {
     version: "0.5.101",
     date: "2026-07-09",
     title: { de: "Aktivität & Wortschatz — zwei neue Bereiche", en: "Activity & Vocabulary Coach — two new sections" },
