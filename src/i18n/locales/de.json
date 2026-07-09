@@ -591,6 +591,8 @@
     "promptAsTargetHint": "Jede Transkription landet im Prompt Terminal statt in der aktiven App",
     "promptFallback": "Konsole als Auffangnetz",
     "promptFallbackHint": "Kein Textfeld fokussiert? Dein Diktat landet automatisch in der Prompt-Konsole statt zu verpuffen",
+    "promptBlur": "iOS-Milchglas",
+    "promptBlurHint": "An: Das Terminal wechselt beim Öffnen weich auf das echte iOS-Milchglas. Aus: Es bleibt durchgehend im flachen, an die Pille angepassten Glas — kein Umschalten",
     "changelog": "Änderungsprotokoll",
     "changelogHint": "Was in jeder Version neu dazugekommen ist.",
     "changelogBtn": "Ansehen",

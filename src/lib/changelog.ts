@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.115",
+    date: "2026-07-09",
+    title: { de: "Terminal im Pillen-Ton, Milchglas-Schalter + zügigerer Genie", en: "Terminal in the pill's tone, frost toggle + a quicker genie" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Das Prompt-Terminal kommt jetzt im gleichen Farbton aus der Pille wie die Pille selbst: Sein Glas übernimmt die Akzentfarbe der Pille, mit einem sanften Leuchten an der Austrittsstelle — der Übergang aus der Pille wirkt wie ein Guss.",
+        en: "The prompt terminal now emerges from the pill in the pill's own color: its glass takes on the pill's accent, with a soft glow at the point it pours out — the emergence reads as one piece.",
+      },
+      {
+        kind: "feature",
+        de: "Neuer Schalter „iOS-Milchglas“: Aus lassen, und das Terminal bleibt durchgehend im flachen, an die Pille angepassten Glas — ohne den weichen Wechsel auf das echte Milchglas. Die Genie-Animation bleibt in beiden Fällen erhalten.",
+        en: "New “iOS frost glass” toggle: leave it off and the terminal stays in the flat, pill-matched glass throughout — without the soft switch to the real frost. The genie animation stays in both cases.",
+      },
+      {
+        kind: "improvement",
+        de: "Der Genie-Flug rein und raus ist einen Tick zügiger — gleiche geschmeidige Kurve, nur etwas flotter.",
+        en: "The genie flight in and out is a touch quicker — same silky curve, just a bit snappier.",
+      },
+    ],
+  },
+  {
     version: "0.5.114",
     date: "2026-07-09",
     title: { de: "Sauberes Wörterbuch: verfälschende Auto-Wörter raus, Vorschläge nur noch für echte Namen", en: "A clean dictionary: corrupting auto-words gone, suggestions for real names only" },

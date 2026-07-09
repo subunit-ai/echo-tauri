@@ -515,6 +515,27 @@ pub fn apply_config(app: &AppHandle) {
             "quick": quick,
         }),
     );
+
+    // Live-push the Prompt Terminal appearance (blur on/off, dark/light, and
+    // the pill accent color) so Settings toggles restyle the open terminal
+    // without reopening. The terminal window also reads these on mount.
+    let (blur, theme, pill_accent) = {
+        let st = app.state::<AppState>();
+        let c = st.config.lock();
+        (
+            c.prompt_terminal_blur,
+            c.prompt_terminal_theme.clone(),
+            c.orb_color_idle.clone(),
+        )
+    };
+    // The terminal webview owns the frost + calls prompt_set_effects, so it
+    // applies the material change itself on receiving this (attach/strip
+    // vibrancy, raise/melt the frost).
+    let _ = app.emit_to(
+        crate::prompt_console::LABEL,
+        "echo://prompt-config",
+        serde_json::json!({ "blur": blur, "theme": theme, "pillColor": pill_accent }),
+    );
 }
 
 /// Parse the "<x>-<y>" tail of a saved position. x can itself be negative

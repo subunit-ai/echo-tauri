@@ -273,6 +273,16 @@ pub struct Config {
     /// Glass intensity of the Prompt Console shell: "clear" (most transparent,
     /// default) | "regular" | "rich". Cycled from the console header.
     pub prompt_console_glass: String,
+    /// iOS-style native frost (NSVisualEffectView) behind the Prompt Terminal.
+    /// true (default) = the terminal hands over to the real desktop-blur on
+    /// settle (the smooth genie material handover). false = stay in the flat
+    /// pill-toned glass permanently — the genie flight still plays, but there
+    /// is NO switch to the blurry material (TJ: "einen Schalter … dass es so
+    /// bleiben kann ohne sich das umschaltet"). New field → serde(default).
+    pub prompt_terminal_blur: bool,
+    /// Prompt Terminal theme: "dark" (default) | "light". Governs the glass
+    /// base tone; the hue is matched to the pill's accent color either way.
+    pub prompt_terminal_theme: String,
 
     /// toggle | hold (push-to-talk, default)
     pub recording_mode: String,
@@ -522,6 +532,8 @@ impl Default for Config {
             prompt_console_as_target: false,
             prompt_fallback_enabled: true,
             prompt_console_glass: "clear".to_string(),
+            prompt_terminal_blur: true,
+            prompt_terminal_theme: "dark".to_string(),
 
             recording_mode: "hold".to_string(),
 
