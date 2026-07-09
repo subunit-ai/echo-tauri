@@ -16,7 +16,7 @@ import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
 import { WhatsNew } from "./components/WhatsNew";
-import { onState, onNeedsAccessibility } from "./lib/ipc";
+import { onState, onNeedsAccessibility, onLearningReward } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
@@ -105,9 +105,19 @@ function EngineErrorToasts() {
     // macOS: auto-paste was blocked for lack of Accessibility permission. Text is on
     // the clipboard; nudge the user to grant it so future pastes land automatically.
     const ax = onNeedsAccessibility(() => toast(t("perm.needsAccessibility"), "error"));
+    // Gamification: taught vocabulary used in a dictation → celebrate in-app
+    // (the native notification covers the backgrounded case).
+    const reward = onLearningReward((r) => {
+      const first = r.events[0];
+      if (!first) return;
+      const xp = r.events.reduce((sum, e) => sum + e.xp, 0);
+      const key = first.kind === "word_of_day" ? "learning.rewardWodToast" : "learning.rewardCoachToast";
+      toast(t(key, { word: first.word, xp, count: r.events.length - 1 }), "success");
+    });
     return () => {
       sub.then((un) => un());
       ax.then((un) => un());
+      reward.then((un) => un());
     };
   }, [toast, t]);
   return null;

@@ -31,6 +31,38 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.108",
+    date: "2026-07-09",
+    title: { de: "Dein Wortschatz zahlt sich aus", en: "Your vocabulary pays off" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Echo erkennt jetzt, wenn du das Wort des Tages oder ein Coach-Wort wirklich in einem Diktat benutzt — auch gebeugt („Diskrepanzen“ zählt für „Diskrepanz“) — und feiert das sofort: Mitteilung, Belohnung in der App und XP (Wort des Tages +50, Coach-Wort +20).",
+        en: "Echo now recognizes when you actually use the word of the day or a coach word in a dictation — inflected forms count too — and celebrates it instantly: notification, in-app reward and XP (word of the day +50, coach word +20).",
+      },
+      {
+        kind: "feature",
+        de: "Neu im Wortschatz-Tab: deine XP-Karte mit Level und Rang-Titel (vom Wortsammler bis zur Eloquenz-Legende), ein Erfolge-Feed deiner gemeisterten Wörter und die Community-Bestenliste — wer erweitert seinen Wortschatz diese Woche am meisten?",
+        en: "New in the Learning tab: your XP card with level and rank title, an achievements feed of your mastered words, and the community leaderboard — who is growing their vocabulary the most this week?",
+      },
+      {
+        kind: "improvement",
+        de: "Das Wort des Tages bleibt jetzt den ganzen Tag dasselbe — vorher wechselte es still zum nächsten Wort, sobald du es benutzt hattest. Benutzt du es, zeigt die Karte stolz „Heute benutzt“.",
+        en: "The word of the day now stays the same all day — previously it silently moved on to the next word once you had used it. Use it and the card proudly shows “Used today”.",
+      },
+      {
+        kind: "improvement",
+        de: "Aktivität öffnet jetzt mit „Gesamt“ und zeigt damit dieselben echten Gesamtzahlen wie der Home-Tab. Bei 7/30/90 Tagen erklärt ein Hinweis, dass tagesgenaue Daten erst seit Kurzem gesammelt werden — ältere Diktate stecken in „Gesamt“.",
+        en: "Activity now opens on “All time”, matching the real lifetime numbers from the Home tab. On 7/30/90 days a hint explains that day-level data is only collected recently — older dictations live in “All time”.",
+      },
+      {
+        kind: "improvement",
+        de: "Die meistgenutzten Wörter wohnen jetzt nur noch im Wortschatz-Tab (in Aktivität waren sie ein Duplikat), und der Verlauf merkt sich statt 500 jetzt bis zu 5.000 Diktate.",
+        en: "Top words now live only in the Learning tab (they were a duplicate in Activity), and history now keeps up to 5,000 dictations instead of 500.",
+      },
+    ],
+  },
+  {
     version: "0.5.107",
     date: "2026-07-09",
     title: { de: "Der Genie-Austritt, jetzt so weich wie der Sog", en: "The genie exit, now as smooth as the suction" },

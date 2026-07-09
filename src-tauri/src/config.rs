@@ -395,6 +395,11 @@ pub struct Config {
     /// Activity/Learning): only installs still on the untouched OLD default are
     /// lifted; a deliberately chosen cap is respected forever.
     pub history_size_migrated: bool,
+    /// Second bump 500→5000 (text-only rows, a few MB at most — TJ 2026-07-09:
+    /// retention should be generous so Activity/Learning build real depth).
+    /// Same contract: only the untouched previous default is lifted.
+    #[serde(default)]
+    pub history_size_migrated2: bool,
     /// Lossless passthrough of history entries (shape owned by the transcription path).
     pub history: Vec<Value>,
     pub history_enabled: bool,
@@ -544,8 +549,9 @@ impl Default for Config {
             de_comma_enabled: true,
             de_comma_migrated: false,
 
-            history_size: 500,
+            history_size: 5000,
             history_size_migrated: false,
+            history_size_migrated2: false,
             history: Vec::new(),
             history_enabled: true,
             meetings: Vec::new(),
@@ -623,7 +629,8 @@ impl Config {
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.dach_format_migrated = true; // fresh installs already default DACH formatting on
         c.de_comma_migrated = true; // fresh installs already default German commas on
-        c.history_size_migrated = true; // fresh installs already start at the 500 cap
+        c.history_size_migrated = true; // fresh installs already start beyond the 500 cap
+        c.history_size_migrated2 = true; // fresh installs already start at the 5000 cap
         c.daily_stats_seeded = true; // fresh installs have no history to backfill
         c.route_default_engine();
         c.seed_default_vocabulary();
@@ -765,6 +772,16 @@ impl Config {
                 self.history_size = 500;
             }
             self.history_size_migrated = true;
+        }
+        // v0.5.107: zweite Anhebung 500→5000 (nur Text, wenige MB — großzügige
+        // Retention nach TJ 2026-07-09). Läuft NACH der 50→500-Leiter, damit
+        // Uralt-Configs in einem Start 50→500→5000 durchwandern; ein bewusst
+        // gesetzter anderer Wert bleibt unangetastet.
+        if !self.history_size_migrated2 {
+            if self.history_size == 500 {
+                self.history_size = 5000;
+            }
+            self.history_size_migrated2 = true;
         }
         // v0.5.4: drag-set positions store the orb CENTRE ("center-x-y") instead
         // of its top-left ("custom-x-y"), so size changes scale the orb in place

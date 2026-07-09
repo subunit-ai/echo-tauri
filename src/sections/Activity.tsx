@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AreaChart, type XYDatum } from "../components/charts/AreaChart";
-import { BarChart } from "../components/charts/BarChart";
 import { EchoWrapped } from "../components/charts/EchoWrapped";
 import { HourlyChart } from "../components/charts/HourlyChart";
 import { ProgressRing } from "../components/charts/ProgressRing";
-import { WordCloud } from "../components/charts/WordCloud";
 import { SPARKLES_PATHS, STAR4_PATHS, StrokeIcon } from "../components/icons";
 import { exportCsv, exportJson } from "../lib/exportActivity";
 import { computeInsights } from "../lib/insights";
@@ -39,11 +37,11 @@ const RANGES: { key: RangeKey; days: number; labelKey: string }[] = [
   { key: "all", days: ALL_DAYS, labelKey: "activity.rangeAll" },
 ];
 
-// Top words stay pinned to the recent window (last 30 days, blueprint §6) —
-// deliberately NOT coupled to the range switcher, which drives daily/hourly.
+// Top words feed Echo Wrapped + the JSON export (last 30 days). The visible
+// word cloud lives in the Wortschatz section only — it was a duplicate here
+// (TJ 2026-07-09).
 const WORD_FREQ_DAYS = 30;
 const WORD_FREQ_LIMIT = 40;
-const TOP_WORD_BARS = 12;
 
 // ---- Local-date helpers (same convention as lib/insights.ts) --------------
 function pad2(n: number): string {
@@ -120,7 +118,10 @@ export function Activity() {
   const lang = i18n.language || "en";
   const toast = useToast();
 
-  const [range, setRange] = useState<RangeKey>("30");
+  // Default "Gesamt": the tab opens with the REAL lifetime numbers (identical
+  // to Home) — day-resolved data only reaches back to `overview.daily_since`,
+  // so 7/30/90 would open with misleadingly small figures (TJ 2026-07-09).
+  const [range, setRange] = useState<RangeKey>("all");
   const [overview, setOverview] = useState<ActivityOverview | null>(null);
   const [daily, setDaily] = useState<ActivityDay[]>([]);
   const [hourly, setHourly] = useState<ActivityHour[]>([]);
@@ -178,11 +179,6 @@ export function Activity() {
     [hourly],
   );
 
-  const barData = useMemo(
-    () => words.slice(0, TOP_WORD_BARS).map((w) => ({ label: w.word, value: w.count })),
-    [words],
-  );
-
   const insights = useMemo(
     () => computeInsights(t, overview, daily, hourly, analysis),
     [t, overview, daily, hourly, analysis],
@@ -210,6 +206,17 @@ export function Activity() {
   if (!overview) return null;
 
   const cardTotals = rangeTotals ?? overview.total;
+  // Honest partial-range hint: day-resolved recording starts at daily_since;
+  // when the selected window reaches further back AND older dictations exist
+  // (lifetime > sum of all day buckets), say so instead of looking broken.
+  const preDailyWords = overview.total.words - overview.daily_words;
+  const preDailyTranscriptions = overview.total.transcriptions - overview.daily_transcriptions;
+  const rangeStart = range === "all" ? null : addDays(todayStr(), -(rangeDays - 1));
+  const showPartialHint =
+    rangeStart !== null &&
+    overview.daily_since !== null &&
+    overview.daily_since > rangeStart &&
+    preDailyWords > 0;
   const saved = fmtSaved(cardTotals.time_saved_seconds);
   // Ø speaking pace (§12a): words / audio minutes in the window, guarded — "–"
   // instead of a division by zero when nothing has been dictated yet.
@@ -341,6 +348,16 @@ export function Activity() {
             </div>
           </div>
 
+          {showPartialHint && overview.daily_since && (
+            <p className="range-hint">
+              {t("activity.partialRangeHint", {
+                since: fmtDayShort(overview.daily_since, lang),
+                words: preDailyWords.toLocaleString(lang),
+                count: preDailyTranscriptions.toLocaleString(lang),
+              })}
+            </p>
+          )}
+
           {/* Goal rings — today vs. daily goal, week vs. weekly goal */}
           <div className="ring-group">
             <div className="ring-card" data-done={dailyGoal > 0 && todayWords >= dailyGoal}>
@@ -467,30 +484,6 @@ export function Activity() {
             <div className="chart-wrap">
               <HourlyChart data={hourlyData} height={160} />
             </div>
-          </div>
-
-          {/* Top words — weighted cloud + ranked horizontal bars (last 30 days) */}
-          <div className="chart-card">
-            <div className="chart-head">
-              <div>
-                <h3 className="chart-title">{t("activity.topWords")}</h3>
-              </div>
-            </div>
-            {words.length === 0 ? (
-              <div className="empty">{t("activity.wordCloudEmpty")}</div>
-            ) : (
-              <div className="chart-grid-2">
-                <WordCloud words={words} max={WORD_FREQ_LIMIT} />
-                <div className="chart-wrap">
-                  <BarChart
-                    data={barData}
-                    horizontal
-                    maxBars={TOP_WORD_BARS}
-                    formatValue={(n) => n.toLocaleString(lang)}
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Insight cards — pure TS one-liners from computeInsights() */}

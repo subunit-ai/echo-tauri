@@ -608,6 +608,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         use tauri::Emitter;
         let _ = app.emit("echo://history-changed", ());
     }
+    // Gamification: recognize taught vocabulary (word of the day, coach words)
+    // in the delivered text and celebrate it — XP, event, native notification.
+    maybe_award_vocab(app, &cfg, &account, &result.text, now as i64);
     // Long recordings are NOT stored separately anymore — they land in the normal
     // history above like any dictation (TJ 2026-07-03). The former meeting store +
     // long-form diarization are retired.
@@ -930,6 +933,10 @@ pub fn activity_overview(state: State<'_, AppState>) -> serde_json::Value {
     let (today_w, today_t, today_s) = crate::store::daily_sum_since(&account, "0 days");
     let (week_w, week_t, week_s) = crate::store::daily_sum_since(&account, "-6 days");
     let (current, longest, _, _) = compute_streak(&account);
+    // Day-resolved recording starts at `daily_since` (backfill was capped by
+    // the retained history) — everything earlier only exists in the lifetime
+    // totals. The frontend uses the delta for an honest partial-range hint.
+    let (daily_w, daily_t, _) = crate::store::daily_sum_since(&account, "-3650 days");
     serde_json::json!({
         "total": {
             "transcriptions": transcriptions,
@@ -937,6 +944,9 @@ pub fn activity_overview(state: State<'_, AppState>) -> serde_json::Value {
             "audio_seconds": audio_seconds,
             "time_saved_seconds": time_saved_seconds(words, audio_seconds),
         },
+        "daily_since": crate::store::daily_first_day(&account),
+        "daily_words": daily_w,
+        "daily_transcriptions": daily_t,
         "today": { "words": today_w, "transcriptions": today_t, "time_saved_seconds": today_s },
         "this_week": { "words": week_w, "transcriptions": week_t, "time_saved_seconds": week_s },
         "streak": { "current": current, "longest": longest },
@@ -1048,12 +1058,25 @@ pub fn learning_suggestions(state: State<'_, AppState>, days: Option<u32>) -> se
     let texts = crate::store::history_texts_since(days.unwrap_or(30));
     let local = crate::analysis::local_suggestions(&texts);
     let cfg = state.config.lock().clone();
-    if cfg.mode == "subunit" {
-        if let Some(suggestions) = word_upgrade_curate(&cfg, &local) {
-            return serde_json::json!({ "source": "llm", "suggestions": suggestions });
+    let (source, suggestions) = if cfg.mode == "subunit" {
+        match word_upgrade_curate(&cfg, &local) {
+            Some(s) => ("llm", s),
+            None => ("local", local),
         }
-    }
-    serde_json::json!({ "source": "local", "suggestions": local })
+    } else {
+        ("local", local)
+    };
+    // Remember what the coach actually showed — only taught words can earn XP.
+    let shown: Vec<String> = suggestions
+        .iter()
+        .flat_map(|s| s.alternatives.iter().map(|a| a.word.clone()))
+        .collect();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    crate::store::suggested_words_add(&shown, source, now);
+    serde_json::json!({ "source": source, "suggestions": suggestions })
 }
 
 /// Daily/weekly word goals (Activity rings). Struct param mirrors `set_config`,
@@ -1120,23 +1143,261 @@ pub fn activity_export(kind: String, filename: String, contents_b64: String) -> 
     Ok(shown)
 }
 
-/// „Wort des Tages“ — curated, local, deterministic per local calendar day
-/// (§12b): the date hash picks a start index, the first word NOT dictated in
-/// the last 30 days wins; `already_used` flags a full-circle day.
-#[tauri::command]
-pub fn word_of_day() -> serde_json::Value {
-    let day = crate::store::today_local();
+// ── Learning gamification (word-of-day pinning, XP, detection, leaderboard) ──
+//
+// The word of the day is PINNED once per local day (store::wod_log): the old
+// pick-on-read would silently skip to the next unused word the moment you
+// spoke today's word — nothing stable to recognize or celebrate. XP is a pure
+// vocabulary currency: only taught words earn it (today's pinned word, coach
+// alternatives that were actually shown, past words of the day).
+
+pub const XP_WORD_OF_DAY: i64 = 50;
+pub const XP_COACH_WORD: i64 = 20;
+
+/// Level from total XP — cumulative quadratic thresholds (level n needs
+/// 100·n² XP: 100, 400, 900, …). Returns (level, floor_xp, next_level_xp).
+fn level_for_xp(xp: i64) -> (i64, i64, i64) {
+    let mut level = 0i64;
+    while 100 * (level + 1) * (level + 1) <= xp {
+        level += 1;
+    }
+    (level, 100 * level * level, 100 * (level + 1) * (level + 1))
+}
+
+/// Inverse of `day_number` (Hinnant's civil_from_days) — days since epoch back
+/// to 'YYYY-MM-DD'. Keeps the crate chrono-free like everything else here.
+fn day_string(days: i64) -> String {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let (y, m) = if mp < 10 { (yoe + era * 400, mp + 3) } else { (yoe + era * 400 + 1, mp - 9) };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Monday of the week containing `day` — the leaderboard's week key (calendar
+/// weeks, not rolling windows, so everyone competes in the same frame).
+fn week_monday(day: &str) -> String {
+    match day_number(day) {
+        // 1970-01-01 was a Thursday → Monday-based weekday index = (dn+3) mod 7.
+        Some(dn) => day_string(dn - (((dn + 3) % 7 + 7) % 7)),
+        None => day.to_string(),
+    }
+}
+
+/// Today's pinned word of the day, pinning it first if this is the day's first
+/// ask. The pick prefers words not dictated in the last 30 days; once pinned
+/// the word stays for the whole day (detection + card agree).
+fn ensure_wod_pinned(day: &str) -> String {
+    if let Some(w) = crate::store::wod_get(day) {
+        return w;
+    }
     let texts = crate::store::history_texts_since(30);
     let recent: std::collections::HashSet<String> =
         texts.iter().flat_map(|t| crate::analysis::tokenize(t)).collect();
-    let (entry, already_used) = crate::analysis::pick_word_of_day(&day, &recent);
+    let (entry, _) = crate::analysis::pick_word_of_day(day, &recent);
+    crate::store::wod_pin(day, entry.word)
+}
+
+/// „Wort des Tages“ — the day's pinned pick with its curated card data.
+/// `already_used` now means "used in a dictation TODAY" (XP ledger truth).
+#[tauri::command]
+pub fn word_of_day(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let day = crate::store::today_local();
+    let word = ensure_wod_pinned(&day);
+    let entry = crate::analysis::WORD_OF_DAY
+        .iter()
+        .find(|e| e.word.to_lowercase() == word.to_lowercase())
+        .unwrap_or_else(|| {
+            // Pinned word vanished from the curated list (version change) —
+            // repin today deterministically so card + detection stay aligned.
+            let texts = crate::store::history_texts_since(30);
+            let recent: std::collections::HashSet<String> =
+                texts.iter().flat_map(|t| crate::analysis::tokenize(t)).collect();
+            let (e, _) = crate::analysis::pick_word_of_day(&day, &recent);
+            crate::store::wod_replace(&day, e.word);
+            e
+        });
     serde_json::json!({
         "word": entry.word,
         "meaning": entry.meaning,
         "example": entry.example,
         "synonyms": entry.synonyms,
-        "already_used": already_used,
+        "already_used": crate::store::learning_event_exists(&account, &day, "word_of_day"),
+        "xp": XP_WORD_OF_DAY,
     })
+}
+
+/// Scan one delivered dictation for taught vocabulary and celebrate new hits:
+/// XP ledger (idempotent per day+word), `echo://learning-reward` for the UI,
+/// a native notification (the app is usually in the background while the user
+/// dictates into another app), and a detached leaderboard sync.
+pub fn maybe_award_vocab(app: &AppHandle, cfg: &Config, account: &str, text: &str, now: i64) {
+    if text.trim().is_empty() {
+        return;
+    }
+    let day = crate::store::today_local();
+    if day.is_empty() {
+        return;
+    }
+    let wod = ensure_wod_pinned(&day);
+    let mut coach = crate::store::suggested_words_all();
+    for w in crate::store::wod_words_before(&day, 120) {
+        coach.insert(w.to_lowercase());
+    }
+    let (wod_hit, coach_hits) = crate::analysis::find_vocab_hits(text, &wod, &coach);
+    let mut events: Vec<serde_json::Value> = Vec::new();
+    if wod_hit
+        && crate::store::learning_award(account, &day, "word_of_day", &wod, XP_WORD_OF_DAY, now)
+    {
+        events.push(serde_json::json!({ "kind": "word_of_day", "word": wod, "xp": XP_WORD_OF_DAY }));
+    }
+    for w in coach_hits {
+        if crate::store::learning_award(account, &day, "coach_word", &w, XP_COACH_WORD, now) {
+            events.push(serde_json::json!({ "kind": "coach_word", "word": w, "xp": XP_COACH_WORD }));
+        }
+    }
+    if events.is_empty() {
+        return;
+    }
+    let xp_total = crate::store::learning_xp(account, None);
+    let (level, _, _) = level_for_xp(xp_total);
+    use tauri::Emitter;
+    let _ = app.emit(
+        "echo://learning-reward",
+        serde_json::json!({ "events": events, "xp_total": xp_total, "level": level }),
+    );
+    notify_reward(app, &cfg.ui_language, &events);
+    push_learning_score_detached(cfg.clone(), account.to_string());
+}
+
+/// Native reward notification, best-effort. DE for German UIs, EN otherwise —
+/// the backend has no i18n catalog (only de/en ship as bundled UI languages).
+fn notify_reward(app: &AppHandle, ui_language: &str, events: &[serde_json::Value]) {
+    let Some(first) = events.first() else { return };
+    let word = first["word"].as_str().unwrap_or("").to_string();
+    let xp: i64 = events.iter().map(|e| e["xp"].as_i64().unwrap_or(0)).sum();
+    let de = ui_language.to_lowercase().starts_with("de");
+    let wod = first["kind"].as_str() == Some("word_of_day");
+    let title = match (de, wod) {
+        (true, true) => "Wort des Tages benutzt!".to_string(),
+        (true, false) => "Neues Wort benutzt!".to_string(),
+        (false, true) => "Word of the day used!".to_string(),
+        (false, false) => "New word used!".to_string(),
+    };
+    let extra = events.len().saturating_sub(1);
+    let body = match (de, extra) {
+        (true, 0) => format!("„{word}“ — +{xp} XP"),
+        (true, _) => format!("„{word}“ und {extra} weitere — +{xp} XP"),
+        (false, 0) => format!("“{word}” — +{xp} XP"),
+        (false, _) => format!("“{word}” and {extra} more — +{xp} XP"),
+    };
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
+/// Best-effort leaderboard sync over the subunit lane (detached — never
+/// delays a dictation). Mirrors word_upgrade_curate's endpoint/auth recipe.
+fn push_learning_score_detached(cfg: Config, account: String) {
+    if cfg.mode != "subunit" {
+        return;
+    }
+    std::thread::spawn(move || push_learning_score(&cfg, &account));
+}
+
+fn push_learning_score(cfg: &Config, account: &str) {
+    let day = crate::store::today_local();
+    if day.is_empty() {
+        return;
+    }
+    let week = week_monday(&day);
+    let name = {
+        let nick = cfg.nickname.trim();
+        let disp = cfg.display_name.trim();
+        if !nick.is_empty() { nick } else { disp }
+    };
+    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/learning/score");
+    let mut req = crate::http::client()
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .json(&serde_json::json!({
+            "week": week,
+            "xp_week": crate::store::learning_xp(account, Some(&week)),
+            "xp_total": crate::store::learning_xp(account, None),
+            "words": crate::store::learning_distinct_words(account),
+            "name": name,
+        }));
+    if !cfg.subunit_access_token.is_empty() {
+        req = req.bearer_auth(&cfg.subunit_access_token);
+    } else if !cfg.subunit_api_key.is_empty() {
+        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+    } else {
+        return;
+    }
+    let _ = req.send();
+}
+
+/// XP state for the Wortschatz header: totals, level maths, today's word-of-
+/// day status and the recent award feed. 100% local.
+#[tauri::command]
+pub fn learning_xp(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let day = crate::store::today_local();
+    let week = week_monday(&day);
+    let xp_total = crate::store::learning_xp(&account, None);
+    let (level, level_floor_xp, next_level_xp) = level_for_xp(xp_total);
+    serde_json::json!({
+        "xp_total": xp_total,
+        "xp_week": crate::store::learning_xp(&account, Some(&week)),
+        "level": level,
+        "level_floor_xp": level_floor_xp,
+        "next_level_xp": next_level_xp,
+        "wod_used_today": crate::store::learning_event_exists(&account, &day, "word_of_day"),
+        "distinct_words": crate::store::learning_distinct_words(&account),
+        "events": crate::store::learning_events_recent(&account, 10),
+    })
+}
+
+/// Community leaderboard („wer erweitert seinen Wortschatz am meisten?“):
+/// pushes the own score, then fetches this week's board. Subscription mode
+/// only; ANY failure degrades to {"available": false} — the card just hides.
+#[tauri::command]
+pub fn learning_leaderboard(state: State<'_, AppState>) -> serde_json::Value {
+    let cfg = state.config.lock().clone();
+    let unavailable = serde_json::json!({ "available": false });
+    if cfg.mode != "subunit" {
+        return unavailable;
+    }
+    let account = crate::presets::account_key(&cfg);
+    push_learning_score(&cfg, &account); // board should include "me" right away
+    let day = crate::store::today_local();
+    let week = week_monday(&day);
+    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/learning/leaderboard");
+    let mut req = crate::http::client()
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .query(&[("week", week.as_str())]);
+    if !cfg.subunit_access_token.is_empty() {
+        req = req.bearer_auth(&cfg.subunit_access_token);
+    } else if !cfg.subunit_api_key.is_empty() {
+        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+    } else {
+        return unavailable;
+    }
+    let Ok(resp) = req.send() else { return unavailable };
+    if !resp.status().is_success() {
+        return unavailable;
+    }
+    let Ok(mut body) = resp.json::<serde_json::Value>() else { return unavailable };
+    if let Some(o) = body.as_object_mut() {
+        o.insert("available".into(), serde_json::json!(true));
+        return body;
+    }
+    unavailable
 }
 
 /// All stored meetings, newest first (each with its store `id`).

@@ -94,6 +94,9 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Native reward notifications (learning gamification) — the app is
+        // usually backgrounded while the user dictates into another app.
+        .plugin(tauri_plugin_notification::init())
         // Launch-at-login. The actual OS entry is toggled via the set_autostart
         // command + reconciled on setup against config.autostart_enabled.
         .plugin(tauri_plugin_autostart::init(
@@ -140,6 +143,8 @@ pub fn run() {
             commands::goals_set,
             commands::activity_export,
             commands::word_of_day,
+            commands::learning_xp,
+            commands::learning_leaderboard,
             commands::account_stats,
             commands::delete_history_entry,
             commands::clear_history,

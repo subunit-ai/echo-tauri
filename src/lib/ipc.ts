@@ -504,6 +504,11 @@ export interface PeriodSum {
 }
 export interface ActivityOverview {
   total: ActivityTotals;
+  /** Earliest day with day-resolved stats — everything before it only exists
+   *  in the lifetime totals (drives the honest partial-range hint). */
+  daily_since: string | null;
+  daily_words: number;
+  daily_transcriptions: number;
   today: PeriodSum;
   this_week: PeriodSum;
   streak: { current: number; longest: number };
@@ -557,6 +562,52 @@ export interface WordOfDay {
   meaning: string;
   example: string;
   synonyms: string[];
+  /** Used in a dictation TODAY (XP ledger truth, not the old 30-day scan). */
   already_used: boolean;
+  xp: number;
 }
 export const wordOfDay = () => invoke<WordOfDay>("word_of_day");
+
+// ---- Learning gamification (XP, rewards, leaderboard) ----
+
+export interface LearningEvent {
+  ts: number;
+  day: string;
+  kind: "word_of_day" | "coach_word";
+  word: string;
+  xp: number;
+}
+export interface LearningXp {
+  xp_total: number;
+  xp_week: number;
+  level: number;
+  level_floor_xp: number;
+  next_level_xp: number;
+  wod_used_today: boolean;
+  distinct_words: number;
+  events: LearningEvent[];
+}
+export const learningXp = () => invoke<LearningXp>("learning_xp");
+
+export interface LeaderboardRow {
+  rank: number;
+  name: string;
+  xp: number;
+  words: number;
+  me?: boolean;
+}
+export interface Leaderboard {
+  available: boolean;
+  week?: LeaderboardRow[];
+  total?: LeaderboardRow[];
+  me?: { rank_week: number | null; rank_total: number | null };
+}
+export const learningLeaderboard = () => invoke<Leaderboard>("learning_leaderboard");
+
+export interface LearningReward {
+  events: { kind: "word_of_day" | "coach_word"; word: string; xp: number }[];
+  xp_total: number;
+  level: number;
+}
+export const onLearningReward = (cb: (r: LearningReward) => void): Promise<UnlistenFn> =>
+  listen<LearningReward>("echo://learning-reward", (e) => cb(e.payload));
