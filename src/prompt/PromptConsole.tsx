@@ -871,8 +871,15 @@ export function PromptConsole() {
       springBumpTo(null);
       return;
     }
-    const r = el.getBoundingClientRect();
-    springBumpTo({ x: r.left, w: r.width });
+    // offsetLeft/offsetWidth, NOT getBoundingClientRect: client rects are
+    // TRANSFORMED. While the console sits hidden after a genie-out, the WAAPI
+    // fill holds the stage at scale 0.02 — dictations routed in meanwhile
+    // ("Konsole als Ziel") re-render the tabs and a rect-based measurement
+    // captured garbage, leaving the silhouette bump beside the actual tab on
+    // the next open (Erik's "tabs sitzen falsch"). Offsets are layout-space
+    // and immune to the stage transform; subtract the row scroll ourselves.
+    const row = tabRowRef.current;
+    springBumpTo({ x: el.offsetLeft - (row ? row.scrollLeft : 0), w: el.offsetWidth });
     // Label width follows the text, so drafts is a real dependency here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.activeId, data?.drafts, renaming, winSize]);

@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.110",
+    date: "2026-07-09",
+    title: { de: "Windows: Geist-Rahmen weg, Tabs sitzen wieder", en: "Windows: ghost frame gone, tabs sit right again" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Auf Windows schwebte dauerhaft ein rechteckiger Schatten-Rahmen um das (transparente) Prompt-Terminal-Fenster — Windows zeichnet Fensterschatten stur ums ganze Rechteck statt um den sichtbaren Inhalt. Der System-Schatten ist dort jetzt aus; das Terminal bringt seine eigene Tiefe mit.",
+        en: "On Windows a rectangular shadow frame floated permanently around the (transparent) prompt terminal window — Windows draws window shadows around the full rect instead of the visible content. The system shadow is now off there; the terminal carries its own depth.",
+      },
+      {
+        kind: "fix",
+        de: "Die Fenster-Outline um den aktiven Tab konnte neben dem Tab landen, wenn Diktate ins unsichtbare Terminal geleitet wurden („Konsole als Ziel\u201c): Die Vermessung las verzerrte Koordinaten, solange das Fenster eingesaugt ruhte. Die Tabs werden jetzt verzerrungsfrei vermessen — die Outline sitzt immer exakt.",
+        en: "The window outline around the active tab could land beside the tab when dictations were routed into the hidden terminal (console-as-target): measurement read distorted coordinates while the window rested sucked-in. Tabs are now measured distortion-free — the outline always sits exactly.",
+      },
+    ],
+  },
+  {
     version: "0.5.109",
     date: "2026-07-09",
     title: { de: "Ein Glas, ein Guss — der Genie-Flug im vollen Material", en: "One glass, one pour — the genie flight in full material" },
