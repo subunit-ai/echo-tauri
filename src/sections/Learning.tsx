@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   learningAnalysis,
+  learningLeaderboard,
   learningSuggestions,
+  learningXp,
   onHistoryChanged,
+  onLearningReward,
   wordOfDay,
+  type Leaderboard,
   type LearningAnalysis,
   type LearningSuggestions,
+  type LearningXp,
   type WordFreq,
   type WordOfDay,
 } from "../lib/ipc";
@@ -75,6 +80,63 @@ const PlusIcon = () => (
   </svg>
 );
 
+/** Trophy glyph for the achievements feed (stroke-SVG, no emojis). */
+const TrophyIcon = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.9"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+    <path d="M7 6H4a1 1 0 0 0-1 1c0 2.2 1.8 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2.2-1.8 4-4 4" />
+  </svg>
+);
+
+/** Highest defined level title — levels above it reuse the top title. */
+const MAX_LEVEL_TITLE = 9;
+
+/** XP header strip: level badge + title, progress to the next level, weekly
+ *  XP and the distinct-words tally. Pure display — all math is backend truth. */
+function XpCard({ xp }: { xp: LearningXp }) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const span = xp.next_level_xp - xp.level_floor_xp;
+  const pct = span > 0 ? Math.min(100, Math.round(((xp.xp_total - xp.level_floor_xp) / span) * 100)) : 0;
+  return (
+    <div className="xp-card">
+      <div className="xp-badge" aria-hidden="true">
+        {xp.level}
+      </div>
+      <div className="xp-main">
+        <div className="xp-row">
+          <span className="xp-rank">
+            {t(`learning.levelTitle${Math.min(xp.level, MAX_LEVEL_TITLE)}`)}
+          </span>
+          <span className="xp-total">{xp.xp_total.toLocaleString(lang)} XP</span>
+        </div>
+        <div className="xp-bar">
+          <div className="xp-bar-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="xp-meta">
+          <span>{t("learning.xpWeek", { xp: xp.xp_week.toLocaleString(lang) })}</span>
+          <span>
+            {t("learning.nextLevel", {
+              xp: Math.max(0, xp.next_level_xp - xp.xp_total).toLocaleString(lang),
+            })}
+          </span>
+          <span>{t("learning.wordsUsed", { count: xp.distinct_words })}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** "Wort des Tages" — prominent daily-word card (§12d). Loads once on mount,
  *  deliberately independent of the range switcher below. */
 function WordOfDayCard({ wod }: { wod: WordOfDay }) {
@@ -83,11 +145,13 @@ function WordOfDayCard({ wod }: { wod: WordOfDay }) {
     <div className="wod-card">
       <div className="wod-head">
         <span className="wod-eyebrow">{t("learning.wodTitle")}</span>
-        {wod.already_used && (
+        {wod.already_used ? (
           <span className="wod-used-badge">
             <CheckIcon />
-            {t("learning.wodUsedBadge")}
+            {t("learning.wodUsedBadge", { xp: wod.xp })}
           </span>
+        ) : (
+          <span className="wod-challenge-badge">{t("learning.wodChallenge", { xp: wod.xp })}</span>
         )}
       </div>
       <div className="wod-word">{wod.word}</div>
@@ -113,9 +177,11 @@ function WordOfDayCard({ wod }: { wod: WordOfDay }) {
 export function Learning() {
   const { config, patch } = useConfig();
   const toast = useToast();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [wod, setWod] = useState<WordOfDay | null>(null);
+  const [xp, setXp] = useState<LearningXp | null>(null);
+  const [lb, setLb] = useState<Leaderboard | null>(null);
   const [days, setDays] = useState<number>(30);
   const [analysis, setAnalysis] = useState<LearningAnalysis | null>(null);
   const [suggestions, setSuggestions] = useState<LearningSuggestions | null>(null);
@@ -123,9 +189,25 @@ export function Learning() {
   // immediately, even before the config round-trip lands.
   const [added, setAdded] = useState<Set<string>>(new Set());
 
-  // Word of the day: once on mount, range-independent (§12d).
+  // Word of the day + XP state: range-independent, but BOTH change the moment
+  // a dictation uses a taught word — refresh on the reward event (and on
+  // history-changed, which fires for every dictation anyway).
   useEffect(() => {
-    wordOfDay().then(setWod).catch(() => {});
+    const refreshGamification = () => {
+      wordOfDay().then(setWod).catch(() => {});
+      learningXp().then(setXp).catch(() => {});
+    };
+    refreshGamification();
+    const un = onLearningReward(refreshGamification);
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  // Leaderboard: one round-trip on mount (pushes the own score first). NOT
+  // re-fetched per dictation — the server is not a realtime scoreboard.
+  useEffect(() => {
+    learningLeaderboard().then(setLb).catch(() => setLb(null));
   }, []);
 
   // Analysis + suggestions follow the range switcher; both are 100% local
@@ -222,7 +304,79 @@ export function Learning() {
       <h1 className="section-title">{t("learning.title")}</h1>
       <p className="section-sub">{t("learning.subtitle")}</p>
 
+      {xp && <XpCard xp={xp} />}
       {wod && <WordOfDayCard wod={wod} />}
+
+      {((xp?.events.length ?? 0) > 0 || (lb?.available && (lb.week?.length ?? 0) > 0)) && (
+        <div className="chart-grid-2" style={{ marginBottom: 16 }}>
+          {/* Achievements feed — the last rewarded words */}
+          {xp && xp.events.length > 0 && (
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="chart-head">
+                <div>
+                  <div className="chart-title">{t("learning.feedTitle")}</div>
+                  <div className="chart-sub">{t("learning.feedSub")}</div>
+                </div>
+              </div>
+              <div className="xp-feed">
+                {xp.events.slice(0, 6).map((e) => (
+                  <div key={`${e.day}-${e.kind}-${e.word}`} className="xp-feed-row">
+                    <span className="xp-feed-icon">
+                      <TrophyIcon />
+                    </span>
+                    <span className="xp-feed-word">{e.word}</span>
+                    <span className="xp-feed-kind">
+                      {t(e.kind === "word_of_day" ? "learning.kindWod" : "learning.kindCoach")}
+                    </span>
+                    <span className="xp-feed-xp">+{e.xp}</span>
+                    <span className="xp-feed-date">
+                      {new Date(e.ts * 1000).toLocaleDateString(i18n.language, {
+                        day: "numeric",
+                        month: "numeric",
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Community leaderboard — most vocabulary XP this week */}
+          {lb?.available && (lb.week?.length ?? 0) > 0 && (
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="chart-head">
+                <div>
+                  <div className="chart-title">{t("learning.lbTitle")}</div>
+                  <div className="chart-sub">{t("learning.lbSub")}</div>
+                </div>
+              </div>
+              <div className="xp-feed">
+                {(lb.week ?? []).slice(0, 5).map((row) => (
+                  <div key={row.rank} className={`xp-feed-row${row.me ? " me" : ""}`}>
+                    <span className="lb-rank">{row.rank}</span>
+                    <span className="xp-feed-word">
+                      {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
+                    </span>
+                    <span className="xp-feed-kind">
+                      {t("learning.lbWords", { count: row.words })}
+                    </span>
+                    <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
+                  </div>
+                ))}
+                {lb.me?.rank_week != null && !(lb.week ?? []).slice(0, 5).some((r) => r.me) && (
+                  <div className="xp-feed-row me">
+                    <span className="lb-rank">{lb.me.rank_week}</span>
+                    <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
+                    <span className="xp-feed-xp">
+                      {(xp?.xp_week ?? 0).toLocaleString(i18n.language)} XP
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="sub-tabs" style={{ marginBottom: 16 }}>
         {RANGES.map((d) => (

@@ -593,6 +593,69 @@ pub fn pick_word_of_day(day: &str, recent_words: &HashSet<String>) -> (&'static 
     (&WORD_OF_DAY[start], true)
 }
 
+// ── Vocabulary-usage detection (gamification) ───────────────────────────────
+
+/// Does `token` look like an inflected form of `base`? Both must be lowercase.
+/// German inflection is suffix-based (Diskrepanz→Diskrepanzen, akribisch→
+/// akribischen, eruieren→eruiert), so two prefix rules cover the real cases:
+///  1. token = base + up to 3 extra chars (adjective/plural endings),
+///  2. infinitives only (base ends in "en", ≥ 6 chars): token starts with the
+///     stem (base minus "en") and stays within −2..+3 of the base length
+///     (verifizieren→verifiziert, eruieren→eruiere).
+/// Deliberately conservative — a missed inflection costs one reward, a false
+/// positive celebrates a word that was never said (Margin must NOT count as
+/// "marginal").
+pub fn matches_inflected(base: &str, token: &str) -> bool {
+    if base.is_empty() || token.is_empty() {
+        return false;
+    }
+    if token == base {
+        return true;
+    }
+    let base_n = base.chars().count();
+    let token_n = token.chars().count();
+    if token.starts_with(base) && token_n <= base_n + 3 {
+        return true;
+    }
+    if base_n >= 6 && base.ends_with("en") {
+        let stem: String = base.chars().take(base_n - 2).collect();
+        if token.starts_with(&stem) && token_n + 2 >= base_n && token_n <= base_n + 3 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Scan one dictation for taught vocabulary: returns whether today's word of
+/// the day was used plus every coach word (suggested alternatives + past words
+/// of the day) that appears — base words, deduped, in `coach` iteration order
+/// replaced by first-hit order of the text.
+pub fn find_vocab_hits(
+    text: &str,
+    wod: &str,
+    coach: &HashSet<String>,
+) -> (bool, Vec<String>) {
+    let tokens = tokenize(text);
+    let wod_lc = wod.trim().to_lowercase();
+    let mut wod_hit = false;
+    let mut hits: Vec<String> = Vec::new();
+    let mut seen: HashSet<&str> = HashSet::new();
+    for t in &tokens {
+        if !wod_lc.is_empty() && !wod_hit && matches_inflected(&wod_lc, t) {
+            wod_hit = true;
+            continue; // today's word is its own (bigger) reward, never a coach hit
+        }
+        for c in coach {
+            if c != &wod_lc && !seen.contains(c.as_str()) && matches_inflected(c, t) {
+                seen.insert(c);
+                hits.push(c.clone());
+                break;
+            }
+        }
+    }
+    (wod_hit, hits)
+}
+
 // ── Learning analysis ────────────────────────────────────────────────────────
 
 #[derive(serde::Serialize)]
@@ -928,5 +991,51 @@ mod tests {
         let (d, used_d) = pick_word_of_day("2026-07-08", &all);
         assert_eq!(d.word, a.word); // start index = the unfiltered pick
         assert!(used_d);
+    }
+
+    #[test]
+    fn inflection_matcher_covers_german_forms() {
+        // Nouns: plural.
+        assert!(matches_inflected("diskrepanz", "diskrepanz"));
+        assert!(matches_inflected("diskrepanz", "diskrepanzen"));
+        // Adjectives: declined endings.
+        assert!(matches_inflected("akribisch", "akribische"));
+        assert!(matches_inflected("akribisch", "akribischen"));
+        assert!(matches_inflected("prägnant", "prägnanter"));
+        // Verbs: conjugation clips the infinitive ending.
+        assert!(matches_inflected("eruieren", "eruiert"));
+        assert!(matches_inflected("verifizieren", "verifiziert"));
+        assert!(matches_inflected("antizipieren", "antizipiere"));
+        // Non-matches: different words must stay different.
+        assert!(!matches_inflected("diskrepanz", "diskret"));
+        assert!(!matches_inflected("marginal", "margin"));
+        assert!(!matches_inflected("valide", "validierungsprozess"));
+        assert!(!matches_inflected("konsens", "konsolidieren"));
+    }
+
+    #[test]
+    fn vocab_hit_detection_finds_wod_and_coach_words() {
+        let coach: HashSet<String> =
+            ["eloquent".to_string(), "prägnant".to_string(), "fundiert".to_string()]
+                .into_iter()
+                .collect();
+        // Inflected word of the day + one inflected coach word in one dictation.
+        let (wod, hits) = find_vocab_hits(
+            "Zwischen Plan und Kosten gibt es große Diskrepanzen, das sollten wir prägnanter formulieren.",
+            "Diskrepanz",
+            &coach,
+        );
+        assert!(wod);
+        assert_eq!(hits, vec!["prägnant".to_string()]);
+        // Same coach word twice → one hit; unknown words → nothing.
+        let (wod2, hits2) =
+            find_vocab_hits("prägnant und nochmal prägnant, sonst nichts", "Diskrepanz", &coach);
+        assert!(!wod2);
+        assert_eq!(hits2.len(), 1);
+        // The word of the day never doubles as a coach hit.
+        let coach_with_wod: HashSet<String> = ["diskrepanz".to_string()].into_iter().collect();
+        let (wod3, hits3) = find_vocab_hits("eine Diskrepanz", "Diskrepanz", &coach_with_wod);
+        assert!(wod3);
+        assert!(hits3.is_empty());
     }
 }

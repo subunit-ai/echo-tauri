@@ -92,6 +92,26 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             PRIMARY KEY (account, day)
          );
          CREATE INDEX IF NOT EXISTS idx_daily_account_day ON daily_stats(account, day DESC);
+         CREATE TABLE IF NOT EXISTS learning_events (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            account TEXT    NOT NULL,
+            ts      INTEGER NOT NULL,
+            day     TEXT    NOT NULL,
+            kind    TEXT    NOT NULL,
+            word    TEXT    NOT NULL,
+            xp      INTEGER NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_levents_account_ts ON learning_events(account, ts DESC);
+         CREATE UNIQUE INDEX IF NOT EXISTS uq_levents_award ON learning_events(account, day, kind, word);
+         CREATE TABLE IF NOT EXISTS wod_log (
+            day  TEXT PRIMARY KEY,
+            word TEXT NOT NULL
+         );
+         CREATE TABLE IF NOT EXISTS suggested_words (
+            word     TEXT PRIMARY KEY,
+            source   TEXT    NOT NULL DEFAULT '',
+            first_ts INTEGER NOT NULL
+         );
          CREATE TABLE IF NOT EXISTS notes (
             id         TEXT    NOT NULL,
             account    TEXT    NOT NULL,
@@ -528,6 +548,201 @@ pub fn backfill_daily_stats(account: &str) {
         );
     }
     log::info!("store: backfilled daily_stats for {n_days} day(s)");
+}
+
+// ---- Learning gamification ----
+// `wod_log` pins ONE word of the day per local day (machine-wide, like the
+// history it derives from). Without the pin the picker would silently skip to
+// the next unused word the moment you speak today's word — nothing stable to
+// celebrate. `suggested_words` remembers every coach alternative the user was
+// actually shown; `learning_events` is the XP ledger (never pruned). The
+// UNIQUE(account, day, kind, word) index makes every award idempotent.
+
+/// The pinned word of the day for `day`, if one was pinned already.
+pub fn wod_get(day: &str) -> Option<String> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row("SELECT word FROM wod_log WHERE day = ?1", params![day], |r| r.get(0))
+        .ok()
+}
+
+/// Pin `word` for `day` (first writer wins) and return the stored word — a
+/// concurrent pin from another code path simply reads the earlier winner back.
+pub fn wod_pin(day: &str, word: &str) -> String {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return word.to_string() };
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO wod_log (day, word) VALUES (?1, ?2)",
+        params![day, word],
+    );
+    conn.query_row("SELECT word FROM wod_log WHERE day = ?1", params![day], |r| r.get(0))
+        .unwrap_or_else(|_| word.to_string())
+}
+
+/// Overwrite the pin for `day` — only for the version-skew case where a
+/// pinned word no longer exists in the curated list.
+pub fn wod_replace(day: &str, word: &str) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO wod_log (day, word) VALUES (?1, ?2)",
+        params![day, word],
+    );
+}
+
+/// Past pinned words of the day (before `day`, newest first, capped) — using
+/// yesterday's word still counts as a coach hit.
+pub fn wod_words_before(day: &str, limit: u32) -> Vec<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn
+        .prepare_cached("SELECT word FROM wod_log WHERE day < ?1 ORDER BY day DESC LIMIT ?2")
+    else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![day, limit], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Remember coach alternatives the user was actually shown (lowercased,
+/// first-seen wins). Only shown words can earn XP — no rewards for words the
+/// coach never taught.
+pub fn suggested_words_add(words: &[String], source: &str, now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "INSERT OR IGNORE INTO suggested_words (word, source, first_ts) VALUES (?1, ?2, ?3)",
+    ) else {
+        return;
+    };
+    for w in words {
+        let canon = w.trim().to_lowercase();
+        if !canon.is_empty() {
+            let _ = stmt.execute(params![canon, source, now]);
+        }
+    }
+}
+
+/// All coach words ever shown (lowercase set) — the detection universe.
+pub fn suggested_words_all() -> std::collections::HashSet<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Default::default() };
+    let Ok(mut stmt) = conn.prepare_cached("SELECT word FROM suggested_words") else {
+        return Default::default();
+    };
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Default::default(),
+    }
+}
+
+/// Award XP once per (account, day, kind, word). Returns true only when the
+/// event was NEWLY inserted — duplicates (same word again today) award nothing.
+pub fn learning_award(account: &str, day: &str, kind: &str, word: &str, xp: i64, now: i64) -> bool {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return false };
+    match conn.execute(
+        "INSERT OR IGNORE INTO learning_events (account, ts, day, kind, word, xp)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![account, now, day, kind, word, xp],
+    ) {
+        Ok(n) => n > 0,
+        Err(e) => {
+            log::warn!("store: learning award failed: {e}");
+            false
+        }
+    }
+}
+
+/// Total XP for `account`; with `since_day` only events on/after that local day.
+pub fn learning_xp(account: &str, since_day: Option<&str>) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    match since_day {
+        Some(day) => conn
+            .query_row(
+                "SELECT COALESCE(SUM(xp), 0) FROM learning_events WHERE account = ?1 AND day >= ?2",
+                params![account, day],
+                |r| r.get(0),
+            )
+            .unwrap_or(0),
+        None => conn
+            .query_row(
+                "SELECT COALESCE(SUM(xp), 0) FROM learning_events WHERE account = ?1",
+                params![account],
+                |r| r.get(0),
+            )
+            .unwrap_or(0),
+    }
+}
+
+/// Recent XP events, newest first (the "Erfolge" feed).
+pub fn learning_events_recent(account: &str, limit: u32) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT ts, day, kind, word, xp FROM learning_events
+         WHERE account = ?1 ORDER BY ts DESC, id DESC LIMIT ?2",
+    ) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account, limit], |r| {
+        Ok(json!({
+            "ts": r.get::<_, i64>(0)?,
+            "day": r.get::<_, String>(1)?,
+            "kind": r.get::<_, String>(2)?,
+            "word": r.get::<_, String>(3)?,
+            "xp": r.get::<_, i64>(4)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// True when an event of `kind` exists for (account, day) — e.g. "was today's
+/// word of the day already used?".
+pub fn learning_event_exists(account: &str, day: &str, kind: &str) -> bool {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return false };
+    conn.query_row(
+        "SELECT 1 FROM learning_events WHERE account = ?1 AND day = ?2 AND kind = ?3 LIMIT 1",
+        params![account, day, kind],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+/// Distinct rewarded words (lifetime) — the "vocabulary expanded by N words"
+/// figure for the leaderboard.
+pub fn learning_distinct_words(account: &str) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COUNT(DISTINCT word) FROM learning_events WHERE account = ?1",
+        params![account],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// Earliest day with a daily_stats bucket for `account` — everything before it
+/// only exists in the lifetime totals (the Activity partial-range hint).
+pub fn daily_first_day(account: &str) -> Option<String> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT MIN(day) FROM daily_stats WHERE account = ?1",
+        params![account],
+        |r| r.get::<_, Option<String>>(0),
+    )
+    .ok()
+    .flatten()
 }
 
 // ---- Meetings ----
