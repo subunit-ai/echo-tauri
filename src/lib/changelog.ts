@@ -31,6 +31,33 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.101",
+    date: "2026-07-09",
+    title: { de: "Aktivität & Wortschatz — zwei neue Bereiche", en: "Activity & Vocabulary Coach — two new sections" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neuer Bereich „Aktivität“: Dein komplettes Diktier-Dashboard — Wörter, Diktate, gesparte Zeit, Tages-Serie und Sprechtempo (Wörter/Min.), dazu Verlaufs-Charts, deine aktivsten Tageszeiten, Tages- und Wochenziele mit Fortschrittsringen und deine meistgenutzten Wörter.",
+        en: "New \"Activity\" section: your complete dictation dashboard — words, dictations, time saved, daily streak and speaking pace (words/min), plus trend charts, your most active hours, daily and weekly goals with progress rings, and your most-used words.",
+      },
+      {
+        kind: "feature",
+        de: "Neuer Bereich „Wortschatz“: Jeden Tag ein gehobenes Wort des Tages mit Erklärung, Beispiel und Synonymen — dazu Füllwort-Analyse, Wortschatz-Vielfalt und Verbesserungsvorschläge mit stärkeren Alternativen samt Begründung, wann sie besser passen.",
+        en: "New \"Vocabulary\" section: an elevated word of the day with meaning, example and synonyms — plus filler-word analysis, vocabulary richness and upgrade suggestions with stronger alternatives, each explained so you know when it fits better.",
+      },
+      {
+        kind: "feature",
+        de: "Echo Wrapped & Export: Erstelle einen teilbaren Rückblick deiner Diktier-Statistiken als Bild oder exportiere deine Aktivität als CSV/JSON.",
+        en: "Echo Wrapped & export: create a shareable recap of your dictation stats as an image, or export your activity as CSV/JSON.",
+      },
+      {
+        kind: "improvement",
+        de: "Der Verlauf merkt sich jetzt bis zu 500 Diktate (vorher 50) — und deine Aktivitäts-Statistiken wachsen ab jetzt dauerhaft mit, unabhängig von der Verlaufs-Größe.",
+        en: "History now keeps up to 500 dictations (previously 50) — and your activity stats now accumulate permanently, independent of history size.",
+      },
+    ],
+  },
+  {
     version: "0.5.100",
     date: "2026-07-09",
     title: { de: "Die Pille hört feiner hin", en: "The pill listens closer" },
