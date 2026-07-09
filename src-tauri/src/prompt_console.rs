@@ -47,7 +47,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Some(w) = app.get_webview_window(LABEL) {
         return Ok(w);
     }
-    WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("prompt.html".into()))
+    let builder = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("prompt.html".into()))
         .title("Echo Prompt Terminal")
         .inner_size(460.0, 560.0)
         .min_inner_size(340.0, 380.0)
@@ -56,8 +56,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(true)
-        .center()
-        .build()
+        .center();
+    // Windows: DWM draws the shadow around the WINDOW RECT, not the drawn
+    // content — on a transparent window that's a permanent ghost frame floating
+    // around the terminal (and around the enlarged genie flight canvas). The
+    // overlay window disables it for the same reason; macOS keeps its native
+    // shadow, which hugs the actual silhouette.
+    #[cfg(target_os = "windows")]
+    let builder = builder.shadow(false);
+    builder.build()
 }
 
 /// Apply / strip the native glass behind the webview (blurs what's BEHIND the

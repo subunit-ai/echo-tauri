@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.110",
+    date: "2026-07-09",
+    title: { de: "Ausgewogene Pille + Windows-Fixes", en: "Balanced pill + Windows fixes" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Sprach-Balken der Pille sind jetzt ausbalanciert: Vorher trugen die mittleren drei bis vier fast alles und die äußeren blieben oft still — jetzt atmet die ganze Pille mit der Stimme. Die Randbalken hören auf lebendige Sprachfrequenzen statt auf die oberste Zisch-Oktave, jeder Balken bekommt einen Anteil der Gesamtenergie, und eine Nachbar-Glättung macht die Welle geschmeidiger.",
+        en: "The pill's voice bars are balanced now: before, the middle three or four carried almost everything while the outer ones often sat still — now the whole pill breathes with your voice. The rim bars listen to living speech frequencies instead of the top sibilance octave, every bar gets a share of the overall energy, and neighbour smoothing makes the wave silkier.",
+      },
+      {
+        kind: "fix",
+        de: "Auf Windows schwebte dauerhaft ein rechteckiger Schatten-Rahmen um das (transparente) Prompt-Terminal-Fenster — Windows zeichnet Fensterschatten stur ums ganze Rechteck statt um den sichtbaren Inhalt. Der System-Schatten ist dort jetzt aus; das Terminal bringt seine eigene Tiefe mit.",
+        en: "On Windows a rectangular shadow frame floated permanently around the (transparent) prompt terminal window — Windows draws window shadows around the full rect instead of the visible content. The system shadow is now off there; the terminal carries its own depth.",
+      },
+      {
+        kind: "fix",
+        de: "Die Fenster-Outline um den aktiven Tab konnte neben dem Tab landen, wenn Diktate ins unsichtbare Terminal geleitet wurden („Konsole als Ziel\u201c): Die Vermessung las verzerrte Koordinaten, solange das Fenster eingesaugt ruhte. Die Tabs werden jetzt verzerrungsfrei vermessen — die Outline sitzt immer exakt.",
+        en: "The window outline around the active tab could land beside the tab when dictations were routed into the hidden terminal (console-as-target): measurement read distorted coordinates while the window rested sucked-in. Tabs are now measured distortion-free — the outline always sits exactly.",
+      },
+    ],
+  },
+  {
     version: "0.5.109",
     date: "2026-07-09",
     title: { de: "Ein Glas, ein Guss — der Genie-Flug im vollen Material", en: "One glass, one pour — the genie flight in full material" },
