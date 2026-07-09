@@ -60,14 +60,19 @@ body {
   filter: drop-shadow(0 -1px 6px rgba(0, 0, 0, 0.28));
 }
 
-/* Extra tint while the OS blur is off (genie flight) — see Silhouette. */
+/* Dense stand-in glass while the OS blur is off (genie flight) — see
+   Silhouette. Asymmetric fade: it GRIPS fast when the flight starts (the blur
+   is cut right after — nothing may shine through raw), and MELTS slowly on
+   settle so the real vibrancy condenses underneath instead of popping in
+   (TJ: window flew "transparenter" and the top flickered once on landing). */
 .pc-sil-boost {
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.34s ease;
 }
 
 .pc-anim .pc-sil-boost {
   opacity: 1;
+  transition: opacity 0.09s ease;
 }
 
 .pc-shell {
