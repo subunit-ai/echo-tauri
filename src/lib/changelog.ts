@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.111",
+    date: "2026-07-09",
+    title: {
+      de: "Wortschatz öffnet wieder flüssig",
+      en: "Vocabulary opens smoothly again",
+    },
+    changes: [
+      {
+        kind: "fix",
+        de: "Der Wortschatz-Bereich konnte beim Öffnen kurz einfrieren oder sehr lange laden, während im Hintergrund die Verbesserungsvorschläge und die Bestenliste geholt wurden. Der Tab öffnet jetzt sofort und bleibt bedienbar — die Daten erscheinen, sobald sie da sind, ohne die App zu blockieren.",
+        en: "Opening the Vocabulary section could briefly freeze or take very long to load while suggestions and the leaderboard were fetched in the background. The tab now opens instantly and stays responsive — the data fills in as it arrives, without blocking the app.",
+      },
+    ],
+  },
+  {
     version: "0.5.110",
     date: "2026-07-09",
     title: { de: "Ausgewogene Pille + Windows-Fixes", en: "Balanced pill + Windows fixes" },

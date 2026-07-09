@@ -1053,7 +1053,12 @@ fn word_upgrade_curate(
 /// fallback) is the curated local UPGRADE_MAP; the `/v1/word-upgrade` LLM lane
 /// only ever *augments* it when the subscription mode is active and the server
 /// answers with a usable shape — any failure silently falls back to local.
-#[tauri::command]
+///
+/// `(async)`: the LLM augmentation is a blocking network call (30 s budget) —
+/// a plain sync command would run it on the MAIN thread and freeze the whole
+/// Wortschatz UI while it waits (Tauri v2: sync commands run on the main
+/// thread). `(async)` spawns it on the runtime's pool so the tab stays fluid.
+#[tauri::command(async)]
 pub fn learning_suggestions(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
     let texts = crate::store::history_texts_since(days.unwrap_or(30));
     let local = crate::analysis::local_suggestions(&texts);
@@ -1365,7 +1370,11 @@ pub fn learning_xp(state: State<'_, AppState>) -> serde_json::Value {
 /// Community leaderboard („wer erweitert seinen Wortschatz am meisten?“):
 /// pushes the own score, then fetches this week's board. Subscription mode
 /// only; ANY failure degrades to {"available": false} — the card just hides.
-#[tauri::command]
+///
+/// `(async)`: push + fetch are two blocking network calls (10 s each). As a
+/// sync command they would run on the MAIN thread and freeze the Wortschatz
+/// tab for up to 20 s on open; `(async)` moves them onto the runtime pool.
+#[tauri::command(async)]
 pub fn learning_leaderboard(state: State<'_, AppState>) -> serde_json::Value {
     let cfg = state.config.lock().clone();
     let unavailable = serde_json::json!({ "available": false });
