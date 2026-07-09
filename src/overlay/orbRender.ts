@@ -1487,6 +1487,27 @@ export function drawOrb(
       const barW = Math.max(1.8, H * 0.1);
       const span = W - H * 1.15; // usable width between the rounded ends
       if (!an.barH || an.barH.length !== N) an.barH = new Array(N).fill(0);
+      // Balance pass (TJ 2026-07-09, after the sensitivity fix): normal speech
+      // moved mostly the 3-4 MIDDLE bars, hard — the rims sat dead. Three
+      // stacked causes, three counters: (1) the rim bars sampled the TOP
+      // octave (sibilance-land, silent between 's' sounds) — the spectral walk
+      // now ends at ~upper-mid (d^1.3 * 0.82), where consonants and formants
+      // actually live; (2) every bar gets a small share of the broadband
+      // level, so the whole pill breathes with the voice; (3) neighbour
+      // smoothing melts single-bar spikes into a wave.
+      let spk: number[] | null = null;
+      if (speaking) {
+        const raw = new Array(N).fill(0);
+        for (let i = 0; i < N; i++) {
+          const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
+          raw[i] = 0.75 * bandNormAt(Math.pow(d, 1.35) * 0.78) + 0.25 * Math.min(1, lvl);
+        }
+        spk = raw.map((_, i) => {
+          const a = raw[Math.max(0, i - 1)];
+          const b = raw[Math.min(N - 1, i + 1)];
+          return 0.2 * a + 0.6 * raw[i] + 0.2 * b;
+        });
+      }
       ctx.lineCap = "round";
       ctx.save();
       ctx.shadowColor = hexA(base, 0.7);
@@ -1499,18 +1520,14 @@ export function drawOrb(
         const bx = cx + (uL * span) / 2;
 
         let tH: number;
-        if (speaking) {
-          // Auto-gained + compressed response: quiet speech still moves the
-          // bars visibly, and every band rides its own dynamic range.
-          // CENTRE-OUT symmetric mapping (TJ 2026-07-09): the pill was a plain
-          // bass→treble spectrum left→right — speech energy lives in the low
-          // bands, so only the LEFT half ever moved. Each bar now samples the
-          // spectrum by its DISTANCE from the centre (centre = bass = the
-          // energy, rims = treble), so both halves deflect evenly and the
-          // pill breathes from the middle out.
-          const d = Math.abs(i - (N - 1) / 2) / ((N - 1) / 2); // 0 Mitte .. 1 Rand
-          const resp = Math.pow(bandNormAt(d), 0.7);
-          const shape = 0.55 + 0.45 * REST[i];
+        if (speaking && spk) {
+          // Auto-gained + compressed response over the CENTRE-OUT spectrum
+          // (centre = bass = the energy, rims = upper-mid). Flatter shape
+          // than REST: the resting profile is centre-tall by design, and
+          // multiplying it in stacked ANOTHER centre boost on the already
+          // bass-heavy spectrum (part of TJ's "nur die mittleren 3-4").
+          const resp = Math.pow(spk[i], 0.7);
+          const shape = 0.8 + 0.2 * REST[i];
           tH = H * Math.min(0.85, shape * (0.1 + 0.95 * resp));
         } else if (stP === "idle") {
           // resting = DOTS; the idle-animation toggle makes them breathe.
@@ -1531,8 +1548,9 @@ export function drawOrb(
         tH *= domeY;
         // Per-bar smoothing: speech stays snappy (fast follow), every state
         // edge (release → transcribing → idle) morphs instead of jumping.
+        // 0.55 → 0.46: a touch more glide between syllables (TJ: "smoother").
         if (!Number.isFinite(an.barH[i])) an.barH[i] = 0; // Selbstheilung
-        an.barH[i] += (tH - an.barH[i]) * (speaking ? 0.55 : 0.16);
+        an.barH[i] += (tH - an.barH[i]) * (speaking ? 0.46 : 0.16);
         let hBar = an.barH[i];
 
         // Materialize: bars ignite centre-out after the glass has condensed.
