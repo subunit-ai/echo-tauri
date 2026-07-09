@@ -643,6 +643,13 @@ impl Config {
     }
 
     fn migrate(&mut self) {
+        // Streaming is THE standard for everyone (TJ 2026-07-09): "off" (classic
+        // one-shot upload) is no longer a user-facing mode — legacy/unknown values
+        // are lifted to "final". The classic path survives only as the automatic
+        // fallback when the WS connection fails, never as a picked mode.
+        if self.streaming_mode != "final" && self.streaming_mode != "live" {
+            self.streaming_mode = "final".to_string();
+        }
         // Guard the UI scale against a corrupt/out-of-range value (never an
         // invisible-or-giant UI); 1.0 = normal, floor at 0.6 (compact module).
         self.ui_scale = if self.ui_scale.is_finite() && self.ui_scale > 0.0 {

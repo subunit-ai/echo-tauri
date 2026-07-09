@@ -427,16 +427,6 @@
     "instantLiveTyping": "Instant: Live-Tippen",
     "instantLiveTypingHint": "Nur im Instant-Modus: das fertige Ergebnis progressiv reintippen statt auf einmal einfügen. Aus = Instant-Paste (Ctrl+V, atomar, zuverlässig — empfohlen auf Windows).",
     "instantLiveTypingLiveNote": "Deaktiviert: Live-Streaming tippt bereits live mit — beide gleichzeitig wären doppelt.",
-    "streaming": "Live-Streaming",
-    "streamingHint": "Transkribiert schon während du sprichst (nur Cloud). Bei Verbindungsfehler automatisch klassischer Upload.",
-    "streamingRecommended": "Empfohlen",
-    "streamingOff": "Standard",
-    "streamingFinal": "Schnell",
-    "streamingLive": "Live",
-    "streamingDescOff": "Text erscheint nach der Aufnahme (klassischer Upload).",
-    "streamingDescFinal": "Komplettes Ergebnis, sobald du loslässt — schnellster Modus.",
-    "streamingDescLive": "Text wird schon während du sprichst geschrieben.",
-    "streamingAria": "Streaming-Modus",
     "streamingLiveTapNote": "Tipp: Live-Tippen läuft am zuverlässigsten mit Umschalt-Aktivierung (Tippen zum Starten/Stoppen). Im Halten-Modus bleibt die Hotkey-Taste gedrückt — das kann das Live-Tippen in manchen Apps (v. a. Terminals/Editoren unter Windows) unterdrücken.",
     "dachFormat": "DACH-Formatierung",
     "dachFormatHint": "Abkürzungen, Währung, „deutsche“ Anführungszeichen",
@@ -601,7 +591,9 @@
     "soundStop": "Loslass-Sound",
     "soundStopHint": "Ton beim Loslassen der Taste (Aufnahme-Ende) — wählbar aus drei Klängen. Unabhängig abschaltbar.",
     "soundStopLow": "Tief",
-    "soundStopFade": "Ausklang"
+    "soundStopFade": "Ausklang",
+    "liveTyping": "Live-Tippen",
+    "liveTypingHint": "Text erscheint schon während du sprichst im Zielfenster. Aus = das komplette Ergebnis wird beim Loslassen eingefügt (empfohlen, schnellster Modus)."
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",

@@ -425,16 +425,6 @@
     "instantLiveTyping": "Instant: live typing",
     "instantLiveTypingHint": "Instant mode only: type the finished result in progressively instead of pasting all at once. Off = instant paste (Ctrl+V, atomic, reliable — recommended on Windows).",
     "instantLiveTypingLiveNote": "Disabled: live streaming already types as you speak — having both on would double up.",
-    "streaming": "Live streaming",
-    "streamingHint": "Transcribe while you speak (cloud only). Falls back to classic upload on any connection error.",
-    "streamingRecommended": "Recommended",
-    "streamingOff": "Standard",
-    "streamingFinal": "Fast",
-    "streamingLive": "Live",
-    "streamingDescOff": "Text appears after recording (classic upload).",
-    "streamingDescFinal": "Full result the moment you release — fastest mode.",
-    "streamingDescLive": "Text is written while you speak.",
-    "streamingAria": "Streaming mode",
     "streamingLiveTapNote": "Tip: live typing is most reliable with toggle activation (tap to start/stop). In hold mode the hotkey stays pressed, which can suppress live typing in some apps (especially terminals/editors on Windows).",
     "dachFormat": "DACH formatting",
     "dachFormatHint": "Abbreviations, currency, „German“ quotation marks",
@@ -599,7 +589,9 @@
     "soundStop": "Release sound",
     "soundStopHint": "Plays when you release the key (end of recording) — choose from three tones. Independently toggleable.",
     "soundStopLow": "Low",
-    "soundStopFade": "Fade"
+    "soundStopFade": "Fade",
+    "liveTyping": "Live typing",
+    "liveTypingHint": "Types the text into the target window while you speak. Off = the full result is pasted when you release (recommended, fastest mode)."
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
