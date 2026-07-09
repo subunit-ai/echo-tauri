@@ -566,7 +566,7 @@ fn connect(app: &AppHandle, resume: Option<&str>) -> Result<(Ws, ReadyInfo), Eng
         "api_key": cfg.subunit_api_key,
         "language": cfg.language,
         "quality_mode": cfg.cloud_quality_mode,
-        "prompt": vocab::vocab_prompt(&cfg),
+        "prompt": vocab::vocab_hotwords(&cfg),
         "cleanup_style": style,
     });
     if let Some(rid) = resume {

@@ -39,7 +39,7 @@ pub fn transcribe_subunit(
             .text("language", cfg.language.clone())
             .text("quality_mode", cfg.cloud_quality_mode.clone());
 
-        let prompt = vocab::vocab_prompt(cfg);
+        let prompt = vocab::vocab_hotwords(cfg);
         if !prompt.is_empty() {
             form = form.text("prompt", prompt);
         }
