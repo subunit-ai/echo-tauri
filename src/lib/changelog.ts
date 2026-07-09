@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.114",
+    date: "2026-07-09",
+    title: { de: "Sauberes Wörterbuch: verfälschende Auto-Wörter raus, Vorschläge nur noch für echte Namen", en: "A clean dictionary: corrupting auto-words gone, suggestions for real names only" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Automatisch „gelernte“ Wörter, die sauberen Text verfälschen konnten (etwa „Frage“ → „Fragen“), werden aus dem Wörterbuch entfernt. Dein Wörterbuch enthält jetzt nur noch echte Eigennamen.",
+        en: "Automatically “learned” words that could corrupt clean text (e.g. “Frage” → “Fragen”) are removed from the dictionary. Your dictionary now holds genuine proper nouns only.",
+      },
+      {
+        kind: "improvement",
+        de: "Wort-Vorschläge erscheinen nur noch für echte Eigennamen (Firmen, Namen) — nichts wird mehr still im Hintergrund hinzugefügt. Über „Auto-Vokabular leeren“ räumst du Altlasten jederzeit selbst weg.",
+        en: "Word suggestions now appear only for genuine proper nouns (companies, names) — nothing is silently added in the background anymore. “Clear auto-learned words” lets you sweep out old entries anytime.",
+      },
+      {
+        kind: "improvement",
+        de: "Der Standard-Cleanup läuft jetzt lokal und DSGVO-konform („Aufräumen“).",
+        en: "The default cleanup now runs locally and GDPR-compliant (“Tidy”).",
+      },
+    ],
+  },
+  {
     version: "0.5.113",
     date: "2026-07-09",
     title: { de: "Pille V1 & V2, Reaktions-Menü + geschmeidiger Genie-Übergang", en: "Pill V1 & V2, reaction menu + a silkier genie handover" },

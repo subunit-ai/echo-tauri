@@ -4,7 +4,17 @@ use std::collections::HashSet;
 
 use regex::Regex;
 
-use crate::config::Config;
+use crate::config::{Config, VocabEntry};
+
+/// Auto-learned entries (`category == "auto"`) are treated as INERT on every
+/// path — no Whisper bias, no post-replace. The old silent auto-add promoted
+/// ordinary words into a hard find-&-replace that measurably corrupted clean
+/// transcripts (server→selber, wichtig→richtig, …). A one-time config migration
+/// purges them, but this is the belt-and-suspenders: even if one survives (a
+/// legacy race) or is somehow re-created, it can never touch a transcript again.
+fn is_inert(e: &VocabEntry) -> bool {
+    e.category == "auto"
+}
 
 /// Space-joined `write_as` terms, fed to Whisper as the `prompt`/initial_prompt
 /// so it biases toward correct spellings of brand/tech/proper nouns. SPACE, not
@@ -19,6 +29,9 @@ pub fn vocab_prompt(cfg: &Config) -> String {
     let mut seen = HashSet::new();
     let mut terms = Vec::new();
     for e in &cfg.vocabulary {
+        if is_inert(e) {
+            continue;
+        }
         let t = e.write_as.trim();
         if !t.is_empty() && seen.insert(t.to_lowercase()) {
             terms.push(t.to_string());
@@ -42,6 +55,9 @@ pub fn vocab_hotwords(cfg: &Config) -> String {
     let mut seen = HashSet::new();
     let mut caps: Vec<String> = Vec::new();
     for e in &cfg.vocabulary {
+        if is_inert(e) {
+            continue;
+        }
         let t = e.write_as.trim();
         if t.is_empty() || !t.chars().next().is_some_and(|c| c.is_uppercase()) {
             continue;
@@ -70,6 +86,9 @@ pub fn apply_vocab_replace(text: &str, cfg: &Config) -> String {
     // otherwise corrupt it into "Claude Koud".
     let mut pairs: Vec<(&str, &str)> = Vec::new();
     for e in &cfg.vocabulary {
+        if is_inert(e) {
+            continue;
+        }
         let target = e.write_as.trim();
         if target.is_empty() {
             continue;
@@ -352,6 +371,42 @@ mod tests {
         cfg.vocab_enabled = false;
         assert_eq!(apply_vocab_replace("ich nutze Sky", &cfg), "ich nutze Sky");
         assert_eq!(vocab_prompt(&cfg), "");
+    }
+
+    #[test]
+    fn auto_category_entries_are_inert_but_curated_still_applies() {
+        let mut cfg = Config::default();
+        // An auto-learned entry of the exact corrupting shape (its `sounds_like`
+        // is an ordinary word) must be a complete no-op on every path...
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: "server".to_string(),
+            write_as: "selber".to_string(),
+            aliases: vec![],
+            category: "auto".to_string(),
+        });
+        // ...while a genuine curated entry still biases + post-replaces as before.
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: "Sky".to_string(),
+            write_as: "SCAI".to_string(),
+            aliases: vec![],
+            category: "Company".to_string(),
+        });
+        cfg.build_vocab_regex_cache();
+
+        // The auto entry never fires — "server" stays "server".
+        assert_eq!(
+            apply_vocab_replace("ich starte den server neu", &cfg),
+            "ich starte den server neu"
+        );
+        // The curated entry still fires.
+        assert_eq!(apply_vocab_replace("ich nutze Sky", &cfg), "ich nutze SCAI");
+
+        // The bias prompt / hotwords omit the auto term, keep the curated one.
+        let prompt = vocab_prompt(&cfg);
+        assert!(!prompt.contains("selber"), "auto term must not reach the Whisper prompt");
+        assert!(prompt.contains("SCAI"), "curated term must reach the Whisper prompt");
+        assert!(!vocab_hotwords(&cfg).contains("selber"), "auto term must not reach hotwords");
+        assert!(vocab_hotwords(&cfg).contains("SCAI"), "curated term must reach hotwords");
     }
 
     #[test]

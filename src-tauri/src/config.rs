@@ -230,6 +230,12 @@ pub struct Config {
 
     pub cleanup_enabled: bool,
     pub cleanup_style: String,
+    /// One-time guard: point the default cleanup style at "tidy" — the lightest,
+    /// DSGVO-safe LOCAL cleanup lane — for installs still on the old "prompt"
+    /// default. Only that untouched old default is lifted; a deliberately chosen
+    /// style sticks forever. Old configs lack the field → default false → migrates.
+    #[serde(default)]
+    pub cleanup_style_migrated: bool,
     pub cleanup_auto_mode: bool,
     pub auto_mode_overrides: HashMap<String, String>,
 
@@ -372,6 +378,16 @@ pub struct Config {
     /// deletions every launch (only on a version bump). Old configs default to 0.
     #[serde(default)]
     pub vocab_seed_version: u32,
+    /// One-time guard: PURGE every auto-learned vocab entry (`category == "auto"`)
+    /// from the active list exactly once. The old silent auto-add promoted words
+    /// whose `sounds_like` were themselves ordinary German words into a hard
+    /// find-&-replace on EVERY transcript — measured to corrupt clean text
+    /// (server→selber, wichtig→richtig, gebaut→genau, …). We rip them all out once
+    /// here; curated entries (Company/Tech/Person/Place/Other/empty) are retained.
+    /// Old configs lack the field → default false → the purge runs for them once;
+    /// afterwards it never re-runs (a user's later curated entries are safe).
+    #[serde(default)]
+    pub auto_vocab_purged: bool,
 
     /// DACH text formatting (currency/percent/units → symbols, abbreviations,
     /// German quotes). Deterministic + zero-latency. ON by default (v0.5.85);
@@ -487,7 +503,11 @@ impl Default for Config {
             diarization_max_speakers: 8,
 
             cleanup_enabled: false,
-            cleanup_style: "prompt".to_string(),
+            // "tidy" = the lightest, DSGVO-safe LOCAL cleanup lane, the new default
+            // (existing installs on the old "prompt" default are lifted once via
+            // `cleanup_style_migrated`).
+            cleanup_style: "tidy".to_string(),
+            cleanup_style_migrated: false,
             cleanup_auto_mode: false,
             auto_mode_overrides: HashMap::new(),
             filler_removal_enabled: true,
@@ -548,6 +568,7 @@ impl Default for Config {
             vocab_regex_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             vocabulary_default_seeded: false,
             vocab_seed_version: 0,
+            auto_vocab_purged: false,
 
             dach_format_enabled: true,
             dach_format_migrated: false,
@@ -635,6 +656,8 @@ impl Config {
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.dach_format_migrated = true; // fresh installs already default DACH formatting on
         c.de_comma_migrated = true; // fresh installs already default German commas on
+        c.cleanup_style_migrated = true; // fresh installs already default to the "tidy" local lane
+        c.auto_vocab_purged = true; // fresh installs have no auto-learned entries to purge
         c.history_size_migrated = true; // fresh installs already start beyond the 500 cap
         c.history_size_migrated2 = true; // fresh installs already start at the 5000 cap
         c.daily_stats_seeded = true; // fresh installs have no history to backfill
@@ -779,6 +802,27 @@ impl Config {
             self.de_comma_enabled = true;
             self.de_comma_migrated = true;
         }
+        // v0.5.11x: PURGE the auto-learned vocabulary once. The old silent auto-add
+        // learned words whose `sounds_like` were themselves ordinary German words and
+        // applied them as a hard find-&-replace on EVERY transcript — measured to
+        // corrupt clean text (server→selber, wichtig→richtig, gebaut→genau, …). Rip
+        // out every `category == "auto"` entry exactly once; curated entries
+        // (Company/Tech/Person/Place/Other/empty category) are kept. The guard trips
+        // so it never re-runs — a user's later curated entries are never touched.
+        if !self.auto_vocab_purged {
+            self.vocabulary.retain(|e| e.category != "auto");
+            self.auto_vocab_purged = true;
+        }
+        // v0.5.11x: point the default cleanup style at "tidy" — the lightest,
+        // DSGVO-safe LOCAL cleanup lane. Only installs still on the OLD "prompt"
+        // default are lifted; a deliberately chosen style (including a later,
+        // deliberate switch back to "prompt") sticks forever. One-time guard.
+        if !self.cleanup_style_migrated {
+            if self.cleanup_style == "prompt" {
+                self.cleanup_style = "tidy".to_string();
+            }
+            self.cleanup_style_migrated = true;
+        }
         // v0.6.x: History-Cap-Default 50→500 (mehr Datenbasis für Activity/Learning).
         // Nur wer den ALTEN Default (50) nie angefasst hat, wird einmalig angehoben.
         if !self.history_size_migrated {
@@ -907,6 +951,11 @@ impl Config {
     pub fn build_vocab_regex_cache(&self) {
         let mut pairs: Vec<(&str, &str)> = Vec::new();
         for e in &self.vocabulary {
+            // Auto-learned entries are inert (see transcribe::vocab) — never build
+            // their patterns, so a stray survivor can't corrupt clean transcripts.
+            if e.category == "auto" {
+                continue;
+            }
             let target = e.write_as.trim();
             if target.is_empty() {
                 continue;
@@ -1032,6 +1081,76 @@ mod tests {
         optout.de_comma_migrated = true;
         optout.migrate();
         assert!(!optout.de_comma_enabled, "explicit opt-out must survive migrate");
+    }
+
+    fn vocab(sounds_like: &str, write_as: &str, category: &str) -> VocabEntry {
+        VocabEntry {
+            sounds_like: sounds_like.to_string(),
+            write_as: write_as.to_string(),
+            aliases: vec![],
+            category: category.to_string(),
+        }
+    }
+
+    #[test]
+    fn auto_vocab_purged_once_keeps_real_entries() {
+        // A config that predates the purge, carrying corrupting auto entries plus
+        // real curated ones (and an empty-category entry that must survive).
+        let mut old = Config::default();
+        old.auto_vocab_purged = false;
+        old.vocabulary = vec![
+            vocab("selber", "server", "auto"),   // the corrupting kind → must go
+            vocab("richtig", "wichtig", "auto"), // → must go
+            vocab("Antropik", "Anthropic", "Company"),
+            vocab("Wisper", "Whisper", "Tech"),
+            vocab("", "KeepMe", ""), // empty category → retained
+        ];
+        old.migrate();
+        assert!(old.auto_vocab_purged, "guard must trip so it never re-runs");
+        assert!(
+            !old.vocabulary.iter().any(|e| e.category == "auto"),
+            "every auto entry must be removed"
+        );
+        assert!(old.vocabulary.iter().any(|e| e.write_as == "Anthropic"), "curated entry survives");
+        assert!(old.vocabulary.iter().any(|e| e.write_as == "Whisper"), "curated entry survives");
+        assert!(old.vocabulary.iter().any(|e| e.write_as == "KeepMe"), "empty-category entry survives");
+        assert_eq!(old.vocabulary.len(), 3, "only the two auto entries are dropped");
+
+        // After the purge the guard never re-runs: an entry re-created later (e.g.
+        // a legacy race) is NOT force-removed a second time.
+        let mut after = Config::default();
+        after.auto_vocab_purged = true;
+        after.vocabulary = vec![vocab("x", "X", "auto")];
+        after.migrate();
+        assert!(
+            after.vocabulary.iter().any(|e| e.category == "auto"),
+            "the one-time guard must not re-run after it has tripped"
+        );
+    }
+
+    #[test]
+    fn cleanup_style_migrates_prompt_to_tidy_once() {
+        // Old config still on the "prompt" default → lifted to the local "tidy" lane.
+        let mut old = Config::default();
+        old.cleanup_style = "prompt".to_string();
+        old.cleanup_style_migrated = false;
+        old.migrate();
+        assert_eq!(old.cleanup_style, "tidy", "old prompt default must move to tidy once");
+        assert!(old.cleanup_style_migrated, "guard must trip so it never re-runs");
+
+        // A deliberately-chosen style must survive untouched.
+        let mut chosen = Config::default();
+        chosen.cleanup_style = "email".to_string();
+        chosen.cleanup_style_migrated = false;
+        chosen.migrate();
+        assert_eq!(chosen.cleanup_style, "email", "chosen style must survive migration");
+
+        // Someone who deliberately switches BACK to prompt after the migration keeps it.
+        let mut back = Config::default();
+        back.cleanup_style = "prompt".to_string();
+        back.cleanup_style_migrated = true;
+        back.migrate();
+        assert_eq!(back.cleanup_style, "prompt", "post-migration prompt choice must stick");
     }
 
     #[test]

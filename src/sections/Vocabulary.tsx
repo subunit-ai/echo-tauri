@@ -169,6 +169,15 @@ function Dictionary() {
     patch({ vocabulary: rows.filter((e) => e.write_as.trim()) });
     setDraft(null);
   };
+  // One-click purge of every auto-learned word (category "auto"). The old silent
+  // auto-add corrupted clean transcripts, so this lets the user clear them anytime
+  // — a config migration already strips them once on upgrade. Only shown when
+  // there actually are auto entries left, and it discards any unsaved draft.
+  const hasAuto = config.vocabulary.some((e) => e.category === "auto");
+  const clearAuto = () => {
+    patch({ vocabulary: config.vocabulary.filter((e) => e.category !== "auto") });
+    setDraft(null);
+  };
 
   return (
     <div className="card">
@@ -181,6 +190,11 @@ function Dictionary() {
         >
           {t("vocab.addEntry")}
         </button>
+        {hasAuto && (
+          <button className="sub-tab" onClick={clearAuto} title={t("vocab.clearAutoHint")}>
+            {t("vocab.clearAuto")}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
         {dirty && (
           <button className="sub-tab" onClick={() => setDraft(null)}>

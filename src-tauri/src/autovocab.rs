@@ -350,9 +350,129 @@ pub fn detect(transcripts: &[String], known: &HashSet<String>) -> Vec<Candidate>
 
 /// How many recent transcripts to mine each scan.
 const HISTORY_WINDOW: u32 = 500;
-/// Server-suggestion confidence at/above which we SILENTLY add (revertable);
-/// below it we keep the candidate pending and ask the user.
-const HIGH_CONFIDENCE: f64 = 0.8;
+/// Minimum gatekeeper confidence for a candidate to be OFFERED as a suggestion at
+/// all. Nothing is ever auto-applied anymore (every accepted candidate lands in
+/// the user-confirmed `pending` list), so this only governs whether a term is
+/// worth showing — a firm floor keeps wild guesses out of the suggestion list.
+const SUGGEST_MIN_CONFIDENCE: f64 = 0.6;
+
+/// Proper-noun-ish kinds the gatekeeper may return. ONLY these are ever offered
+/// as vocabulary suggestions — a name / brand / product / tech word / place /
+/// abbreviation / foreign term the STT plausibly garbles. Everything else
+/// (ordinary word, verb, adjective, adverb, inflection, …) is dropped. Matched
+/// case-insensitively; a few synonyms are accepted for server-vocabulary drift.
+fn is_proper_noun_kind(kind: &str) -> bool {
+    matches!(
+        kind.trim().to_lowercase().as_str(),
+        "person" | "name" | "company" | "org" | "organization" | "brand" | "product"
+            | "tech" | "technology" | "place" | "location" | "abbrev" | "abbreviation"
+            | "acronym" | "foreign"
+    )
+}
+
+/// Client-side proper-noun heuristic used when the server doesn't classify the
+/// `kind` (older builds return only is_term/spelling/confidence). A written form
+/// is proper-noun-ish if it carries a capital (proper nouns / German nouns), an
+/// internal capital (OpenAI, iOS), a hyphen, or is multi-word. A single
+/// all-lowercase plain word is NOT — German verbs / adjectives / adverbs and
+/// everyday words are lowercase, and those are exactly what corrupted transcripts
+/// (selber, richtig, genau, fragen, machst). Precision-first: this may reject the
+/// rare lowercase tech token (npm, systemd) — those can still be added by hand —
+/// but it guarantees no ordinary lowercase word is ever proposed.
+fn looks_proper_noun(spelling: &str) -> bool {
+    let s = spelling.trim();
+    if s.is_empty() {
+        return false;
+    }
+    if s.contains(' ') || s.contains('-') {
+        return true;
+    }
+    // Any uppercase letter (leading OR internal) → capitalized/brand-ish.
+    s.chars().any(|c| c.is_uppercase())
+}
+
+/// Is `spelling` merely an inflected form of a word we ALREADY track (any
+/// write_as / sounds_like / alias in the vocabulary)? Reuses the detection-side
+/// inflection test: same stem, differing only by a short grammatical ending. Such
+/// a candidate is not a new term — it's the declined/conjugated form of one we
+/// have — so never propose it.
+fn is_inflection_of_existing(spelling: &str, cfg: &crate::config::Config) -> bool {
+    let s = spelling.trim().to_lowercase();
+    if s.is_empty() {
+        return false;
+    }
+    for e in &cfg.vocabulary {
+        for w in std::iter::once(&e.write_as)
+            .chain(std::iter::once(&e.sounds_like))
+            .chain(e.aliases.iter())
+        {
+            let w = w.trim().to_lowercase();
+            if w.is_empty() || w == s {
+                continue;
+            }
+            if is_inflection(&[w, s.clone()]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// STRICT acceptance test for a gatekeeper verdict: is this candidate a genuine
+/// proper noun / term worth OFFERING to the user (as a pending suggestion — never
+/// auto-applied)? All of:
+///   * judged a real term (`is_term`),
+///   * with a non-empty spelling and enough confidence,
+///   * proper-noun-ish — a proper-noun `kind` from the server, or (no kind) the
+///     client proper-noun heuristic on the spelling,
+///   * NOT a mere inflection of a word we already track.
+/// Anything failing this is dropped, so ordinary words / verbs / adjectives /
+/// adverbs / inflections can never reach the suggestion list.
+fn accept_suggestion(d: &crate::vocab_suggest::Decision, cfg: &crate::config::Config) -> bool {
+    if !d.is_term || d.confidence < SUGGEST_MIN_CONFIDENCE {
+        return false;
+    }
+    let spelling = d.spelling.trim();
+    if spelling.is_empty() {
+        return false;
+    }
+    let proper = if d.kind.trim().is_empty() {
+        looks_proper_noun(spelling)
+    } else {
+        is_proper_noun_kind(&d.kind)
+    };
+    if !proper {
+        return false;
+    }
+    !is_inflection_of_existing(spelling, cfg)
+}
+
+/// What to do with a candidate given the gatekeeper's verdict. There is NO
+/// "add" variant on purpose — the scan can only ever suggest (pending) or drop,
+/// never silently mutate the active vocabulary.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Verdict {
+    /// Offer it as a pending suggestion (the user confirms). Carries the best
+    /// spelling to pre-fill, if the gatekeeper had one.
+    Suggest(Option<String>),
+    /// Drop it for good — not a proper-noun term (ordinary word / inflection / …).
+    Drop,
+    /// No verdict came back (offline / old server) — leave it pending so the user
+    /// still sees the raw candidate; nothing is ever auto-added on a non-answer.
+    LeavePending,
+}
+
+/// Pure routing: map a gatekeeper decision (or its absence) to a `Verdict`. Kept
+/// side-effect-free so it's unit-testable and can NEVER auto-add.
+pub fn route_decision(d: Option<&crate::vocab_suggest::Decision>, cfg: &crate::config::Config) -> Verdict {
+    match d {
+        Some(d) if accept_suggestion(d, cfg) => {
+            Verdict::Suggest((!d.spelling.trim().is_empty()).then(|| d.spelling.trim().to_string()))
+        }
+        Some(_) => Verdict::Drop,
+        None => Verdict::LeavePending,
+    }
+}
 
 /// Minimum seconds between background scans (throttle for the per-dictation hook).
 const SCAN_MIN_INTERVAL_SECS: i64 = 90;
@@ -451,35 +571,27 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
     }
 
     // The AI gatekeeper judges the whole batch at once: per candidate, is it a
-    // REAL vocab-worthy term (name/brand/tech the STT garbles) or just an
-    // ordinary word? Only its verdict — not frequency — decides. Anything it
-    // rejects is retired for good so ordinary words never get suggested.
-    // Best-effort: if the call fails (offline / old server), the candidates stay
-    // pending so the user still sees them — we never auto-add on a guess.
+    // REAL, proper-noun-ish term (name/brand/product/tech/place the STT garbles)
+    // or just an ordinary word / inflection? Only its verdict — gated by the
+    // STRICT `accept_suggestion` (is_term + proper-noun kind/heuristic + enough
+    // confidence + not an inflection of an existing term) — decides. NOTHING is
+    // ever silently added: an accepted candidate becomes a PENDING suggestion the
+    // user must confirm; anything rejected is retired for good so ordinary words
+    // never surface. Best-effort: if the call fails (offline / old server), the
+    // candidate is left pending so the user still sees the raw find.
     if !fresh.is_empty() {
         let decisions = crate::vocab_suggest::curate(&cfg, &fresh);
         for cand in &fresh {
-            let words: Vec<String> = cand.variants.iter().map(|(v, _)| v.clone()).collect();
-            match decisions.iter().find(|d| d.key == cand.key) {
-                // Ordinary word / not a real term → drop it, permanently.
-                Some(d) if !d.is_term => {
+            let decision = decisions.iter().find(|d| d.key == cand.key);
+            match route_decision(decision, &cfg) {
+                Verdict::Suggest(sug) => {
+                    let conf = decision.map(|d| d.confidence);
+                    crate::store::set_vcand(&cand.key, sug.as_deref(), conf, "pending", None, now);
+                }
+                Verdict::Drop => {
                     crate::store::set_vcand(&cand.key, None, None, "ignored", None, now);
                 }
-                // Real term + sure of the spelling → silently learn it (revertable).
-                Some(d) if d.confidence >= HIGH_CONFIDENCE && !d.spelling.is_empty() => {
-                    let (sounds_like, aliases) = split_variants(&words, &d.spelling);
-                    add_vocab_entry(app, sounds_like, aliases, &d.spelling);
-                    crate::store::set_vcand(&cand.key, Some(&d.spelling), Some(d.confidence), "added", Some(&d.spelling), now);
-                    let _ = app.emit("echo://vocab-learned", serde_json::json!({ "term": d.spelling }));
-                }
-                // Real term but unsure of the spelling (e.g. an unknown personal
-                // name) → ask the user, pre-filling the best guess.
-                Some(d) => {
-                    let sug = (!d.spelling.is_empty()).then_some(d.spelling.as_str());
-                    crate::store::set_vcand(&cand.key, sug, Some(d.confidence), "pending", None, now);
-                }
-                // No verdict came back → leave pending for the user.
-                None => {
+                Verdict::LeavePending => {
                     crate::store::set_vcand(&cand.key, None, None, "pending", None, now);
                 }
             }
@@ -504,8 +616,12 @@ fn split_variants(variants: &[String], spelling: &str) -> (String, Vec<String>) 
     (sounds_like, aliases)
 }
 
-/// Push a `category:"auto"` vocab entry into the live config, rebuild the regex
+/// Push a vocab entry the USER confirmed into the live config, rebuild the regex
 /// cache, persist, and tell the UI. (The new term biases Whisper + post-replaces.)
+/// Tagged `category:"Other"` — a real, APPLIED, user-visible/-editable entry — NOT
+/// the inert `"auto"` category, which is skipped on every path (see
+/// transcribe::vocab). This is only ever reached from `confirm()`; the background
+/// scan never adds silently.
 fn add_vocab_entry<R: Runtime>(app: &AppHandle<R>, sounds_like: String, aliases: Vec<String>, spelling: &str) {
     {
         let state = app.state::<AppState>();
@@ -514,7 +630,7 @@ fn add_vocab_entry<R: Runtime>(app: &AppHandle<R>, sounds_like: String, aliases:
             sounds_like,
             write_as: spelling.to_string(),
             aliases,
-            category: "auto".to_string(),
+            category: "Other".to_string(),
         });
         cfg.build_vocab_regex_cache();
         let _ = cfg.save();
@@ -565,8 +681,10 @@ pub fn ignore<R: Runtime>(app: &AppHandle<R>, key: &str) {
     let _ = app.emit("echo://vocab-candidates-changed", ());
 }
 
-/// Undo an auto-added term: remove its `auto` vocab entry and mark the candidate
-/// ignored (so the scan won't re-add it).
+/// Undo a confirmed suggestion: remove the vocab entry it created and mark the
+/// candidate ignored (so the scan won't re-surface it). Matches by the stored
+/// `added_term` (the confirmed `write_as`) — confirmed entries live under the
+/// real "Other" category now, not "auto".
 pub fn undo<R: Runtime>(app: &AppHandle<R>, key: &str) {
     let added_term = crate::store::get_vcand(key)
         .and_then(|r| r.get("added_term").and_then(|v| v.as_str()).map(String::from));
@@ -574,7 +692,7 @@ pub fn undo<R: Runtime>(app: &AppHandle<R>, key: &str) {
         let state = app.state::<AppState>();
         let mut cfg = state.config.lock();
         cfg.vocabulary
-            .retain(|e| !(e.category == "auto" && e.write_as.eq_ignore_ascii_case(&term)));
+            .retain(|e| !e.write_as.eq_ignore_ascii_case(&term));
         cfg.build_vocab_regex_cache();
         let _ = cfg.save();
         drop(cfg);
@@ -687,6 +805,94 @@ mod tests {
         known.insert("jedletschka".to_string());
         known.insert("jedlitschka".to_string());
         assert!(detect(&h, &known).is_empty(), "known/ignored variants must be skipped");
+    }
+
+    // ── Strict acceptance / never-silent-add (the suggestion gatekeeping) ──────
+
+    use crate::config::{Config, VocabEntry};
+    use crate::vocab_suggest::Decision;
+
+    fn decision(key: &str, is_term: bool, kind: &str, spelling: &str, confidence: f64) -> Decision {
+        Decision {
+            key: key.to_string(),
+            is_term,
+            kind: kind.to_string(),
+            spelling: spelling.to_string(),
+            confidence,
+        }
+    }
+
+    #[test]
+    fn ordinary_word_is_rejected() {
+        let cfg = Config::default();
+        // A lowercase everyday word — even if the model wrongly calls it a term —
+        // is never proper-noun-ish (no server kind → client heuristic drops it).
+        let d = decision("selber", true, "", "selber", 0.99);
+        assert_eq!(route_decision(Some(&d), &cfg), Verdict::Drop);
+        // Explicit non-term.
+        let d2 = decision("richtig", false, "", "richtig", 0.99);
+        assert_eq!(route_decision(Some(&d2), &cfg), Verdict::Drop);
+        // An upgraded server that DOES classify: a non-proper-noun kind is dropped
+        // even when capitalized and highly confident.
+        let d3 = decision("gebaut", true, "verb", "Gebaut", 0.99);
+        assert_eq!(route_decision(Some(&d3), &cfg), Verdict::Drop);
+        // Low confidence is dropped regardless.
+        let d4 = decision("firma", true, "company", "Firma", 0.2);
+        assert_eq!(route_decision(Some(&d4), &cfg), Verdict::Drop);
+    }
+
+    #[test]
+    fn proper_noun_passes_to_pending_and_never_auto_adds() {
+        let cfg = Config::default();
+        // Server classifies it as a person + confident → offered as a PENDING
+        // suggestion (never applied). `route_decision` has no add variant at all,
+        // so a high-confidence proper noun can only ever become a suggestion.
+        let d = decision("jedlischka", true, "person", "Jedlischka", 0.95);
+        assert_eq!(
+            route_decision(Some(&d), &cfg),
+            Verdict::Suggest(Some("Jedlischka".to_string()))
+        );
+        // No server kind, but the spelling looks like a proper noun (multi-word) →
+        // still accepted via the client heuristic.
+        let d2 = decision("klodkoud", true, "", "Claude Code", 0.9);
+        assert_eq!(
+            route_decision(Some(&d2), &cfg),
+            Verdict::Suggest(Some("Claude Code".to_string()))
+        );
+    }
+
+    #[test]
+    fn inflection_of_existing_word_is_rejected() {
+        let mut cfg = Config::default();
+        // We already track "Projekt"; "Projekte" is just its plural inflection —
+        // a real term (capitalized) by the heuristic, but not a NEW one.
+        cfg.vocabulary.push(VocabEntry {
+            sounds_like: String::new(),
+            write_as: "Projekt".to_string(),
+            aliases: vec![],
+            category: "Other".to_string(),
+        });
+        let d = decision("projekte", true, "", "Projekte", 0.9);
+        assert_eq!(route_decision(Some(&d), &cfg), Verdict::Drop);
+    }
+
+    #[test]
+    fn no_verdict_leaves_pending_never_adds() {
+        let cfg = Config::default();
+        assert_eq!(route_decision(None, &cfg), Verdict::LeavePending);
+    }
+
+    #[test]
+    fn looks_proper_noun_distinguishes_terms_from_plain_words() {
+        assert!(looks_proper_noun("Anthropic"));
+        assert!(looks_proper_noun("OpenAI"));
+        assert!(looks_proper_noun("KI-Bilder"));
+        assert!(looks_proper_noun("Claude Code"));
+        // Plain lowercase words (verbs/adjectives/adverbs/ordinary) are NOT.
+        assert!(!looks_proper_noun("selber"));
+        assert!(!looks_proper_noun("richtig"));
+        assert!(!looks_proper_noun("machst"));
+        assert!(!looks_proper_noun(""));
     }
 
     #[test]

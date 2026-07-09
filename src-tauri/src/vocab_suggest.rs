@@ -23,6 +23,13 @@ pub struct Decision {
     pub key: String,
     /// Is this a real vocab-worthy term at all? `false` → ordinary word, drop it.
     pub is_term: bool,
+    /// What KIND of term it is, when the server tells us: person / company /
+    /// product / tech / place / abbrev / foreign for proper-noun-ish terms;
+    /// anything else (verb / adjective / adverb / ordinary / …) is NOT vocab-
+    /// worthy. Empty when the server doesn't classify (older builds) → the
+    /// acceptance logic falls back to a client-side proper-noun heuristic. Only
+    /// a proper-noun-ish kind is ever offered as a suggestion.
+    pub kind: String,
     /// Correct spelling for a real term (empty if it couldn't decide one).
     pub spelling: String,
     /// 0..1 — confidence the spelling is THE correct one. Unknown personal names
@@ -84,6 +91,12 @@ pub fn curate(cfg: &Config, candidates: &[Candidate]) -> Vec<Decision> {
                 return None;
             }
             let is_term = d.get("is_term").and_then(|v| v.as_bool()).unwrap_or(false);
+            let kind = d
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
             let spelling = d
                 .get("spelling")
                 .and_then(|v| v.as_str())
@@ -98,6 +111,7 @@ pub fn curate(cfg: &Config, candidates: &[Candidate]) -> Vec<Decision> {
             Some(Decision {
                 key,
                 is_term,
+                kind,
                 spelling,
                 confidence,
             })
