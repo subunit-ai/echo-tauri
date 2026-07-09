@@ -213,6 +213,7 @@ pub fn on_event(app: &AppHandle, shortcut: &Shortcut, event: ShortcutEvent) {
 fn spawn_transcribe(app: &AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
+        log::info!("transcribe trigger: os-plugin hotkey");
         let _ = crate::commands::do_transcribe(&app);
     });
 }
