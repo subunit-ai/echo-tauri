@@ -341,14 +341,17 @@ export function Orb() {
       if (state.current === "recording") {
         try {
           const f = await invoke<{ level: number; bands: number[] }>("mic_features");
-          level.current =
-            f.level > level.current ? f.level : level.current * 0.82 + f.level * 0.18;
-          bandsData.current = f.bands;
+          // NaN-Härtung: ein non-finiter Frame (Audio-Glitch/Gerätewechsel) darf
+          // die VU-Glättung nie vergiften — sticky NaN = Orb tot bis Neustart.
+          const lv = Number.isFinite(f.level) ? f.level : 0;
+          const cur = Number.isFinite(level.current) ? level.current : 0;
+          level.current = lv > cur ? lv : cur * 0.82 + lv * 0.18;
+          bandsData.current = f.bands.map((b) => (Number.isFinite(b) ? b : 0));
         } catch {
           /* ignore */
         }
       } else {
-        level.current *= 0.85;
+        level.current = (Number.isFinite(level.current) ? level.current : 0) * 0.85;
       }
     }, 33);
 

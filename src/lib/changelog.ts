@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.105",
+    date: "2026-07-09",
+    title: { de: "Die Pille atmet aus der Mitte", en: "The pill breathes from the centre" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Ausschläge der Sprach-Balken waren links-lastig — das Spektrum lief Bass→Höhen von links nach rechts, und Sprachenergie sitzt nun mal im Bass. Jetzt schlagen die Balken symmetrisch von der Mitte nach außen aus: Mitte = Energie, Ränder = Höhen.",
+        en: "The voice bars deflected mostly on the left — the spectrum ran bass→treble left to right, and speech energy lives in the bass. The bars now deflect symmetrically from the centre out: centre = energy, rims = treble.",
+      },
+      {
+        kind: "fix",
+        de: "Nach längerem Diktieren konnten die Balken plötzlich ganz aufhören auszuschlagen — bis zum App-Neustart. Ein einziger fehlerhafter Audio-Frame (z. B. beim Kopfhörer-Wechsel) vergiftete die Animations-Glättung dauerhaft. Alle Pfade heilen sich jetzt selbst.",
+        en: "After longer dictations the bars could suddenly stop moving entirely — until an app restart. A single bad audio frame (e.g. when switching headphones) permanently poisoned the animation smoothing. All paths now self-heal.",
+      },
+    ],
+  },
+  {
     version: "0.5.104",
     date: "2026-07-09",
     title: { de: "Der Zeitraum-Schalter greift jetzt überall", en: "The time-range switcher now applies everywhere" },
