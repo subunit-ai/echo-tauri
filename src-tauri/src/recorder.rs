@@ -63,6 +63,13 @@ struct Analyzer {
     hop_len: usize,
     coeffs: [f32; BAND_COUNT],
     hann: Vec<f32>,
+    /// Running ambient-noise estimate (window RMS): falls quickly toward dips
+    /// (word gaps reach room tone within ~150 ms), rises only slowly so
+    /// ongoing speech can never drag the estimate up and gate itself.
+    noise_est: f32,
+    /// Current effective gate derived from `noise_est` — shared with the
+    /// scalar VU in `ingest` (which already holds the analyzer lock).
+    eff_floor: f32,
 }
 
 impl Analyzer {
@@ -80,6 +87,7 @@ impl Analyzer {
         let hann: Vec<f32> = (0..win)
             .map(|j| 0.5 - 0.5 * (2.0 * std::f32::consts::PI * j as f32 / (win - 1) as f32).cos())
             .collect();
+        let floor0 = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
         Self {
             ring: vec![0.0; win],
             pos: 0,
@@ -87,6 +95,8 @@ impl Analyzer {
             hop_len: win / 2,
             coeffs,
             hann,
+            noise_est: (floor0 * 0.5).max(0.001),
+            eff_floor: floor0.max(0.0035),
         }
     }
 
@@ -107,18 +117,38 @@ impl Analyzer {
     /// One spectrum over the current window: Goertzel power per band → dB →
     /// 0..1 with a gentle high-frequency tilt (voices roll off with frequency;
     /// without the tilt the upper bands would never visibly move).
-    fn analyze(&self) -> [f32; BAND_COUNT] {
+    fn analyze(&mut self) -> [f32; BAND_COUNT] {
         let win = self.ring.len();
         let mut out = [0f32; BAND_COUNT];
-        // Same gate as the scalar VU: true silence keeps the spectrum at rest.
-        let noise_floor = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
         let mut sum_sq = 0f32;
         for &s in &self.ring {
             sum_sq += s * s;
         }
-        if (sum_sq / win as f32).sqrt() < noise_floor {
+        let rms = (sum_sq / win as f32).sqrt();
+
+        // Adaptive gate instead of the old fixed `noise_floor` cliff. The fixed
+        // 0.02 sat ABOVE normal speaking volume on many mic/room setups, so the
+        // whole spectrum stayed hard-zeroed until you raised your voice — and
+        // then snapped to full (TJ 2026-07-09: "bei normaler Stimme schlägt gar
+        // nichts aus"). Minimum-statistics light: track ambient from the dips,
+        // gate at ~1.7× ambient, never stricter than the configured floor.
+        if rms < self.noise_est {
+            self.noise_est += (rms - self.noise_est) * 0.22;
+        } else {
+            self.noise_est += (rms - self.noise_est) * 0.002;
+        }
+        self.noise_est = self.noise_est.max(0.0005);
+        let user_floor = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
+        let hi = user_floor.max(0.0035);
+        let lo = (user_floor * 0.18).clamp(0.0035, hi);
+        self.eff_floor = (self.noise_est * 1.7).clamp(lo, hi);
+        if rms < self.eff_floor {
             return out;
         }
+        // Soft knee: fully open at 2× the gate, so near-threshold speech shows
+        // partial bars instead of the old all-or-nothing jump.
+        let t = ((rms - self.eff_floor) / self.eff_floor).clamp(0.0, 1.0);
+        let open = t * t * (3.0 - 2.0 * t);
         for (bi, coeff) in self.coeffs.iter().enumerate() {
             let (mut s1, mut s2) = (0f32, 0f32);
             for j in 0..win {
@@ -136,7 +166,7 @@ impl Analyzer {
             // −50 dB floor / −10 dB ceiling (was −54/−12): a few dB less
             // sensitive at the quiet end so room tone / breath doesn't light
             // the spectrum, and a touch more headroom before a band pins.
-            out[bi] = (((db + tilt) + 50.0) / 40.0).clamp(0.0, 1.0).powf(0.8);
+            out[bi] = (((db + tilt) + 50.0) / 40.0).clamp(0.0, 1.0).powf(0.8) * open;
         }
         out
     }
@@ -448,6 +478,7 @@ fn ingest(
 ) {
     let mut sum_sq = 0f32;
     let n;
+    let eff_floor;
     {
         // Lock order: analyzer → buf (only place both are held; band reads go
         // through atomics, so nothing else ever takes the analyzer lock).
@@ -482,18 +513,20 @@ fn ingest(
             }
             n = frames;
         }
+        eff_floor = an.eff_floor;
     }
     if n > 0 {
         let rms = (sum_sq / n as f32).sqrt();
         // Perceptual VU mapping so normal speaking/prompting volume visibly deflects
         // the orb meters (a flat `rms * 4` left quiet speech near the floor). Three
-        // stages: (1) a tiny noise gate so true silence stays at rest, (2) a strong
-        // linear gain, (3) a gamma < 1 that expands the quiet→mid range — the band
-        // an actual voice lives in — while still saturating to 1.0 when you're loud.
-        let noise_floor = f32::from_bits(REACT_NOISE_FLOOR.load(Ordering::Relaxed));
+        // stages: (1) the analyzer's ADAPTIVE noise gate (ambient-tracking, capped
+        // by the configured floor) so true silence stays at rest without gating a
+        // normal speaking voice, (2) a strong linear gain, (3) a gamma < 1 that
+        // expands the quiet→mid range — the band an actual voice lives in — while
+        // still saturating to 1.0 when you're loud.
         let gain = f32::from_bits(REACT_GAIN.load(Ordering::Relaxed));
         let gamma = f32::from_bits(REACT_GAMMA.load(Ordering::Relaxed));
-        let gated = (rms - noise_floor).max(0.0);
+        let gated = (rms - eff_floor).max(0.0);
         let boosted = (gated * gain).min(1.0).powf(gamma);
         level.store(boosted.to_bits(), Ordering::Relaxed);
     }
@@ -518,13 +551,18 @@ mod tests {
         BAND_F_LO * (BAND_F_HI / BAND_F_LO).powf(i as f32 / (BAND_COUNT - 1) as f32)
     }
 
-    fn analyze_sine(freq: f32, amp: f32) -> [f32; BAND_COUNT] {
-        let mut an = Analyzer::new(SR as u32);
+    /// Overwrite the analyzer's window with a sine (RMS = amp / √2).
+    fn fill_sine(an: &mut Analyzer, freq: f32, amp: f32) {
         let win = an.ring.len();
         for i in 0..win {
             an.ring[an.pos] = amp * (2.0 * std::f32::consts::PI * freq * i as f32 / SR).sin();
             an.pos = (an.pos + 1) % win;
         }
+    }
+
+    fn analyze_sine(freq: f32, amp: f32) -> [f32; BAND_COUNT] {
+        let mut an = Analyzer::new(SR as u32);
+        fill_sine(&mut an, freq, amp);
         an.analyze()
     }
 
@@ -546,8 +584,53 @@ mod tests {
 
     #[test]
     fn below_noise_floor_is_gated() {
-        // Amplitude well under the default 0.01 RMS gate → fully dark.
-        let out = analyze_sine(band_freq(8), 0.005);
-        assert!(out.iter().all(|&b| b == 0.0), "sub-gate signal lit bands: {out:?}");
+        // A steady near-silent tone is "ambient" by definition: the adaptive
+        // estimate converges onto it, so it must stay dark — first hop and
+        // after a full second of adaptation alike.
+        let mut an = Analyzer::new(SR as u32);
+        fill_sine(&mut an, band_freq(8), 0.005);
+        for _ in 0..50 {
+            let out = an.analyze();
+            assert!(out.iter().all(|&b| b == 0.0), "sub-gate signal lit bands: {out:?}");
+        }
+    }
+
+    #[test]
+    fn normal_voice_in_quiet_room_lights_bands() {
+        // TJ 2026-07-09: normal speaking volume (RMS ≈ 0.011, UNDER the old
+        // fixed 0.02 gate) left the pill completely dark until he raised his
+        // voice. After ~1 s of quiet room tone the adaptive gate must sit low
+        // enough for a normal voice to register clearly.
+        let mut an = Analyzer::new(SR as u32);
+        fill_sine(&mut an, band_freq(8), 0.002); // room tone, RMS ≈ 0.0014
+        for _ in 0..50 {
+            an.analyze();
+        }
+        fill_sine(&mut an, band_freq(8), 0.015); // normal voice, RMS ≈ 0.0106
+        let out = an.analyze();
+        assert!(out[8] > 0.3, "normal voice barely registered: {out:?}");
+    }
+
+    #[test]
+    fn gate_adapts_down_in_quiet_room() {
+        // The effective gate must drop well below the configured 0.02 floor
+        // once the room is quiet — and never rise above it.
+        let mut an = Analyzer::new(SR as u32);
+        assert!(an.eff_floor <= 0.02 + 1e-6);
+        fill_sine(&mut an, band_freq(8), 0.002);
+        for _ in 0..50 {
+            an.analyze();
+        }
+        assert!(
+            an.eff_floor < 0.006,
+            "gate did not adapt down: {}",
+            an.eff_floor
+        );
+        // Loud sustained input must not push the gate past the user floor.
+        fill_sine(&mut an, band_freq(8), 0.5);
+        for _ in 0..200 {
+            an.analyze();
+        }
+        assert!(an.eff_floor <= 0.02 + 1e-6, "gate rose past floor: {}", an.eff_floor);
     }
 }

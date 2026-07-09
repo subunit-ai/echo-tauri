@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.106",
+    date: "2026-07-09",
+    title: { de: "Die Pille hört jetzt auch leise Stimmen", en: "The pill now hears quiet voices too" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Sprach-Balken reagierten erst, wenn man laut sprach — eine feste Rauschschwelle lag über normaler Sprechlautstärke und schaltete alles darunter hart stumm. Die Schwelle passt sich jetzt automatisch an die Umgebung an: In einem ruhigen Raum sinkt sie weit ab, und schon normale, leise Sprache lässt die Balken sauber ausschlagen.",
+        en: "The voice bars only reacted when you spoke loudly — a fixed noise threshold sat above normal speaking volume and hard-muted everything below it. The gate now adapts to your environment: in a quiet room it drops way down, so normal, quiet speech deflects the bars cleanly.",
+      },
+      {
+        kind: "improvement",
+        de: "Kein Alles-oder-nichts mehr: Nahe der Schwelle blenden die Ausschläge weich ein, statt schlagartig von tot auf voll zu springen.",
+        en: "No more all-or-nothing: near the threshold the bars fade in softly instead of snapping from dead to full.",
+      },
+    ],
+  },
+  {
     version: "0.5.105",
     date: "2026-07-09",
     title: { de: "Die Pille atmet aus der Mitte", en: "The pill breathes from the centre" },
