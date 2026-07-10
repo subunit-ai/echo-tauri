@@ -231,11 +231,11 @@ const ORB_STYLES: [string, string][] = [
  *  sync, and in sync with the orb satellite + the cycle order in commands.rs).
  *  Values must match the server-side cleanup style keys (cleanup.py PROMPTS). */
 const CLEANUP_STYLE_OPTIONS = (t: (k: string) => string): [string, string][] => [
+  ["tidy", t("settings.cleanupStyleTidy")], // "Standard" — the default, local DSGVO lane, always first
   ["prompt", t("settings.cleanupStylePrompt")],
   ["email", t("settings.cleanupStyleEmail")],
   ["slack", t("settings.cleanupStyleSlack")],
   ["formal", t("settings.cleanupStyleFormal")],
-  ["tidy", t("settings.cleanupStyleTidy")],
   ["notes", t("settings.cleanupStyleNotes")],
   ["letter", t("settings.cleanupStyleLetter")],
   ["social", t("settings.cleanupStyleSocial")],
@@ -999,7 +999,7 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
             <Row name={t("settings.aiCleanup")} hint={t("settings.aiCleanupHint")}>
               <Toggle checked={c.cleanup_enabled} onChange={(v) => set("cleanup_enabled", v)} />
             </Row>
-            <Row name={t("settings.cleanupStyle")}>
+            <Row name={t("settings.cleanupStyle")} hint={t("settings.cleanupStyleHint")}>
               <Sel
                 value={c.cleanup_style}
                 onChange={(v) => set("cleanup_style", v)}

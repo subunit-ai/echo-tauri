@@ -1549,14 +1549,14 @@ pub fn orb_cycle(
                     .unwrap_or(0);
                 c.language = order[next].to_string();
             }
-            // off → prompt → email → slack → formal → tidy → notes → letter → social → off
+            // off → tidy (Standard) → prompt → email → slack → formal → notes → letter → social → off
             "cleanup" => {
                 if !c.cleanup_enabled {
                     c.cleanup_enabled = true;
-                    c.cleanup_style = "prompt".to_string();
+                    c.cleanup_style = "tidy".to_string();
                 } else {
                     let order = [
-                        "prompt", "email", "slack", "formal", "tidy", "notes", "letter", "social",
+                        "tidy", "prompt", "email", "slack", "formal", "notes", "letter", "social",
                     ];
                     let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
                     if idx + 1 >= order.len() {
