@@ -639,7 +639,10 @@ fn clear_modifiers() {
 /// when `autopaste` is on, inject it — either an instant paste (Ctrl/Cmd+V, the
 /// default) or live-typed Unicode (`instant_live_typing`), focusing the captured
 /// target first when `target_lock` is on.
-pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Result<()> {
+/// `release` is the hotkey-release origin from `do_transcribe`, threaded through so
+/// the paste — which on macOS runs ASYNC on the main thread after this fn returns —
+/// can log its true press→landed latency as a `[client-timing] paste {...}` line.
+pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>, release: Instant) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         log::debug!("deliver: empty text, skip");
         return Ok(());
@@ -667,7 +670,7 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
     // main-thread closure logs its own outcome; we don't block "Done" on it.
     #[cfg(target_os = "macos")]
     {
-        macos_inject(text.to_string(), cfg.instant_live_typing, cfg.target_lock, target.cloned(), true);
+        macos_inject(text.to_string(), cfg.instant_live_typing, cfg.target_lock, target.cloned(), true, release, text.chars().count());
         log::info!("deliver: macOS inject dispatched to main thread (+{:?})", t0.elapsed());
         return Ok(());
     }
@@ -681,6 +684,9 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
             }
         }
 
+        // Non-macOS paste is synchronous, so the true landing time is measurable
+        // right here. Counts-only client-timing (mirrors the macOS async line).
+        let t_paste = Instant::now();
         if cfg.instant_live_typing {
             // Live-typing can fail on some setups (typed nothing). The text is already
             // on the clipboard, so fall back to the proven instant paste rather than
@@ -688,12 +694,20 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
             if let Err(e) = type_text(text) {
                 log::warn!("deliver: live-typing failed ({e}) — falling back to instant paste");
                 paste()?;
+                log::info!(
+                    "[client-timing] paste {}",
+                    serde_json::json!({"method": "paste-fallback", "exec_ms": t_paste.elapsed().as_millis() as u64, "since_release_ms": release.elapsed().as_millis() as u64, "chars": text.chars().count()})
+                );
                 log::info!("deliver: done via instant-paste (fallback) (+{:?})", t0.elapsed());
                 return Ok(());
             }
         } else {
             paste()?;
         }
+        log::info!(
+            "[client-timing] paste {}",
+            serde_json::json!({"method": method, "exec_ms": t_paste.elapsed().as_millis() as u64, "since_release_ms": release.elapsed().as_millis() as u64, "chars": text.chars().count()})
+        );
         log::info!("deliver: done via {method} (+{:?})", t0.elapsed());
         Ok(())
     }
@@ -705,12 +719,15 @@ pub fn deliver(text: &str, cfg: &Config, target: Option<&Target>) -> anyhow::Res
 /// `prefer_typing` types the text via Unicode keystrokes; otherwise (and as a typing
 /// fallback when `allow_paste_fallback`) it sends a Cmd+V chord against the clipboard.
 #[cfg(target_os = "macos")]
+#[allow(clippy::too_many_arguments)]
 fn macos_inject(
     text: String,
     prefer_typing: bool,
     target_lock: bool,
     target: Option<Target>,
     allow_paste_fallback: bool,
+    release: Instant,
+    chars: usize,
 ) {
     use tauri::Emitter;
     let Some(app) = APP_HANDLE.get() else {
@@ -718,7 +735,14 @@ fn macos_inject(
         return;
     };
     let app2 = app.clone();
+    // Client-timing: capture the moment we hand the closure to the main-thread
+    // queue. `queue_ms` inside the closure = how long it waited behind whatever
+    // the main thread was doing (orb/overlay render is the suspect) before the
+    // paste could even start — the async-paste black hole this instruments.
+    let t_dispatch = Instant::now();
     if let Err(e) = app.run_on_main_thread(move || {
+        let queue_ms = t_dispatch.elapsed().as_millis() as u64;
+        let t_exec = Instant::now();
         use enigo::{Direction, Enigo, Key, Keyboard, Settings};
         // CGEventPost is gated by the Accessibility (AX) TCC permission. Prompt once if
         // missing; without it the paste silently does nothing, so bail to clipboard-only
@@ -745,6 +769,7 @@ fn macos_inject(
             let _ = enigo.key(k, Direction::Release);
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
+        let method = if prefer_typing { "type" } else { "paste" };
         if prefer_typing {
             // Flag-zeroed CGEvent typing (see mac::type_unicode) — immune to a
             // physically-held hotkey modifier, unlike enigo.text() which inherits it.
@@ -759,6 +784,21 @@ fn macos_inject(
         } else {
             paste_cmd_v(&mut enigo);
         }
+        // Structured paste line — the TRUE end of the dictation. `since_release_ms`
+        // is the full press→landed latency; `queue_ms` isolates main-thread
+        // contention; `exec_ms` covers enigo init + the fixed 20 ms settle + Cmd+V.
+        // Counts-only, PII-safe. Emitted here (not in do_transcribe) because this
+        // genuinely runs after the pipeline returns.
+        log::info!(
+            "[client-timing] paste {}",
+            serde_json::json!({
+                "method": method,
+                "queue_ms": queue_ms,
+                "exec_ms": t_exec.elapsed().as_millis() as u64,
+                "since_release_ms": release.elapsed().as_millis() as u64,
+                "chars": chars,
+            })
+        );
         log::info!("macos inject: done on main thread");
     }) {
         log::error!("macos inject: run_on_main_thread failed: {e}");
@@ -813,7 +853,9 @@ pub fn paste_clipboard_into_focused(text: &str) {
     #[cfg(target_os = "macos")]
     {
         // Same main-thread marshalling + Accessibility gate as the normal flow.
-        macos_inject(text.to_string(), false, false, None, true);
+        // Manual Prompt-Console paste — no hotkey-release origin, so `release` is
+        // "now" (its paste line then just measures the paste cost, not a dictation).
+        macos_inject(text.to_string(), false, false, None, true, Instant::now(), text.chars().count());
     }
     #[cfg(not(target_os = "macos"))]
     {

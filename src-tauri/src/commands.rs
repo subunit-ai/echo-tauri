@@ -197,11 +197,24 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // greppable line + stored with history, so we iterate on real field data.
     let t_total = std::time::Instant::now();
 
+    // Client-latency instrumentation (counts-only, PII-safe). These accumulate the
+    // per-phase splits the opaque `latency:` line never had, and are emitted as ONE
+    // `[client-timing] {json}` line (mirrors the server's `[dictate-timing]`). The
+    // async macOS paste logs its own companion `[client-timing] paste {...}` line
+    // (see inject::deliver) because it genuinely runs after this fn returns.
+    let mut ws_flush_ms: u64 = 0;
+    let mut server_final_ms: u64 = 0;
+    let mut vocab_ms: u64 = 0;
+    let mut stream_finish_ms: u64 = 0;
+
     // Cloud path: refresh the access token if it's expired before we call out
-    // (streaming reuses the same credential, so this covers both paths).
+    // (streaming reuses the same credential, so this covers both paths). On the
+    // hot path — a token that expired mid-hold pays a blocking HTTP refresh here.
+    let t_auth = std::time::Instant::now();
     if state.config.lock().mode == "subunit" {
         crate::auth::ensure_fresh(app);
     }
+    let ensure_fresh_ms = t_auth.elapsed().as_millis() as u64;
     let cfg = state.config.lock().clone();
     let streaming = cfg.mode == "subunit" && cfg.streaming_mode != "off";
 
@@ -226,8 +239,16 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     let cap_opt: Option<crate::recorder::Capture>;
     if streaming {
         emit_state(app, EngineState::Transcribing, None);
-        match crate::transcribe::stream::finish() {
+        // Whole finish() call: signals the session thread to flush+end, then blocks
+        // on the server final. The StreamFinal below splits this into flush/wait/vocab.
+        let t_finish_call = std::time::Instant::now();
+        let finished = crate::transcribe::stream::finish();
+        stream_finish_ms = t_finish_call.elapsed().as_millis() as u64;
+        match finished {
             Some(Ok(fin)) => {
+                ws_flush_ms = fin.finish_flush_ms;
+                server_final_ms = fin.final_wait_ms;
+                vocab_ms = fin.vocab_ms;
                 streamed = Some(fin);
                 cap_opt = None;
             }
@@ -463,6 +484,10 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             _ => result.text,
         }
     };
+    // Split for client-timing: the separate /v1/cleanup network call (0 on the
+    // streaming inline path + all the skip cases) vs the local de_comma+dach passes.
+    let cleanup_call_ms = t_cleanup.elapsed().as_millis() as u64;
+    let t_post = std::time::Instant::now();
     // German commas BEFORE dach: dach's punctuation-spacing normalisation then
     // tidies anything the insertion touched. Both skip live-typed text (can't
     // retro-edit what is already injected into the target app).
@@ -472,6 +497,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     if cfg.dach_format_enabled && !already_injected {
         text = crate::dach::dach_format(&text);
     }
+    let postprocess_ms = t_post.elapsed().as_millis() as u64;
     let cleanup_ms = t_cleanup.elapsed().as_millis() as u64;
     // Latency breakdown — the measurement system we iterate against. server_ms is
     // pure GPU (cloud elapsed_s); stt_ms is the full cloud round trip (so
@@ -546,9 +572,11 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             log::warn!("clipboard failed: {e}");
         }
         crate::prompt_console::receive_transcript(app, &result.text);
-    } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref()) {
+    } else if let Err(e) = crate::inject::deliver(&result.text, &cfg, target.as_ref(), t_total) {
         log::warn!("inject failed: {e}");
     }
+    // On macOS this is only the DISPATCH time — the real Cmd+V runs async on the
+    // main thread and logs its own `[client-timing] paste {...}` (see deliver).
     let inject_ms = t_inject.elapsed().as_millis() as u64;
 
     // The one latency line we iterate against (counts only — never content).
@@ -561,6 +589,33 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         result.quality_mode,
         result.text.chars().count()
     );
+
+    // Structured client-latency line — mirrors the server's `[dictate-timing]`.
+    // Splits the previously opaque release→paste-dispatch span into every phase we
+    // control on the client. Counts-only (never text). `path` distinguishes the WS
+    // streaming split (ws_flush/server_final/vocab populated) from the batch
+    // fallback (those 0; stt_ms/server_gpu carry the round trip). The real Cmd+V
+    // lands async → its own `[client-timing] paste {...}` line completes the story.
+    let ct = serde_json::json!({
+        "path": if stream_finish_ms > 0 { "stream" } else { "batch" },
+        "total_ms": total_ms,               // release → paste dispatched
+        "ensure_fresh_ms": ensure_fresh_ms, // blocking token refresh (0 if fresh)
+        "stream_finish_ms": stream_finish_ms, // whole finish() (flush+wait+vocab+chan)
+        "ws_flush_ms": ws_flush_ms,         // ship audio tail + {end} frame
+        "server_final_ms": server_final_ms, // {end} → server final (net + tail-decode + inline cleanup)
+        "vocab_ms": vocab_ms,               // client vocab-replace + comma de-spam + filler strip
+        "cleanup_call_ms": cleanup_call_ms, // separate /v1/cleanup call (0 on streaming inline)
+        "postprocess_ms": postprocess_ms,   // de_comma + dach
+        "inject_dispatch_ms": inject_ms,    // clipboard set + main-thread dispatch (NOT the paste itself on macOS)
+        "stt_ms": result.timings.stt_ms,    // batch: full cloud round trip
+        "server_gpu_ms": result.timings.server_ms,
+        "tier": result.quality_mode,
+        "style": style,
+        "audio_s": (duration_s * 10.0).round() / 10.0,
+        "chars": result.text.chars().count(),
+        "already_injected": already_injected,
+    });
+    log::info!("[client-timing] {ct}");
 
     // Best-effort push to the Synapse knowledge base (detached so the up-to-5s
     // round-trip never delays the user). No-op unless synapse_save_enabled.
