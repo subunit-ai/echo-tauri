@@ -229,6 +229,14 @@ pub struct Config {
     pub diarization_max_speakers: i32,
 
     pub cleanup_enabled: bool,
+    /// One-time guard that flips `cleanup_enabled` ON for configs that predate
+    /// the default flip: the "tidy" (Standard) lane is the local, DSGVO-safe
+    /// default correction, so dictation should get it out of the box. Old
+    /// configs saved `false` (the old opt-in default), so changing the default
+    /// alone would never reach them — this migrates them exactly once, then
+    /// respects a later opt-out forever.
+    #[serde(default)]
+    pub cleanup_enabled_migrated: bool,
     pub cleanup_style: String,
     /// One-time guard: point the default cleanup style at "tidy" — the lightest,
     /// DSGVO-safe LOCAL cleanup lane — for installs still on the old "prompt"
@@ -512,7 +520,13 @@ impl Default for Config {
             diarization_enabled: false,
             diarization_max_speakers: 8,
 
-            cleanup_enabled: false,
+            // Cleanup is ON by default: without it the dictation ships raw ASR
+            // text (history shows style "-"). The default lane is "tidy"
+            // (Standard) — local + DSGVO-safe, so on-by-default is harmless.
+            // Existing opt-in-era installs are lifted once via
+            // `cleanup_enabled_migrated`.
+            cleanup_enabled: true,
+            cleanup_enabled_migrated: false,
             // "tidy" = the lightest, DSGVO-safe LOCAL cleanup lane, the new default
             // (existing installs on the old "prompt" default are lifted once via
             // `cleanup_style_migrated`).
@@ -668,6 +682,7 @@ impl Config {
         c.filler_removal_migrated = true; // fresh installs already default filler-removal on
         c.dach_format_migrated = true; // fresh installs already default DACH formatting on
         c.de_comma_migrated = true; // fresh installs already default German commas on
+        c.cleanup_enabled_migrated = true; // fresh installs already default cleanup on
         c.cleanup_style_migrated = true; // fresh installs already default to the "tidy" local lane
         c.auto_vocab_purged = true; // fresh installs have no auto-learned entries to purge
         c.history_size_migrated = true; // fresh installs already start beyond the 500 cap
@@ -834,6 +849,15 @@ impl Config {
                 self.cleanup_style = "tidy".to_string();
             }
             self.cleanup_style_migrated = true;
+        }
+        // v0.5.11x: cleanup ("tidy"/Standard lane) is now ON by default — without
+        // it dictation ships raw ASR text (history style "-"). Old configs saved
+        // `cleanup_enabled: false` (the old opt-in default), so flip it ON exactly
+        // once; a later deliberate opt-out is then respected forever (the guard
+        // never re-runs). Same one-time pattern as filler/DACH/comma above.
+        if !self.cleanup_enabled_migrated {
+            self.cleanup_enabled = true;
+            self.cleanup_enabled_migrated = true;
         }
         // v0.6.x: History-Cap-Default 50→500 (mehr Datenbasis für Activity/Learning).
         // Nur wer den ALTEN Default (50) nie angefasst hat, wird einmalig angehoben.
@@ -1163,6 +1187,24 @@ mod tests {
         back.cleanup_style_migrated = true;
         back.migrate();
         assert_eq!(back.cleanup_style, "prompt", "post-migration prompt choice must stick");
+    }
+
+    #[test]
+    fn cleanup_enabled_migrates_on_once_then_respects_optout() {
+        // A config from the opt-in era: cleanup saved off, never migrated.
+        let mut old = Config::default();
+        old.cleanup_enabled = false;
+        old.cleanup_enabled_migrated = false;
+        old.migrate();
+        assert!(old.cleanup_enabled, "old config must be flipped on once");
+        assert!(old.cleanup_enabled_migrated, "guard must trip so it never re-runs");
+
+        // A user who deliberately opts out AFTER the migration stays opted out.
+        let mut optout = Config::default();
+        optout.cleanup_enabled = false;
+        optout.cleanup_enabled_migrated = true;
+        optout.migrate();
+        assert!(!optout.cleanup_enabled, "explicit opt-out must survive migrate");
     }
 
     #[test]

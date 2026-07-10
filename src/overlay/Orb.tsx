@@ -97,7 +97,7 @@ function computeLayout(): {
       h: panelH(2),
     },
     cleanup: {
-      // 10 rows: off · auto · prompt · email · slack · formal · tidy · notes · letter · social
+      // 10 rows: off · auto · tidy (Standard) · prompt · email · slack · formal · notes · letter · social
       x: chips.cleanup.x + CHIP + PANEL_GAP,
       y: clampTop(midY - panelH(10) / 2, panelH(10)),
       w: PANEL_W,
@@ -655,6 +655,12 @@ export function Orb() {
               onClick={pick("cleanup", "auto")}
             />
             <Row
+              icon={BROOM_PATHS}
+              label={t("settings.cleanupStyleTidy")}
+              active={quick.cleanup === "tidy"}
+              onClick={pick("cleanup", "tidy")}
+            />
+            <Row
               icon={TERMINAL_PATHS}
               label={t("settings.cleanupStylePrompt")}
               active={quick.cleanup === "prompt"}
@@ -677,12 +683,6 @@ export function Orb() {
               label={t("settings.cleanupStyleFormal")}
               active={quick.cleanup === "formal"}
               onClick={pick("cleanup", "formal")}
-            />
-            <Row
-              icon={BROOM_PATHS}
-              label={t("settings.cleanupStyleTidy")}
-              active={quick.cleanup === "tidy"}
-              onClick={pick("cleanup", "tidy")}
             />
             <Row
               icon={LIST_PATHS}
