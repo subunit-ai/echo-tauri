@@ -343,15 +343,26 @@ jobs:
           gh release download "$tag" -R "$repo" --clobber
           rm -f /tmp/dist/latest.json
           export GH_TOKEN="$RELEASES_TOKEN"
+          # Draft-ID beim Anlegen DIREKT aus der POST-Antwort merken: /releases/tags/<tag>
+          # sieht Drafts nie (404, killte v0.5.123), und die Release-LISTE ist eventual-
+          # consistent (sah bei subunit-desktop einen 1,5s alten Draft nicht). Nur im
+          # Rerun-Fall (Draft existiert schon) Liste mit Retry.
+          pubid=""
           if ! gh release view "$tag" -R "$pubrepo" > /dev/null 2>&1; then
-            gh release create "$tag" -R "$pubrepo" --draft --title "Echo $tag" \
-              --notes "Echo $tag — macOS (Apple Silicon), Windows x64, Windows ARM64, Linux x86_64. Auto-Update-Feed: latest.json."
+            pubid=$(gh api -X POST "repos/$pubrepo/releases" \
+              -f tag_name="$tag" -F draft=true -f name="Echo $tag" \
+              -f body="Echo $tag — macOS (Apple Silicon), Windows x64, Windows ARM64, Linux x86_64. Auto-Update-Feed: latest.json." \
+              --jq .id)
           fi
           gh release upload "$tag" -R "$pubrepo" /tmp/dist/* /tmp/pub/latest.json --clobber
-          # Draft-ID über die Release-LISTE auflösen — /releases/tags/<tag> kann
-          # Drafts nicht sehen (404, hat v0.5.123 den ersten Mirror-Publish gekillt).
-          pubid=$(gh api "repos/$pubrepo/releases?per_page=30" \
-            --jq "[.[] | select(.tag_name==\"$tag\")][0].id // empty")
+          if [ -z "$pubid" ]; then
+            for i in 1 2 3 4 5; do
+              pubid=$(gh api "repos/$pubrepo/releases?per_page=30" \
+                --jq "[.[] | select(.tag_name==\"$tag\")][0].id // empty")
+              [ -n "$pubid" ] && break
+              sleep 3
+            done
+          fi
           [ -n "$pubid" ] || { echo "::error::kein $pubrepo-Release für $tag gefunden"; exit 1; }
           gh api -X PATCH "repos/$pubrepo/releases/$pubid" \
             -F draft=false -f make_latest=true > /dev/null
