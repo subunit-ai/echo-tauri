@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.124",
+    date: "2026-07-10",
+    title: {
+      de: "Präziseres Korrektur-Modell — jetzt Standard",
+      en: "More accurate correction model — now the default",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Diktat-Feinschliff heißt jetzt „Standard“, steht in der Auswahl ganz oben und ist ab Werk aktiv: standardmäßige deutsche Rechtschreibung und Zeichensetzung, korrigiert von unserem neuen, deutlich präziseren Modell — datenschutzfreundlich auf Servern in Deutschland.",
+        en: "The dictation polish is now called “Standard”, sits at the top of the picker and is on by default: standard spelling and punctuation, corrected by our new, noticeably more accurate model — privacy-friendly on servers in Germany.",
+      },
+      {
+        kind: "improvement",
+        de: "Zahlen und Einheiten werden sauber gesetzt (5kg → 5 kg, 10€ → 10 €, 50km/h → 50 km/h) und weitere Komma-Regeln greifen automatisch (ohne/statt/außer … zu).",
+        en: "Numbers and units are spaced correctly (5kg → 5 kg, 10€ → 10 €, 50km/h → 50 km/h) and additional comma rules apply automatically (German infinitive groups).",
+      },
+      {
+        kind: "fix",
+        de: "Links und Satzzeichen-Folgen (z. B. „!!!“) werden bei der Formatierung nicht mehr auseinandergerissen.",
+        en: "Links and punctuation runs (e.g. “!!!”) are no longer broken apart during formatting.",
+      },
+    ],
+  },
+  {
     version: "0.5.123",
     date: "2026-07-10",
     title: { de: "Neuer, stabilerer Update-Kanal", en: "New, more reliable update channel" },
