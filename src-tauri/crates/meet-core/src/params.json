@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "comment": "Einzige Quelle der Diarisierungs-Schwellen. Jede Änderung = Versions-Bump + Golden-Tests in python/ UND rust/ müssen grün sein. Validiert an GT-Skript-Tests 922462 (98,4%) + 301304 (100%) am 2026-06-11.",
+  "version": "0.3.0",
+  "comment": "Einzige Quelle der Diarisierungs-Schwellen. Jede Änderung = Versions-Bump + Golden-Tests in python/ UND rust/ müssen grün sein. Validiert an GT-Skript-Tests 922462 (98,4%) + 301304 (100%) am 2026-06-11. v0.1.1 (2026-06-16): SW_M 0.12->0.06 = Run-on-Split (632094 90,6->92,6%). v0.2.0 (2026-07-06): neuer hints-Block (Overlap/Schnellwechsel-Härtung) — wirkt NUR wenn der Aufrufer cut_hints/overlap_zones übergibt bzw. via Verdachts-Modus (SUS_*) bei gemischten Pass-1-Embeddings; ohne diese Signale ist das Verhalten identisch zu v0.1.1 (Golden-Replays byte-gleich). Rust-Port: hints ungenutzt (kein pyannote in Echo-Tauri local-meet) — dokumentierte, ehrliche Divergenz. v0.3.0 (2026-07-10): Multi-Prototyp-Anker (Python) — ein Anker darf eine LISTE von L2-Prototypen sein (Enroll-Kern + Meeting-Fernfeld + Diktat-Nahfeld), Score = max darüber; einzelne Vektoren byte-identisch zu v0.2.0 (Golden-Replays unverändert grün), KEINE Schwellen-Änderung. Rust bleibt Single-Vektor (kein Prototyp-Produzent in local-meet) — dokumentierte Divergenz wie hints.",
   "match": {
     "T": 0.26,
     "M": 0.04,
@@ -16,7 +16,7 @@
   "split": {
     "SW_MIN_DUR": 1.2,
     "SW_MIN_PART": 0.25,
-    "SW_M": 0.12,
+    "SW_M": 0.06,
     "SW_PAUSE": 0.15,
     "SW_DEPTH": 3,
     "SENTENCE_ENDS": [".", "?", "!"]
@@ -24,5 +24,13 @@
   "mini": {
     "MINI_FLOOR": 0.2,
     "MINI_M": 0.15
+  },
+  "hints": {
+    "HINT_TOL": 0.25,
+    "SUS_M": 0.1,
+    "SUS_MIN_DUR": 2.5,
+    "SUS_MAX_CAND": 24,
+    "OV_COVER": 0.5,
+    "OV_MINI_M": 0.08
   }
 }
