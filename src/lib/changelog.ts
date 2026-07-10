@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.123",
+    date: "2026-07-10",
+    title: { de: "Neuer, stabilerer Update-Kanal", en: "New, more reliable update channel" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Echo bezieht Updates ab jetzt über einen dedizierten Verteilkanal. Für dich ändert sich nichts — Updates kommen wie gewohnt automatisch, künftig nur noch zuverlässiger. Dieses Update einmal installieren, damit der Wechsel greift.",
+        en: "Echo now receives updates through a dedicated distribution channel. Nothing changes for you — updates keep arriving automatically, just more reliably. Install this update once so the switch takes effect.",
+      },
+    ],
+  },
+  {
     version: "0.5.122",
     date: "2026-07-10",
     title: { de: "Dein Stimmabdruck — sichtbar, verwaltbar, lernend", en: "Your voiceprint — visible, manageable, learning" },
