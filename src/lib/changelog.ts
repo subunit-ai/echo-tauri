@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.120",
+    date: "2026-07-10",
+    title: { de: "Tabs nicht mehr durchsichtig (ohne Milchglas)", en: "Tabs no longer transparent (frost off)" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Mit ausgeschaltetem iOS-Milchglas waren die Tabs oben durchsichtig — man sah den Schreibtisch durch die Titelleiste (dunkel wie hell). Ohne Milchglas wird das Fenster jetzt komplett deckend, sodass die Tab-Leiste sauber gefüllt ist.",
+        en: "With the iOS frost turned off, the top tabs were see-through — the desktop showed through the title bar (dark and light alike). With frost off the window is now fully opaque, so the tab strip is cleanly filled.",
+      },
+    ],
+  },
+  {
     version: "0.5.119",
     date: "2026-07-09",
     title: { de: "Lange Diktate brechen nicht mehr ab", en: "Long dictations no longer cut out" },

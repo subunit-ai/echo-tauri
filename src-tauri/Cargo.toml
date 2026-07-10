@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.5.119"
+version = "0.5.120"
 description = "Echo — Hotkey dictation & meeting capture (Tauri rewrite)"
 authors = ["Subunit UG"]
 edition = "2021"

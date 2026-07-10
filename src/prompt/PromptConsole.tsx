@@ -255,7 +255,7 @@ function stripPath(w: number): string {
 /** The window body as SVG: recessed strip + (pane ⋃ active tab) silhouette with
  *  a gradient rim. Fills scale with the glass level; Windows gets solid fills
  *  (no OS vibrancy to shine through). */
-function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: { x: number; w: number } | null; glass: number; theme: string }) {
+function Silhouette({ w, h, bump, glass, theme, flat }: { w: number; h: number; bump: { x: number; w: number } | null; glass: number; theme: string; flat: boolean }) {
   if (w <= 0 || h <= 0) return null;
   const sil = silhouettePath(w, h, bump);
   // CSS can't reach SVG gradient stops, so the window BODY (pcTint/strip/rim)
@@ -264,6 +264,13 @@ function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: 
   // we can't assume a dark desktop behind the native vibrancy, so the surface
   // must stay light-and-legible even at "clear" glass.
   const light = theme === "light";
+  // `flat` = iOS frost OFF: there is NO native vibrancy behind the window, so
+  // the glass-scaled (semi-transparent) fills would show the desktop straight
+  // through — the recessed strip especially, leaving the INACTIVE TABS see-
+  // through (TJ, both dark and light). In flat mode the body + strip go OPAQUE
+  // (matching the pill-neutral frost tone) so the whole window is solid. The
+  // frost only backs pane+active-tab; the strip is what needs this. (Windows is
+  // already opaque below, independent of vibrancy.)
   return (
     <svg className="pc-sil" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
       <defs>
@@ -280,6 +287,20 @@ function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: 
                 <stop offset="0" stopColor="#18293f" />
                 <stop offset="0.5" stopColor="#0e1c30" />
                 <stop offset="1" stopColor="#0b1626" />
+              </>
+            )
+          ) : flat ? (
+            light ? (
+              <>
+                <stop offset="0" stopColor="#f4f8fc" />
+                <stop offset="0.46" stopColor="#eef3f9" />
+                <stop offset="1" stopColor="#e8eef6" />
+              </>
+            ) : (
+              <>
+                <stop offset="0" stopColor="#232b39" />
+                <stop offset="0.46" stopColor="#1b222f" />
+                <stop offset="1" stopColor="#141a26" />
               </>
             )
           ) : light ? (
@@ -316,7 +337,9 @@ function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: 
           <path d={sil} fill="black" />
         </mask>
       </defs>
-      {/* Recessed titlebar strip — darker, tucked BEHIND the pane+tab shape. */}
+      {/* Recessed titlebar strip — darker, tucked BEHIND the pane+tab shape.
+          In flat mode it goes OPAQUE (recessed = a shade below the body) so the
+          inactive tabs sitting on it are never see-through. */}
       <path
         d={stripPath(w)}
         fill={
@@ -324,9 +347,13 @@ function Silhouette({ w, h, bump, glass, theme }: { w: number; h: number; bump: 
             ? light
               ? "rgba(224,231,240,0.98)"
               : "rgba(7,15,27,0.96)"
-            : light
-              ? `rgba(214,223,234,${Math.min(1, 0.5 + 0.35 * glass)})`
-              : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`
+            : flat
+              ? light
+                ? "#dde5ee"
+                : "#171d28"
+              : light
+                ? `rgba(214,223,234,${Math.min(1, 0.5 + 0.35 * glass)})`
+                : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`
         }
         mask="url(#pcNotch)"
       />
@@ -487,6 +514,9 @@ export function PromptConsole() {
   // synchronous flight seal — both write the same value).
   const [frostBg, setFrostBg] = useState(() => terminalGlassBg("#00fdff", "dark"));
   const [pcTheme, setPcTheme] = useState("dark");
+  // Blur-off ("flat") state drives the SVG body to opaque so the strip/tabs
+  // aren't see-through — a STATE (not just blurOnRef) so the Silhouette re-renders.
+  const [blurOn, setBlurOn] = useState(true);
   const [copied, setCopied] = useState(false);
   const [libQuery, setLibQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -898,6 +928,7 @@ export function PromptConsole() {
         setAsTarget(!!c.prompt_console_as_target);
         setGlass(asGlass(c.prompt_console_glass));
         blurOnRef.current = c.prompt_terminal_blur !== false;
+        setBlurOn(blurOnRef.current);
         termThemeRef.current = c.prompt_terminal_theme === "light" ? "light" : "dark";
         if (typeof c.orb_color_idle === "string" && hexToRgb(c.orb_color_idle))
           pillColorRef.current = c.orb_color_idle;
@@ -913,7 +944,10 @@ export function PromptConsole() {
       async (e) => {
         const p = e.payload;
         const wasBlur = blurOnRef.current;
-        if (typeof p.blur === "boolean") blurOnRef.current = p.blur;
+        if (typeof p.blur === "boolean") {
+          blurOnRef.current = p.blur;
+          setBlurOn(p.blur);
+        }
         if (p.theme === "light" || p.theme === "dark") termThemeRef.current = p.theme;
         if (typeof p.pillColor === "string" && hexToRgb(p.pillColor)) pillColorRef.current = p.pillColor;
         applyTerminalGlass();
@@ -1558,7 +1592,7 @@ export function PromptConsole() {
       data-pc-theme={pcTheme}
       style={{ "--pc-glass": GLASS_MUL[glass] } as CSSProperties}
     >
-      <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} theme={pcTheme} />
+      <Silhouette w={winSize.w} h={winSize.h} bump={bumpDraw} glass={GLASS_MUL[glass]} theme={pcTheme} flat={!blurOn} />
       {/* Genie flight frost — clipped to the SAME silhouette string the SVG
           renders NaN-free (never synthesize a new polygon: one NaN silently
           drops the whole clip-path — v0.5.99 lesson). Falls back to the DIV's
