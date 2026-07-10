@@ -8,6 +8,7 @@ import { ModelManager } from "../components/ModelManager";
 import { Toggle } from "../components/Toggle";
 import { useSessionExpired } from "../components/SessionBanner";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { VoiceprintPanel } from "../components/VoiceprintPanel";
 import { ChangelogModal } from "../components/Changelog";
 import {
   appVersion,
@@ -37,13 +38,14 @@ import { SOUND_PRESETS, STOP_SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
-export type SettingsTab = "allgemein" | "dictation" | "transcription" | "overlay" | "account";
+export type SettingsTab = "allgemein" | "dictation" | "transcription" | "overlay" | "voice" | "account";
 type Tab = SettingsTab;
 const TABS: { key: Tab; labelKey: string }[] = [
   { key: "allgemein", labelKey: "settings.tabGeneral" },
   { key: "dictation", labelKey: "settings.tabDictation" },
   { key: "transcription", labelKey: "settings.tabTranscription" },
   { key: "overlay", labelKey: "settings.tabOverlay" },
+  { key: "voice", labelKey: "settings.tabVoice" },
   { key: "account", labelKey: "settings.tabAccount" },
 ];
 
@@ -1220,6 +1222,12 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
               />
             </Row>
           </>
+        )}
+
+        {tab === "voice" && (
+          <Group title={t("settings.secVoiceprint")}>
+            <VoiceprintPanel />
+          </Group>
         )}
 
         {tab === "account" && (
