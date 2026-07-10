@@ -348,7 +348,12 @@ jobs:
               --notes "Echo $tag — macOS (Apple Silicon), Windows x64, Windows ARM64, Linux x86_64. Auto-Update-Feed: latest.json."
           fi
           gh release upload "$tag" -R "$pubrepo" /tmp/dist/* /tmp/pub/latest.json --clobber
-          gh api -X PATCH "repos/$pubrepo/releases/$(gh api "repos/$pubrepo/releases/tags/$tag" --jq .id)" \
+          # Draft-ID über die Release-LISTE auflösen — /releases/tags/<tag> kann
+          # Drafts nicht sehen (404, hat v0.5.123 den ersten Mirror-Publish gekillt).
+          pubid=$(gh api "repos/$pubrepo/releases?per_page=30" \
+            --jq "[.[] | select(.tag_name==\"$tag\")][0].id // empty")
+          [ -n "$pubid" ] || { echo "::error::kein $pubrepo-Release für $tag gefunden"; exit 1; }
+          gh api -X PATCH "repos/$pubrepo/releases/$pubid" \
             -F draft=false -f make_latest=true > /dev/null
           echo "mirrored to https://github.com/$pubrepo/releases/tag/$tag"
 
