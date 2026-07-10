@@ -1,0 +1,14 @@
+/private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/deps/serde-53ed22a7e1687b2f.d: /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/build/serde-7405efe9374042db/out/private.rs
+
+/private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/deps/libserde-53ed22a7e1687b2f.rlib: /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/build/serde-7405efe9374042db/out/private.rs
+
+/private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/deps/libserde-53ed22a7e1687b2f.rmeta: /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/build/serde-7405efe9374042db/out/private.rs
+
+/Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/tomsync/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/build/serde-7405efe9374042db/out/private.rs:
+
+# env-dep:OUT_DIR=/private/tmp/echo-wt-meetcore030/src-tauri/crates/meet-core/target/debug/build/serde-7405efe9374042db/out
