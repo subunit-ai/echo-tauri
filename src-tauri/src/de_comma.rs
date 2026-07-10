@@ -7,7 +7,9 @@
 //!     ("das geht nicht weil …" → "das geht nicht, weil …"), shifting the
 //!     comma in front of a modifier ("… auch wenn …" → "…, auch wenn …")
 //!   - comma before "sondern"
-//!   - comma before "um … zu <Infinitiv>" groups
+//!   - comma before an extended infinitive group introduced by
+//!     "um / ohne / (an)statt / außer … zu <Infinitiv>" (Duden mandates the
+//!     comma for all of them; same precise "zu <Infinitiv>" guard as "um … zu")
 //!   - misheard "das" → "dass" after verbs of saying/thinking and "ohne"
 //!     ("er hat gesagt das er kommt" → "er hat gesagt, dass er kommt")
 //!
@@ -81,7 +83,15 @@ const SAY_VERBS: &[&str] = &[
     "wichtig", "möglich", "schade", "gut",
 ];
 
-/// How many tokens after "um" we scan for the "zu <Infinitiv>" tail.
+/// Introducers that open an extended infinitive group ("… zu <Infinitiv>"),
+/// each of which takes a comma in front of it (Duden). "um" is the classic
+/// case; "ohne / (an)statt / außer" share the exact same rule and guard, so a
+/// prepositional use without a following infinitive ("ohne dich", "statt
+/// Kaffee", "außer zu Hause") is never touched.
+const INFINITIVE_INTRODUCERS: &[&str] = &["um", "ohne", "statt", "anstatt", "außer"];
+
+/// How many tokens after an infinitive introducer we scan for the "zu
+/// <Infinitiv>" tail.
 const UM_ZU_LOOKAHEAD: usize = 12;
 
 /// Lowercase word core: token stripped of surrounding punctuation.
@@ -118,10 +128,12 @@ fn can_take_comma(toks: &[String], idx: usize) -> bool {
     !BLOCKERS.contains(&core(prev).as_str())
 }
 
-/// "um <…> zu <Infinitiv>" within the lookahead window?
-fn um_zu_group(toks: &[String], um_idx: usize) -> bool {
-    let end = (um_idx + 1 + UM_ZU_LOOKAHEAD).min(toks.len());
-    for j in (um_idx + 1)..end {
+/// "<introducer> <…> zu <Infinitiv>" within the lookahead window? A clause
+/// boundary before the "zu" kills the group. Introducer-agnostic — the same
+/// guard proves the infinitive group for "um", "ohne", "(an)statt" and "außer".
+fn infinitive_group(toks: &[String], intro_idx: usize) -> bool {
+    let end = (intro_idx + 1 + UM_ZU_LOOKAHEAD).min(toks.len());
+    for j in (intro_idx + 1)..end {
         if core(&toks[j]) == "zu" && !ends_punctuated(&toks[j]) {
             if let Some(next) = toks.get(j + 1) {
                 if is_infinitive_after_zu(next) {
@@ -198,8 +210,9 @@ fn process_line(line: &str) -> String {
             continue;
         }
 
-        // ── comma before "um … zu <Infinitiv>"
-        if tok_core == "um" && um_zu_group(&toks, i) {
+        // ── comma before an extended infinitive group
+        //    ("um / ohne / (an)statt / außer … zu <Infinitiv>")
+        if INFINITIVE_INTRODUCERS.contains(&tok_core.as_str()) && infinitive_group(&toks, i) {
             if can_take_comma(&toks, i - 1) {
                 toks[i - 1].push(',');
             }
@@ -302,6 +315,39 @@ mod tests {
     #[test]
     fn sondern() {
         assert_eq!(insert_commas("nicht heute sondern morgen"), "nicht heute, sondern morgen");
+    }
+
+    #[test]
+    fn extended_infinitive_groups() {
+        // ohne / (an)statt / außer + "zu <Infinitiv>" all take a comma in front,
+        // exactly like "um … zu".
+        assert_eq!(insert_commas("er ging ohne zu zahlen"), "er ging, ohne zu zahlen");
+        assert_eq!(
+            insert_commas("wir tranken tee statt kaffee zu bestellen"),
+            "wir tranken tee, statt kaffee zu bestellen"
+        );
+        assert_eq!(
+            insert_commas("sie half anstatt zu warten"),
+            "sie half, anstatt zu warten"
+        );
+        assert_eq!(
+            insert_commas("er tat nichts außer zu schlafen"),
+            "er tat nichts, außer zu schlafen"
+        );
+    }
+
+    #[test]
+    fn infinitive_introducers_stay_when_prepositional() {
+        // No following "zu <Infinitiv>" → these are prepositions, not infinitive
+        // groups → NO comma (precision-first).
+        assert_eq!(insert_commas("das geht nicht ohne dich"), "das geht nicht ohne dich");
+        assert_eq!(insert_commas("wir nehmen tee statt kaffee"), "wir nehmen tee statt kaffee");
+        assert_eq!(insert_commas("alle waren da außer peter"), "alle waren da außer peter");
+        // "zu" followed by a non-infinitive (a noun) does not open the group.
+        assert_eq!(insert_commas("er blieb außer zu hause"), "er blieb außer zu hause");
+        assert_eq!(insert_commas("wir gehen ohne zu einem termin"), "wir gehen ohne zu einem termin");
+        // A blocker directly before the introducer forbids the comma.
+        assert_eq!(insert_commas("er kam und ohne zu klopfen"), "er kam und ohne zu klopfen");
     }
 
     #[test]
