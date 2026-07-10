@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.121",
+    date: "2026-07-10",
+    title: { de: "Titelleiste sitzt sauber (ohne Milchglas)", en: "Title bar sits clean (frost off)" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Mit ausgeschaltetem iOS-Milchglas hatte die Titelleiste kleine Aussparungen an den oberen Ecken, schmiegte sich nicht sauber an, und die Ampel saß etwas zu hoch. Das Fenster bekommt jetzt eine durchgehende, deckende Unterlage mit runden Ecken — die Leiste sitzt bündig, die Ampel liegt auf einer Linie mit den Tabs. Dunkel wie hell.",
+        en: "With the iOS frost turned off the title bar had small notches at the top corners, didn't sit flush, and the traffic lights were a touch too high. The window now has a single opaque rounded backing — the strip sits flush and the traffic lights line up with the tabs. Dark and light alike.",
+      },
+    ],
+  },
+  {
     version: "0.5.120",
     date: "2026-07-10",
     title: { de: "Tabs nicht mehr durchsichtig (ohne Milchglas)", en: "Tabs no longer transparent (frost off)" },

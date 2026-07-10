@@ -265,12 +265,17 @@ function Silhouette({ w, h, bump, glass, theme, flat }: { w: number; h: number; 
   // must stay light-and-legible even at "clear" glass.
   const light = theme === "light";
   // `flat` = iOS frost OFF: there is NO native vibrancy behind the window, so
-  // the glass-scaled (semi-transparent) fills would show the desktop straight
-  // through — the recessed strip especially, leaving the INACTIVE TABS see-
-  // through (TJ, both dark and light). In flat mode the body + strip go OPAQUE
-  // (matching the pill-neutral frost tone) so the whole window is solid. The
-  // frost only backs pane+active-tab; the strip is what needs this. (Windows is
-  // already opaque below, independent of vibrancy.)
+  // the semi-transparent fills would show the desktop straight through (TJ:
+  // transparent inactive tabs, dark and light). Rather than making each SVG
+  // path opaque — which exposes every internal seam / corner gap the vibrancy
+  // used to hide (TJ round 2: "cutouts links+rechts, schmiegt sich nicht an") —
+  // we lay ONE continuous opaque rounded-rect BACKING (radius PANE_R = exactly
+  // what the native vibrancy fills) behind everything. The strip + silhouette
+  // then sit on it seamlessly, just like they sit on the vibrancy when blur is
+  // on. See the <path d={roundedWindow…}> below.
+  // Matches the neutral frost that covers the pane (terminalGlassBg) so the
+  // corner areas the backing fills blend seamlessly with the pane.
+  const backing = light ? "#f0f6fa" : "#1e2531";
   return (
     <svg className="pc-sil" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
       <defs>
@@ -287,20 +292,6 @@ function Silhouette({ w, h, bump, glass, theme, flat }: { w: number; h: number; 
                 <stop offset="0" stopColor="#18293f" />
                 <stop offset="0.5" stopColor="#0e1c30" />
                 <stop offset="1" stopColor="#0b1626" />
-              </>
-            )
-          ) : flat ? (
-            light ? (
-              <>
-                <stop offset="0" stopColor="#f4f8fc" />
-                <stop offset="0.46" stopColor="#eef3f9" />
-                <stop offset="1" stopColor="#e8eef6" />
-              </>
-            ) : (
-              <>
-                <stop offset="0" stopColor="#232b39" />
-                <stop offset="0.46" stopColor="#1b222f" />
-                <stop offset="1" stopColor="#141a26" />
               </>
             )
           ) : light ? (
@@ -337,9 +328,17 @@ function Silhouette({ w, h, bump, glass, theme, flat }: { w: number; h: number; 
           <path d={sil} fill="black" />
         </mask>
       </defs>
-      {/* Recessed titlebar strip — darker, tucked BEHIND the pane+tab shape.
-          In flat mode it goes OPAQUE (recessed = a shade below the body) so the
-          inactive tabs sitting on it are never see-through. */}
+      {/* Flat-mode opaque BACKING: one clean rounded rect (radius PANE_R = the
+          native vibrancy radius) behind everything, standing in for the
+          vibrancy the window no longer has. No internal seams, no corner gaps —
+          the strip + silhouette sit on it exactly as they sit on the vibrancy
+          when blur is on. */}
+      {flat && !IS_WINDOWS && (
+        <rect x="0" y="0" width={w} height={h} rx={PANE_R} ry={PANE_R} fill={backing} />
+      )}
+      {/* Recessed titlebar strip — a shade darker than the body, tucked BEHIND
+          the pane+tab shape. In flat mode it sits opaque on the backing; with
+          blur on it stays glass-scaled (the vibrancy shows through). */}
       <path
         d={stripPath(w)}
         fill={
@@ -349,8 +348,8 @@ function Silhouette({ w, h, bump, glass, theme, flat }: { w: number; h: number; 
               : "rgba(7,15,27,0.96)"
             : flat
               ? light
-                ? "#dde5ee"
-                : "#171d28"
+                ? "#e4ebf3"
+                : "#161c27"
               : light
                 ? `rgba(214,223,234,${Math.min(1, 0.5 + 0.35 * glass)})`
                 : `rgba(5,12,25,${Math.min(1, 0.12 + 0.3 * glass)})`
