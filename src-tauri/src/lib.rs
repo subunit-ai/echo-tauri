@@ -39,6 +39,7 @@ mod sound; // native record-start cue (instant even when the window is hidden)
 mod store; // SQLite history + meetings + orb profiles (echo.db)
 mod transcribe;
 mod vocab_suggest; // auto-vocab spelling guess via the Abo cleanup backend
+mod voiceprint; // persistenter Account-Stimmabdruck (/v1/voiceprints, opt-in + adaptiv)
 
 use commands::AppState;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
@@ -223,6 +224,14 @@ pub fn run() {
             notes::note_record_level,
             notes::note_record_stop,
             notes::note_record_cancel,
+            voiceprint::voiceprint_me,
+            voiceprint::voiceprint_adaptive,
+            voiceprint::voiceprint_reset_learned,
+            voiceprint::voiceprint_delete,
+            voiceprint::voiceprint_record_start,
+            voiceprint::voiceprint_record_level,
+            voiceprint::voiceprint_record_cancel,
+            voiceprint::voiceprint_record_enroll,
         ])
         .setup(|app| {
             // Version/platform banner — first line in every log, mirrors the old

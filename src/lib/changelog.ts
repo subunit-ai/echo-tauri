@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.122",
+    date: "2026-07-10",
+    title: { de: "Dein Stimmabdruck — sichtbar, verwaltbar, lernend", en: "Your voiceprint — visible, manageable, learning" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neuer Bereich Einstellungen → Stimme: dein Stimmprofil als füllende Visualisierung mit Vervollständigungs-Grad, geführter Einrichtung (~60s Lesetext mit Live-Pegel) und Verwaltung — in Meetings entfällt danach das Zahl-Vorlesen.",
+        en: "New Settings → Voice area: your voice profile as a filling visualisation with completion level, guided setup (~60s read-aloud with live meter) and management — meetings no longer need the number check-in.",
+      },
+      {
+        kind: "feature",
+        de: "Stimme laufend verbessern (Opt-in): eigene Diktate und Meetings präzisieren dein Profil automatisch; gelernte Anker sind sichtbar, zurücksetzbar und löschbar.",
+        en: "Keep improving my voice (opt-in): your own dictations and meetings refine your profile automatically; learned anchors are visible, resettable and deletable.",
+      },
+      {
+        kind: "fix",
+        de: "Lokaler Meeting-Modus: aktualisierte Diarisierungs-Parameter (validierter Splitter-Fix).",
+        en: "Local meeting mode: updated diarisation parameters (validated splitter fix).",
+      },
+    ],
+  },
+  {
     version: "0.5.121",
     date: "2026-07-10",
     title: { de: "Titelleiste sitzt sauber (ohne Milchglas)", en: "Title bar sits clean (frost off)" },
