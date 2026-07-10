@@ -116,7 +116,10 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: -4px; /* optically centre against the tab baseline */
+  /* Align with the tab labels: the tabrow is flex-end (tabs sit at the strip
+     bottom, text centred ~y23), so a strip-centred cluster read too high (TJ:
+     "Ampel versetzt"). Nudge down to share the tab-label line. */
+  margin-top: 3px;
 }
 
 .pc-light {
