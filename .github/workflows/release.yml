@@ -234,21 +234,35 @@ jobs:
     # the macOS updater ("None of the fallback platforms… were found"). Assembling
     # from the .sig files here is race-free, and we refuse to publish if any
     # platform is missing.
+    #
+    # DISTRIBUTION lives in the PUBLIC repo subunit-ai/echo-releases (binaries +
+    # latest.json only, no source): this repo is going private, and release assets
+    # of private repos are never anonymously downloadable — the updater would get
+    # 404s. Clients from v0.5.122 on poll echo-releases. We ALSO still publish the
+    # release here (make_latest=true) so clients ≤v0.5.121 — which poll THIS repo's
+    # latest.json — can reach the switchover version while the repo is still public.
+    # Once the fleet has converged and the repo is private, that second publish is
+    # invisible to the outside and merely archives the tag (same pattern as
+    # subunit-scai → scai-releases). Extra secret: RELEASES_TOKEN = token with
+    # write access to echo-releases (GITHUB_TOKEN is scoped to this repo only).
     needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Assemble + validate latest.json, then publish
+      - name: Assemble + validate latest.json, publish to echo-releases + here
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           set -euo pipefail
           tag="${{ github.ref_name }}"
           repo="${{ github.repository }}"
+          pubrepo="subunit-ai/echo-releases"
           ver="${tag#v}"
           now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           base_url="https://github.com/$repo/releases/download/$tag"
+          pub_base_url="https://github.com/$pubrepo/releases/download/$tag"
 
           # Drafts aren't resolvable via /releases/tags/<tag> — find by listing.
           rel=$(gh api "repos/$repo/releases?per_page=30" \
@@ -284,8 +298,7 @@ jobs:
             gh release download "$tag" -R "$repo" -p "$f.sig" -O "/tmp/$f.sig" --clobber
           done
 
-          python3 - "$ver" "$now" "$base_url" "$mac" "$lin" "$win64" "$winarm" \
-            > /tmp/latest.json <<'PY'
+          cat > /tmp/mkmanifest.py <<'PY'
           import sys, json
           ver, now, base = sys.argv[1], sys.argv[2], sys.argv[3]
           mac, lin, win64, winarm = sys.argv[4:8]
@@ -306,15 +319,44 @@ jobs:
                      "platforms": plats}, sys.stdout, indent=2)
           PY
 
-          # Belt-and-suspenders: assert all four base platforms made it in.
-          for k in darwin-aarch64 linux-x86_64 windows-x86_64 windows-aarch64; do
-            jq -e ".platforms[\"$k\"].url" /tmp/latest.json >/dev/null \
-              || { echo "::error::assembled latest.json missing $k"; exit 1; }
-          done
-          echo "assembled latest.json:"; jq '.platforms | keys' /tmp/latest.json
+          # Two manifests, same assets: one per repo, each with self-referential URLs.
+          mkdir -p /tmp/pub
+          python3 /tmp/mkmanifest.py "$ver" "$now" "$base_url" \
+            "$mac" "$lin" "$win64" "$winarm" > /tmp/latest.json
+          python3 /tmp/mkmanifest.py "$ver" "$now" "$pub_base_url" \
+            "$mac" "$lin" "$win64" "$winarm" > /tmp/pub/latest.json
 
-          # Replace the racy latest.json on the draft, then flip it public + latest.
+          # Belt-and-suspenders: assert all four base platforms made it into both.
+          for f in /tmp/latest.json /tmp/pub/latest.json; do
+            for k in darwin-aarch64 linux-x86_64 windows-x86_64 windows-aarch64; do
+              jq -e ".platforms[\"$k\"].url" "$f" >/dev/null \
+                || { echo "::error::$f missing $k"; exit 1; }
+            done
+          done
+          echo "manifest platforms:"; jq '.platforms | keys' /tmp/latest.json
+
+          # 1) Mirror to the PUBLIC distribution repo — canonical from v0.5.122 on.
+          #    All draft assets (installers + updater bundles + .sig), minus the racy
+          #    tauri-action latest.json, which our deterministic /tmp/pub one replaces.
+          #    Draft-first so /releases/latest never serves a half-uploaded release.
+          mkdir -p /tmp/dist && cd /tmp/dist
+          gh release download "$tag" -R "$repo" --clobber
+          rm -f /tmp/dist/latest.json
+          export GH_TOKEN="$RELEASES_TOKEN"
+          if ! gh release view "$tag" -R "$pubrepo" > /dev/null 2>&1; then
+            gh release create "$tag" -R "$pubrepo" --draft --title "Echo $tag" \
+              --notes "Echo $tag — macOS (Apple Silicon), Windows x64, Windows ARM64, Linux x86_64. Auto-Update-Feed: latest.json."
+          fi
+          gh release upload "$tag" -R "$pubrepo" /tmp/dist/* /tmp/pub/latest.json --clobber
+          gh api -X PATCH "repos/$pubrepo/releases/$(gh api "repos/$pubrepo/releases/tags/$tag" --jq .id)" \
+            -F draft=false -f make_latest=true > /dev/null
+          echo "mirrored to https://github.com/$pubrepo/releases/tag/$tag"
+
+          # 2) Publish here too (transition): clients ≤v0.5.121 poll THIS repo's
+          #    latest.json and need to see the switchover version. Once the repo is
+          #    private this merely archives the tag internally.
+          export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           gh release upload "$tag" -R "$repo" /tmp/latest.json --clobber
           gh api -X PATCH "repos/$repo/releases/$id" \
             -F draft=false -f make_latest=true > /dev/null
-          echo "published $tag (release $id) with a complete latest.json"
+          echo "published $tag (release $id) here + mirrored to $pubrepo"
