@@ -53,6 +53,17 @@ pub struct StreamFinal {
     /// spoke (reconciled to this exact text on release) → the caller MUST NOT
     /// paste it again. False for "final" mode (caller pastes once).
     pub already_injected: bool,
+    /// Client-latency instrumentation (ms, counts-only, PII-safe). Populated in
+    /// `await_final`; surfaced so `do_transcribe` can log ONE `[client-timing]`
+    /// line that splits the previously opaque release→final wait into its parts.
+    /// `finish_flush_ms`: shipping the buffered audio tail + the `{end}` frame.
+    /// `final_wait_ms`: `{end}` sent → server `final` frame in hand (network +
+    /// server tail-decode + inline cleanup — the dominant term). `vocab_ms`: the
+    /// deterministic client pass (vocab-replace + comma de-spam + filler strip)
+    /// on the final (and cleaned_text). 0 on the resume/batch fallback paths.
+    pub finish_flush_ms: u64,
+    pub final_wait_ms: u64,
+    pub vocab_ms: u64,
 }
 
 /// Error + whatever capture the session still owns, so the caller can fall
@@ -1468,11 +1479,16 @@ fn finish_flow(
     live: Option<&mut Live>,
     rid: &Option<String>,
 ) -> Result<StreamFinal, StreamFailure> {
+    // Timing (client-latency instrumentation): from release-side finalize to the
+    // moment the `{end}` frame is on the wire — i.e. shipping the last buffered
+    // audio tail. Counts-only, no text.
+    let t_finish = Instant::now();
     let flush_result = feed_delta(app, ws, feed, true)
         .and_then(|()| {
             ws.send(Message::Text(r#"{"type":"end"}"#.into()))
                 .map_err(|e| EngineError::new("network", format!("Stream-End: {e}")))
         });
+    let finish_flush_ms = t_finish.elapsed().as_millis() as u64;
 
     // Mic off NOW — the user released the key; nothing more to capture either way.
     let state = app.state::<AppState>();
@@ -1482,7 +1498,7 @@ fn finish_flow(
         return Err(StreamFailure { error, capture, resume_id: rid.clone() });
     }
 
-    await_final(app, ws, live).map_err(|error| StreamFailure {
+    await_final(app, ws, live, finish_flush_ms).map_err(|error| StreamFailure {
         error,
         capture,
         resume_id: rid.clone(),
@@ -1498,7 +1514,12 @@ fn await_final(
     app: &AppHandle,
     ws: &mut Ws,
     mut live: Option<&mut Live>,
+    finish_flush_ms: u64,
 ) -> Result<StreamFinal, EngineError> {
+    // Client-latency instrumentation: `{end}` is already on the wire, so this
+    // spans the wait for the server `final` (network + server tail-decode +
+    // inline cleanup — the term we tune against). Counts-only.
+    let t_wait = Instant::now();
     let deadline = Instant::now() + FINAL_DEADLINE;
     let mut last_rx = Instant::now();
     let mut last_ping = Instant::now();
@@ -1512,6 +1533,9 @@ fn await_final(
                 let v: serde_json::Value = serde_json::from_str(&t).unwrap_or_default();
                 match v.get("type").and_then(|t| t.as_str()) {
                     Some("final") => {
+                        // Server `final` in hand — freeze the network+decode wait
+                        // before the client-side deterministic pass runs.
+                        let final_wait_ms = t_wait.elapsed().as_millis() as u64;
                         // The deterministic client pass (vocab replace → comma
                         // de-spam → optional filler strip) belongs on EVERY engine
                         // path. Running it here — before live_reconcile types/
@@ -1519,6 +1543,7 @@ fn await_final(
                         // filler/comma cleanups work in streaming mode independently
                         // of the AI cleanup; the server only gets the bias prompt.
                         let cfg = app.state::<AppState>().config.lock().clone();
+                        let t_vocab = Instant::now();
                         let text = vocab::post_process(
                             v.get("text").and_then(|t| t.as_str()).unwrap_or_default().trim(),
                             &cfg,
@@ -1529,6 +1554,7 @@ fn await_final(
                             .and_then(|t| t.as_str())
                             .filter(|s| !s.trim().is_empty())
                             .map(|s| vocab::post_process(s.trim(), &cfg));
+                        let vocab_ms = t_vocab.elapsed().as_millis() as u64;
                         let quality_mode = v
                             .get("quality_mode")
                             .and_then(|t| t.as_str())
@@ -1557,6 +1583,9 @@ fn await_final(
                             duration_s,
                             cleanup_status,
                             already_injected,
+                            finish_flush_ms,
+                            final_wait_ms,
+                            vocab_ms,
                         });
                     }
                     Some("partial") => {
@@ -1670,7 +1699,10 @@ pub fn resume_finish(
         log::info!("stream: resume — final was already computed, zero re-upload");
     }
 
-    let fin = await_final(app, &mut ws, None)?;
+    // Resume is the rare flaky-network fallback; it ships its tail above, so the
+    // client-timing flush term is folded into 0 here (the release→final split is
+    // meaningful on the normal streaming path).
+    let fin = await_final(app, &mut ws, None, 0)?;
     log::info!(
         "stream: resumed parked session ok in {:?} ({:.1}s audio)",
         t0.elapsed(),
