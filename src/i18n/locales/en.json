@@ -953,6 +953,7 @@
     "errLoad": "Could not load status — please try again later.",
     "errBusy": "Another recording is running — please wait a moment.",
     "errMic": "Could not start the microphone — check the device in settings.",
-    "errChange": "Change failed — please try again."
+    "errChange": "Change failed — please try again.",
+    "completeSub": "of your voice profile"
   }
 }

@@ -955,6 +955,7 @@
     "errLoad": "Status konnte nicht geladen werden — bitte später erneut versuchen.",
     "errBusy": "Gerade läuft eine andere Aufnahme — bitte kurz warten.",
     "errMic": "Mikrofon konnte nicht gestartet werden — Gerät in den Einstellungen prüfen.",
-    "errChange": "Änderung fehlgeschlagen — bitte nochmal versuchen."
+    "errChange": "Änderung fehlgeschlagen — bitte nochmal versuchen.",
+    "completeSub": "deines Stimmprofils"
   }
 }
