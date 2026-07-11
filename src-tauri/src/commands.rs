@@ -783,9 +783,24 @@ pub fn history_list(query: Option<String>, limit: Option<u32>, offset: Option<u3
 // ── Auto-vocabulary (detect recurring mis-heard terms → hybrid learn) ───────
 
 /// List candidates by status ("pending" suggestions or "added" auto-learned).
+/// Pending is DISPLAY-GATED: only candidates the strict gatekeeper positively
+/// judged (they carry a `suggestion`) are ever shown. Raw/undecided finds —
+/// fresh detections or ones whose curate call failed — stay invisible and are
+/// re-judged on the next scan, instead of nagging the user with ordinary words.
 #[tauri::command]
 pub fn vocab_candidates(status: Option<String>) -> Vec<serde_json::Value> {
-    crate::store::list_vcand(status.as_deref().unwrap_or("pending"))
+    let status = status.unwrap_or_else(|| "pending".to_string());
+    let rows = crate::store::list_vcand(&status);
+    if status != "pending" {
+        return rows;
+    }
+    rows.into_iter()
+        .filter(|c| {
+            c.get("suggestion")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| !s.trim().is_empty())
+        })
+        .collect()
 }
 
 /// Trigger a background scan now (network suggest runs off-thread; never blocks).
