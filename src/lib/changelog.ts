@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.126",
+    date: "2026-07-11",
+    title: { de: "Saubere Vorschläge, saubere Diktate", en: "Clean suggestions, clean dictations" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Vokabular-Vorschläge schlagen keine gewöhnlichen Alltagswörter mehr vor: Kandidaten ohne eindeutige Einordnung (Name, Marke, Fachbegriff …) werden jetzt konsequent verworfen, und bereits angesammelte Trivial-Vorschläge werden einmalig aufgeräumt. Deine bestätigten Vokabeln bleiben unangetastet.",
+        en: "Vocabulary suggestions no longer propose ordinary everyday words: candidates without a clear classification (name, brand, technical term …) are now rejected outright, and previously accumulated trivial suggestions are cleaned up once. Your confirmed vocabulary stays untouched.",
+      },
+      {
+        kind: "fix",
+        de: "Füllwörter (»ähm«, »äh« …) werden jetzt auch dann zuverlässig entfernt, wenn die Textveredelung aktiv ist — die deterministische Filterung läuft nun auf jedem Diktat-Weg über das Endergebnis.",
+        en: "Filler words (\"uhm\", \"uh\" …) are now reliably removed even when text cleanup is active — the deterministic filter now runs on the final result on every dictation path.",
+      },
+    ],
+  },
+  {
     version: "0.5.125",
     date: "2026-07-10",
     title: { de: "Der Stimmabdruck ist jetzt ein echter Abdruck", en: "Your voiceprint now looks like a real print" },

@@ -138,12 +138,15 @@ pub fn transcribe_subunit(
         .unwrap_or_default();
 
     // Server-side cleanup result (combined round trip), when requested + present.
-    // Vocab post-replace applies here too — the server cleans the raw transcript,
-    // the vocabulary fixes (whole-word, case-insensitive) are a client concern.
+    // FULL post_process (vocab replace + despam + filler strip), not just the
+    // vocab replace: the caller prefers `cleaned_text` over `text` when present,
+    // and the server cleanup lane does not de-filler — so this is the only place
+    // the deterministic passes reach the text that actually gets pasted. Parity
+    // with the streaming path, which post_processes `cleaned_text` too.
     let cleaned_text = json
         .get("cleaned_text")
         .and_then(|v| v.as_str())
-        .map(|t| vocab::apply_vocab_replace(t.trim(), cfg));
+        .map(|t| vocab::post_process(t.trim(), cfg));
 
     // Server's pure compute time (whisper only — excludes the inline cleanup the
     // server runs afterwards). Keeping it lets the dispatcher report server vs

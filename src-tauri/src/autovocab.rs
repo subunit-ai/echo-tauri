@@ -370,27 +370,6 @@ fn is_proper_noun_kind(kind: &str) -> bool {
     )
 }
 
-/// Client-side proper-noun heuristic used when the server doesn't classify the
-/// `kind` (older builds return only is_term/spelling/confidence). A written form
-/// is proper-noun-ish if it carries a capital (proper nouns / German nouns), an
-/// internal capital (OpenAI, iOS), a hyphen, or is multi-word. A single
-/// all-lowercase plain word is NOT — German verbs / adjectives / adverbs and
-/// everyday words are lowercase, and those are exactly what corrupted transcripts
-/// (selber, richtig, genau, fragen, machst). Precision-first: this may reject the
-/// rare lowercase tech token (npm, systemd) — those can still be added by hand —
-/// but it guarantees no ordinary lowercase word is ever proposed.
-fn looks_proper_noun(spelling: &str) -> bool {
-    let s = spelling.trim();
-    if s.is_empty() {
-        return false;
-    }
-    if s.contains(' ') || s.contains('-') {
-        return true;
-    }
-    // Any uppercase letter (leading OR internal) → capitalized/brand-ish.
-    s.chars().any(|c| c.is_uppercase())
-}
-
 /// Is `spelling` merely an inflected form of a word we ALREADY track (any
 /// write_as / sounds_like / alias in the vocabulary)? Reuses the detection-side
 /// inflection test: same stem, differing only by a short grammatical ending. Such
@@ -423,8 +402,11 @@ fn is_inflection_of_existing(spelling: &str, cfg: &crate::config::Config) -> boo
 /// auto-applied)? All of:
 ///   * judged a real term (`is_term`),
 ///   * with a non-empty spelling and enough confidence,
-///   * proper-noun-ish — a proper-noun `kind` from the server, or (no kind) the
-///     client proper-noun heuristic on the spelling,
+///   * carrying a proper-noun `kind` from the server — a decision WITHOUT a
+///     `kind` is rejected (fail-closed). The old fallback ("any uppercase letter
+///     → proper-noun-ish") let every capitalized ordinary GERMAN noun through
+///     (Mitarbeiter, Rechnung, Ordner …), which is how trivial everyday words
+///     flooded the suggestion list; our server always classifies `kind`,
 ///   * NOT a mere inflection of a word we already track.
 /// Anything failing this is dropped, so ordinary words / verbs / adjectives /
 /// adverbs / inflections can never reach the suggestion list.
@@ -436,12 +418,7 @@ fn accept_suggestion(d: &crate::vocab_suggest::Decision, cfg: &crate::config::Co
     if spelling.is_empty() {
         return false;
     }
-    let proper = if d.kind.trim().is_empty() {
-        looks_proper_noun(spelling)
-    } else {
-        is_proper_noun_kind(&d.kind)
-    };
-    if !proper {
+    if !is_proper_noun_kind(&d.kind) {
         return false;
     }
     !is_inflection_of_existing(spelling, cfg)
@@ -852,13 +829,11 @@ mod tests {
             route_decision(Some(&d), &cfg),
             Verdict::Suggest(Some("Jedlischka".to_string()))
         );
-        // No server kind, but the spelling looks like a proper noun (multi-word) →
-        // still accepted via the client heuristic.
+        // No server kind → FAIL-CLOSED: even a proper-noun-looking spelling is
+        // dropped. German capitalizes every noun, so any spelling-based fallback
+        // waves ordinary words through — kind-less decisions are not trusted.
         let d2 = decision("klodkoud", true, "", "Claude Code", 0.9);
-        assert_eq!(
-            route_decision(Some(&d2), &cfg),
-            Verdict::Suggest(Some("Claude Code".to_string()))
-        );
+        assert_eq!(route_decision(Some(&d2), &cfg), Verdict::Drop);
     }
 
     #[test]
@@ -872,7 +847,9 @@ mod tests {
             aliases: vec![],
             category: "Other".to_string(),
         });
-        let d = decision("projekte", true, "", "Projekte", 0.9);
+        // Real server kind, so the drop below comes from the INFLECTION gate,
+        // not the fail-closed kind gate.
+        let d = decision("projekte", true, "product", "Projekte", 0.9);
         assert_eq!(route_decision(Some(&d), &cfg), Verdict::Drop);
     }
 
@@ -883,16 +860,15 @@ mod tests {
     }
 
     #[test]
-    fn looks_proper_noun_distinguishes_terms_from_plain_words() {
-        assert!(looks_proper_noun("Anthropic"));
-        assert!(looks_proper_noun("OpenAI"));
-        assert!(looks_proper_noun("KI-Bilder"));
-        assert!(looks_proper_noun("Claude Code"));
-        // Plain lowercase words (verbs/adjectives/adverbs/ordinary) are NOT.
-        assert!(!looks_proper_noun("selber"));
-        assert!(!looks_proper_noun("richtig"));
-        assert!(!looks_proper_noun("machst"));
-        assert!(!looks_proper_noun(""));
+    fn kindless_decisions_never_suggest() {
+        // FAIL-CLOSED: without a server `kind` no candidate reaches the
+        // suggestion list — capitalized ordinary German nouns are exactly what
+        // the old uppercase heuristic waved through.
+        let cfg = Config::default();
+        for spelling in ["Mitarbeiter", "Rechnung", "Ordner", "Anthropic", "Claude Code"] {
+            let d = decision("x", true, "", spelling, 0.95);
+            assert_eq!(route_decision(Some(&d), &cfg), Verdict::Drop, "{spelling}");
+        }
     }
 
     #[test]
