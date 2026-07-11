@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.127",
+    date: "2026-07-11",
+    title: { de: "Vorschläge: nur noch echte Begriffe", en: "Suggestions: real terms only" },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Vorschlags-Liste zeigt jetzt ausschließlich geprüfte Begriffe (Namen, Marken, Fachwörter). Rohe Funde aus deinen Diktaten erscheinen nicht mehr — sie werden im Hintergrund geprüft und tauchen erst auf, wenn sie als echter Begriff bestätigt sind. Die bisher angesammelten Roh-Vorschläge und die alten »automatisch gelernt«-Einträge werden einmalig vollständig entfernt.",
+        en: "The suggestion list now shows only vetted terms (names, brands, technical words). Raw finds from your dictations no longer appear — they are checked in the background and only surface once confirmed as a real term. Previously accumulated raw suggestions and the old \"auto-learned\" entries are removed once and for all.",
+      },
+    ],
+  },
+  {
     version: "0.5.126",
     date: "2026-07-11",
     title: { de: "Saubere Vorschläge, saubere Diktate", en: "Clean suggestions, clean dictations" },

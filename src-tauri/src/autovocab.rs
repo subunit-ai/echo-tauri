@@ -530,19 +530,26 @@ pub fn scan_and_learn<R: Runtime>(app: &AppHandle<R>) {
     }
 
     // Upsert every detected candidate as pending (refreshing counts) and collect
-    // the brand-NEW ones (no prior status) to hand to the AI gatekeeper in ONE
-    // batch. Already-pending candidates keep their prior decision — we don't
-    // re-bill the model for them.
+    // the ones needing a gatekeeper verdict in ONE batch: brand-NEW candidates
+    // (no prior status) AND pending ones still without a decision (their earlier
+    // curate call failed — offline / limit / old server). Without the retry those
+    // sat undecided forever; since undecided candidates are never displayed
+    // (vocab_candidates gates on `suggestion`), they'd be stuck invisible.
+    // Candidates with a positive verdict keep it — we don't re-bill for them.
     let mut fresh: Vec<Candidate> = Vec::new();
     for cand in detect(&texts, &known) {
         let prior = crate::store::vcand_status(&cand.key);
         if matches!(prior.as_deref(), Some("ignored") | Some("added")) {
             continue; // already settled by the user / a prior auto-add
         }
+        let undecided = prior.as_deref() == Some("pending")
+            && crate::store::get_vcand(&cand.key)
+                .and_then(|c| c.get("suggestion").and_then(|s| s.as_str()).map(String::from))
+                .is_none();
         let variants_json = serde_json::to_string(&cand.variants).unwrap_or_else(|_| "[]".into());
         crate::store::upsert_vcand_pending(&cand.key, &variants_json, cand.total as i64, now);
         changed = true;
-        if prior.is_none() {
+        if prior.is_none() || undecided {
             fresh.push(cand);
         }
     }

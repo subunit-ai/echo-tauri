@@ -140,18 +140,23 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
     // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1", []);
-    // One-time purge (v0.5.126): the pending vocab suggestions collected before
-    // the fail-closed gatekeeper were full of capitalized ordinary German nouns
-    // (a kind-less server decision fell back to an any-uppercase heuristic).
-    // Wipe the pending queue exactly once — decided rows (ignored/confirmed)
-    // keep their verdicts, and future scans re-nominate through the strict
-    // kind-only gate, so real terms come back and the junk does not.
+    // One-time purge (v0.5.127, supersedes the v0.5.126 pending-only purge): the
+    // suggestion machinery accumulated junk in TWO places — `pending` rows full
+    // of ordinary words (raw finds were shown when the gatekeeper call failed,
+    // and the old any-uppercase fallback waved German nouns through) and `added`
+    // rows from the retired silent auto-add era, whose config entries are long
+    // purged but whose "learned" chips kept rendering. Wipe both exactly once;
+    // `ignored` verdicts survive so retired candidates never re-nag. Real terms
+    // re-enter via the strict curate gate on future scans.
     let user_version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap_or(0);
-    if user_version < 1 {
-        let _ = conn.execute("DELETE FROM vocab_candidates WHERE status = 'pending'", []);
-        let _ = conn.pragma_update(None, "user_version", 1_i64);
+    if user_version < 2 {
+        let _ = conn.execute(
+            "DELETE FROM vocab_candidates WHERE status IN ('pending', 'added')",
+            [],
+        );
+        let _ = conn.pragma_update(None, "user_version", 2_i64);
     }
     *DB.lock() = Some(conn);
     log::info!("store: opened {}", path.display());
