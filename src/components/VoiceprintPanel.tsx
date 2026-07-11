@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Toggle } from "./Toggle";
+import { VoiceprintFigure } from "./VoiceprintFigure";
 
 /**
  * Stimmabdruck — Verwaltung + Visualisierung des persistenten Account-Voiceprints
@@ -33,64 +34,9 @@ type Me = {
 
 const MIN_S = 20;
 const MAX_S = 90;
-
-/** Deterministische Bar-Höhen (kein Math.random — stabil über Renders/Themes). */
-function barHeights(n: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = Math.sin(i * 2.9) * 0.5 + Math.sin(i * 1.3 + 1.7) * 0.35 + Math.sin(i * 0.61 + 4.2) * 0.15;
-    out.push(0.35 + 0.65 * Math.abs(a));
-  }
-  return out;
-}
-
-/**
- * Die sich füllende Stimmabdruck-Visualisierung: radiale Voice-ID-Bars im Kreis.
- * `fill` (0..1) füllt die Bars im Uhrzeigersinn (Akzentfarbe), der Rest bleibt
- * als Silhouette stehen. `live` (0..1) pulst während der Aufnahme zusätzlich
- * die Bar-Länge — dieselbe Grafik ist Status-Anzeige UND Aufnahme-Meter.
- */
-function VoiceprintViz({ fill, live = 0, size = 190 }: { fill: number; live?: number; size?: number }) {
-  const N = 56;
-  const bars = useRef(barHeights(N)).current;
-  const cx = size / 2;
-  const r0 = size * 0.27;
-  const rMax = size * 0.46;
-  const filledUpTo = Math.round(Math.max(0, Math.min(1, fill)) * N);
-  const pct = Math.round(Math.max(0, Math.min(1, fill)) * 100);
-  return (
-    <div className="vp-viz" role="img" aria-label={`Stimmprofil ${pct}%`}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {bars.map((h, i) => {
-          const ang = (i / N) * Math.PI * 2 - Math.PI / 2;
-          const boost = live > 0 ? 0.75 + 0.5 * live * (0.6 + 0.4 * Math.sin(i * 1.7 + Date.now() / 130)) : 1;
-          const len = (rMax - r0) * h * boost;
-          const x1 = cx + Math.cos(ang) * r0;
-          const y1 = cx + Math.sin(ang) * r0;
-          const x2 = cx + Math.cos(ang) * (r0 + len);
-          const y2 = cx + Math.sin(ang) * (r0 + len);
-          const on = i < filledUpTo;
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={on ? "var(--cyan)" : "currentColor"}
-              strokeOpacity={on ? 0.95 : 0.18}
-              strokeWidth={size * 0.016}
-              strokeLinecap="round"
-            />
-          );
-        })}
-      </svg>
-      <div className="vp-viz-center">
-        <div className="vp-viz-pct">{pct}%</div>
-      </div>
-    </div>
-  );
-}
+/** Sättigungs-Ziele der beiden Lern-Quellen — identisch zur Server-Formel in /me. */
+const FAR_TARGET = 3;
+const NEAR_TARGET = 3;
 
 export function VoiceprintPanel() {
   const { t } = useTranslation();
@@ -193,30 +139,38 @@ export function VoiceprintPanel() {
   const completeness = me?.completeness ?? 0;
   const protos = me?.prototypes;
   const fmtDate = (ts?: number | null) => (ts ? new Date(ts * 1000).toLocaleDateString() : "");
+  // Spiegelt die Server-Formel (45 % Kern · 30 % Meeting · 25 % Diktat) — der Abdruck
+  // zeigt damit dieselbe Zahl wie `completeness`, nur aufgeschlüsselt nach Quelle.
+  const coreProg = me?.has_voiceprint ? (me.quality ?? 0) : 0;
+  const farProg = Math.min(1, (protos?.farfield_samples ?? 0) / FAR_TARGET);
+  const nearProg = Math.min(1, (protos?.nearfield_samples ?? 0) / NEAR_TARGET);
 
   return (
     <div className="vp-panel">
       <div className="vp-hero">
-        <VoiceprintViz fill={mode === "record" ? completeness : completeness} live={mode === "record" ? level : 0} />
+        <VoiceprintFigure
+          progress={{ core: coreProg, far: farProg, near: nearProg }}
+          live={level}
+          recording={mode === "record"}
+        />
         <div className="vp-hero-side">
           {me?.has_voiceprint ? (
             <>
-              <div className="vp-state-line">{t("vp.stateStored")}</div>
-              <div className="hint">
-                {t("vp.qualityCore")}: {Math.round(((me.quality ?? 0) as number) * 100)}%
-                {me.updated_at ? ` · ${fmtDate(me.updated_at)}` : ""}
-              </div>
+              <div className="vp-pct">{Math.round(completeness * 100)}%</div>
+              <div className="vp-pct-sub">{t("vp.completeSub")}</div>
               {me.model_match === false && <div className="vp-warn">{t("vp.reenrollHint")}</div>}
               <div className="vp-progress-legend">
                 <div>
                   <span className="vp-dot vp-dot-core" /> {t("vp.legendCore")} ·{" "}
-                  {Math.round(((me.quality ?? 0) as number) * 100)}%
+                  {Math.round(coreProg * 100)}%
                 </div>
                 <div>
-                  <span className="vp-dot vp-dot-far" /> {t("vp.legendMeetings")} · {protos?.farfield_samples ?? 0}/3
+                  <span className="vp-dot vp-dot-far" /> {t("vp.legendMeetings")} ·{" "}
+                  {protos?.farfield_samples ?? 0}/{FAR_TARGET}
                 </div>
                 <div>
-                  <span className="vp-dot vp-dot-near" /> {t("vp.legendDictation")} · {protos?.nearfield_samples ?? 0}/3
+                  <span className="vp-dot vp-dot-near" /> {t("vp.legendDictation")} ·{" "}
+                  {protos?.nearfield_samples ?? 0}/{NEAR_TARGET}
                 </div>
               </div>
             </>

@@ -31,6 +31,18 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.125",
+    date: "2026-07-10",
+    title: { de: "Der Stimmabdruck ist jetzt ein echter Abdruck", en: "Your voiceprint now looks like a real print" },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Statt eines gleichmäßigen Rings zeigt Einstellungen → Stimme jetzt einen echten Fingerabdruck, der sich wie ein Puzzle zusammensetzt: jedes Ridge-Fragment ist ein Stück, und seine Farbe verrät, woher es kam — Kern-Einrichtung, Meeting-Anker oder Diktat-Anker. So siehst du auf einen Blick nicht nur WIE VOLL dein Profil ist, sondern WORAUS es besteht.",
+        en: "Instead of an even ring, Settings → Voice now shows a real fingerprint that assembles like a puzzle: every ridge fragment is a piece, and its colour tells you where it came from — core setup, meeting anchors or dictation anchors. You see at a glance not just HOW COMPLETE your profile is, but what it is MADE OF.",
+      },
+    ],
+  },
+  {
     version: "0.5.124",
     date: "2026-07-10",
     title: {

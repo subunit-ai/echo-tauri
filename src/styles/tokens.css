@@ -70,6 +70,7 @@
   --amber-line: rgba(251, 191, 36, 0.34);
   --red: #fb5d7e;
   --violet: #a78bfa;
+  --emerald: #34d399; /* 3. Quelle im Stimmabdruck (Diktat-Anker); cyan=Kern, violet=Meeting */
   --mint: #6ee6be;
 
   /* ── Long-form prose (transcript / explanations) ── */
@@ -169,6 +170,7 @@
   --amber-line: rgba(217, 119, 6, 0.3);
   --red: #e11d48;
   --violet: #7c5cf0;
+  --emerald: #0d9488; /* trägt auf hellem Grund (emerald-400 wäre zu blass) */
 
   --prose: #27425f;
   --prose2: #33506e;
@@ -234,6 +236,10 @@
   /* accent aliases (--accent/--accent-text/--cyan-ink…) all resolve from --cyan,
      so making it grey turns every var-driven accent monochrome. */
   --cyan: #e6e6e8;
+  /* Stimmabdruck: die drei Quellen dürfen hier keine Farbe tragen — sie bleiben
+     über die HELLIGKEIT unterscheidbar (Kern hell → Meeting → Diktat dunkler). */
+  --violet: #a8a8ab;
+  --emerald: #78787c;
   --cyan-d: #d0d0d2;
   --cyan-ink: #f6f6f6;
 
