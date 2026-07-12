@@ -1226,7 +1226,15 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
 
         {tab === "voice" && (
           <Group title={t("settings.secVoiceprint")}>
-            <VoiceprintPanel />
+            <VoiceprintPanel
+              seed={
+                c.subunit_workspace_id
+                  ? "ws:" + c.subunit_workspace_id
+                  : c.account_email
+                    ? "em:" + c.account_email
+                    : "local"
+              }
+            />
           </Group>
         )}
 

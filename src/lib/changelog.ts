@@ -31,6 +31,26 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.128",
+    date: "2026-07-12",
+    title: {
+      de: "Dein Stimmabdruck als Spektral-Rosette",
+      en: "Your voiceprint as a spectral rosette",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Stimmabdruck zeigt jetzt deine Stimme statt eines Fingerabdrucks: eine Spektral-Rosette — dein Klangspektrum, im Kreis aufgewickelt. Winkel = Zeit, Radius = Tonhöhe, Bögen = Obertonenergie. Jedes Konto bekommt sein eigenes, unverwechselbares Muster, und wie bisher füllt sich das Bild Stück für Stück aus deinen drei Quellen (Einrichtung, Meetings, Diktate).",
+        en: "Your voiceprint now shows your voice instead of a fingerprint: a spectral rosette — your sound spectrum wound into a circle. Angle = time, radius = pitch, arcs = harmonic energy. Every account gets its own distinctive pattern, and as before the picture fills in piece by piece from your three sources (setup, meetings, dictation).",
+      },
+      {
+        kind: "feature",
+        de: "Neues Lade-Erlebnis: Während der Aufnahme und der Auswertung siehst du eine schwingende Chladni-Platte — Sand, der sich zu Klangmustern ordnet und mit deiner Stimme mitwandert. Beim Auswerten morpht das Muster ruhig durch die Frequenzen, bis dein Abdruck fertig ist.",
+        en: "New loading experience: during recording and analysis you see a vibrating Chladni plate — sand settling into sound patterns that shift with your voice. While analyzing, the pattern calmly morphs through the frequencies until your print is ready.",
+      },
+    ],
+  },
+  {
     version: "0.5.127",
     date: "2026-07-11",
     title: { de: "Vorschläge: nur noch echte Begriffe", en: "Suggestions: real terms only" },

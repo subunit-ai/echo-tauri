@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { ChladniLoader } from "./ChladniLoader";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Toggle } from "./Toggle";
 import { VoiceprintFigure } from "./VoiceprintFigure";
@@ -38,7 +39,7 @@ const MAX_S = 90;
 const FAR_TARGET = 3;
 const NEAR_TARGET = 3;
 
-export function VoiceprintPanel() {
+export function VoiceprintPanel({ seed = "local" }: { seed?: string }) {
   const { t } = useTranslation();
   const [me, setMe] = useState<Me | null>(null);
   const [err, setErr] = useState("");
@@ -148,11 +149,18 @@ export function VoiceprintPanel() {
   return (
     <div className="vp-panel">
       <div className="vp-hero">
-        <VoiceprintFigure
-          progress={{ core: coreProg, far: farProg, near: nearProg }}
-          live={level}
-          recording={mode === "record"}
-        />
+        {mode === "record" || mode === "uploading" ? (
+          // Chladni-Platte: beim Sprechen morpht der Sand mit dem Pegel, bei der
+          // Auswertung läuft er selbstständig durch die Moden (das Ladesymbol).
+          <ChladniLoader mode={mode === "record" ? "speak" : "eval"} level={level} />
+        ) : (
+          <VoiceprintFigure
+            progress={{ core: coreProg, far: farProg, near: nearProg }}
+            live={level}
+            recording={false}
+            seed={seed}
+          />
+        )}
         <div className="vp-hero-side">
           {me?.has_voiceprint ? (
             <>
