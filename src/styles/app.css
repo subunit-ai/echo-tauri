@@ -2740,8 +2740,17 @@ select:hover {
   display: flex; align-items: center; gap: 28px;
   padding: 14px 6px 20px;
 }
-/* Fingerabdruck: Ridge-Fragmente, die sich wie ein Puzzle zusammensetzen. */
+/* Spektral-Rosette: Bogen-Teile, die sich wie ein Puzzle zusammensetzen. */
 .vp-fp { color: var(--ink); flex: 0 0 auto; line-height: 0; }
+/* Chladni-Platte (Loader beim Sprechen/Auswerten): Korn-Farbe = currentColor. */
+.vp-plate {
+  flex: 0 0 auto;
+  line-height: 0;
+  color: var(--ink);
+  background: var(--bg-deep, rgba(0, 0, 0, 0.2));
+  border-radius: 16px;
+  overflow: hidden;
+}
 .vp-fp-off {
   fill: none;
   stroke: currentColor;

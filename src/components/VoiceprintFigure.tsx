@@ -1,23 +1,23 @@
 import { useMemo } from "react";
 
 /**
- * Der Stimmabdruck als echter FINGERABDRUCK, der sich wie ein Puzzle zusammensetzt
- * (TJ 2026-07-10 — ein gleichmäßiger Ring log: er suggeriert uniformes Wachstum,
- * dabei steuern DREI unabhängige Quellen Stücke bei).
+ * Der Stimmabdruck als SPEKTRAL-ROSETTE — das Spektrogramm der Stimme, polar
+ * aufgewickelt (TJ 2026-07-12; löst den Fingerabdruck aus v0.5.125 ab, der als
+ * falsche Biometrie empfunden wurde: er erzählte Haut, nicht Klang).
  *
- * Muster: Sherlock-Monro-Orientierungsfeld einer Loop-Singularität —
- *   θ(z) = ½·(arg(z − delta) − arg(z − core))
- * Die Ridges sind Streamlines dieses Felds, gleichmäßig verteilt getract (nur säen,
- * wo noch kein Ridge in d_sep-Nähe liegt). Kern-Schleife und Delta entstehen dadurch
- * von selbst — kein Zielscheiben-Ring.
+ * Geometrie: Winkel = Zeit, Radius = Frequenz, Bögen = Obertonenergie. Ein
+ * langsam wandernder Grundton legt Obertonreihen (k·f0) über die Ringe, Phrasen
+ * und Pausen entstehen aus der Aktivitäts-Hüllkurve — man sieht buchstäblich
+ * Sprache im Kreis laufen. Dicht wie eine Iris, streng geometrisch.
  *
- * Puzzle: Jede Ridge zerfällt in Fragmente. Die Fragmente werden ridge-kohärent
- * verstreut (Stücke derselben Linie gehören meist zur selben Quelle — sonst wirkt
- * es wie Konfetti) und nach dem SERVER-Gewicht auf die Quellen verteilt:
- *   45 % Kern (geführtes Enrollment) · 30 % Meeting-Anker · 25 % Diktat-Anker.
- * Jede Quelle füllt ihre Stücke nach ihrem EIGENEN Fortschritt → gefüllte Stücke /
- * alle Stücke entspricht exakt der `completeness` vom Server. Man sieht also nicht
- * nur WIE VOLL das Profil ist, sondern WOHER jedes Stück kam.
+ * Puzzle: unverändert zu v0.5.125 — jeder Bogen ist ein Teil, die Teile werden
+ * sektor-kohärent auf die DREI Quellen verteilt (45 % Kern · 30 % Meeting ·
+ * 25 % Diktat, Server-Formel) und jede Quelle füllt nach ihrem EIGENEN
+ * Fortschritt → gefüllte Teile / alle Teile == `completeness`.
+ *
+ * NEU: `seed` (Account-Key) macht die Rosette PRO PERSON einzigartig — der
+ * Fingerabdruck war für alle User identisch. Deterministisch bleibt sie: kein
+ * Math.random, dasselbe Konto zeigt immer dieselbe Rosette.
  */
 
 type Progress = { core: number; far: number; near: number };
@@ -30,141 +30,95 @@ function h1(n: number): number {
   const s = Math.sin(n * 127.1) * 43758.5453;
   return s - Math.floor(s);
 }
-function fbm2(x: number, y: number): number {
-  return (
-    Math.sin(x * 0.055 + 1.3) * Math.cos(y * 0.048 - 0.7) * 0.55 +
-    Math.sin(x * 0.021 - 2.1) * 0.3 +
-    Math.cos(y * 0.031 + 0.4) * 0.25
-  );
+function seedOf(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+function rng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+
+/** Stimm-Charakter aus dem Seed: Formant-Hüllkurve + Phasen (= Stimmenfarbe). */
+function makeVoice(seed: string) {
+  const r = rng(seedOf("echo-vp:" + seed));
+  const formants: { mu: number; sig: number; amp: number }[] = [];
+  let pos = 0.1 + r() * 0.07;
+  for (let k = 0; k < 4; k++) {
+    formants.push({ mu: pos, sig: 0.05 + r() * 0.05, amp: (k === 0 ? 0.9 : 0.5) + r() * 0.5 });
+    pos += 0.17 + r() * 0.13;
+  }
+  return { formants, ph1: r() * 6.283, ph2: r() * 6.283, ph3: r() * 6.283, wob: 0.6 + r() * 0.9 };
 }
 
-function buildFingerprint(size: number): Piece[] {
-  const R = size * 0.46;
+function buildRosette(size: number, seed: string): Piece[] {
+  const v = makeVoice(seed);
+  const fenv = (x: number) => {
+    let e = 0;
+    for (const f of v.formants)
+      e += f.amp * Math.exp(-((x - f.mu) * (x - f.mu)) / (2 * f.sig * f.sig));
+    return e;
+  };
+  const S = 96; // Sektoren (Zeit)
+  const rings = 17; // Frequenz-Bänder
   const cx = size / 2;
-  const cy = size * 0.5;
-  const core: [number, number] = [cx + R * 0.02, cy - R * 0.22];
-  const delta: [number, number] = [cx - R * 0.34, cy + R * 0.46];
-  const D_SEP = size * 0.0295;
-  const D_TEST = D_SEP * 0.62;
-  const STEP = size * 0.008;
+  const cy = size / 2;
+  const r0 = size * 0.105;
+  const r1 = size * 0.475;
 
-  // Fingerkuppe: Superellipse, unten etwas breiter — bewusst kein Kreis
-  const inMask = (x: number, y: number) => {
-    const u = (x - cx) / (R * 0.86);
-    const v = (y - cy) / (R * 1.02);
-    const vv = v > 0 ? v * 0.94 : v * 1.03;
-    return Math.pow(Math.abs(u), 2.3) + Math.pow(Math.abs(vv), 2.0) < 1;
-  };
-  const theta = (x: number, y: number) =>
-    0.5 * (Math.atan2(y - delta[1], x - delta[0]) - Math.atan2(y - core[1], x - core[0])) +
-    0.1 * fbm2(x - cx, y - cy);
-
-  // Belegungsraster für den Ridge-Abstand
-  const cs = D_TEST;
-  const gw = Math.ceil(size / cs) + 2;
-  const grid = new Map<number, [number, number][]>();
-  const key = (gx: number, gy: number) => gy * gw + gx;
-  const put = (x: number, y: number) => {
-    const k = key(Math.floor(x / cs) + 1, Math.floor(y / cs) + 1);
-    const arr = grid.get(k);
-    if (arr) arr.push([x, y]);
-    else grid.set(k, [[x, y]]);
-  };
-  const tooClose = (x: number, y: number, d: number) => {
-    const gx = Math.floor(x / cs) + 1;
-    const gy = Math.floor(y / cs) + 1;
-    for (let a = -1; a <= 1; a++)
-      for (let b = -1; b <= 1; b++) {
-        const arr = grid.get(key(gx + a, gy + b));
-        if (!arr) continue;
-        for (const [px, py] of arr) {
-          const dx = px - x;
-          const dy = py - y;
-          if (dx * dx + dy * dy < d * d) return true;
-        }
+  const cand: { s: number; g: number; th: number; inten: number }[] = [];
+  for (let s = 0; s < S; s++) {
+    const th = (s / S) * Math.PI * 2;
+    // Phrasen + Pausen: die Stimme ist nicht immer an
+    let act = 0.72 + 0.4 * Math.sin(s * 0.3 + v.ph1) + 0.26 * Math.sin(s * 0.11 * v.wob + v.ph2);
+    act = clamp(act, 0, 1);
+    if (act < 0.15) act = 0;
+    // Grundton wandert langsam → Obertonreihen werden konzentrische Bänder
+    const f0 = 1.15 + 0.55 * Math.sin(s * 0.15 + v.ph3) + 0.25 * Math.sin(s * 0.06 * v.wob + v.ph1);
+    for (let g = 0; g < rings; g++) {
+      let harm = 0;
+      for (let k = 1; k <= 13; k++) {
+        const d = g - k * f0;
+        harm = Math.max(harm, Math.exp(-(d * d) / (2 * 0.55 * 0.55)) * (1 - 0.035 * k));
       }
-    return false;
-  };
-
-  const trace = (sx: number, sy: number): [number, number][] => {
-    const fwd: [number, number][] = [];
-    const bwd: [number, number][] = [];
-    for (const dir of [1, -1]) {
-      let x = sx;
-      let y = sy;
-      let lastX = 0;
-      let lastY = 0;
-      const out = dir === 1 ? fwd : bwd;
-      for (let i = 0; i < 900; i++) {
-        const t = theta(x, y);
-        // Richtungsfeld (kein Vektorfeld): Vorzeichen am vorigen Schritt ausrichten
-        let vx = Math.cos(t) * dir;
-        let vy = Math.sin(t) * dir;
-        if (i > 0 && vx * lastX + vy * lastY < 0) {
-          vx = -vx;
-          vy = -vy;
-        }
-        const t2 = theta(x + vx * STEP * 0.5, y + vy * STEP * 0.5); // RK2
-        let wx = Math.cos(t2);
-        let wy = Math.sin(t2);
-        if (wx * vx + wy * vy < 0) {
-          wx = -wx;
-          wy = -wy;
-        }
-        x += wx * STEP;
-        y += wy * STEP;
-        lastX = wx;
-        lastY = wy;
-        if (!inMask(x, y)) break;
-        if (tooClose(x, y, D_TEST * (i < 4 ? 0.25 : 1))) break;
-        out.push([x, y]);
-      }
+      const inten =
+        act * harm * (0.55 + 0.65 * fenv(g / rings)) * (0.84 + 0.32 * h1(s * 7.7 + g * 3.1));
+      if (inten > 0.09) cand.push({ s, g, th, inten: Math.min(inten, 1) });
     }
-    return bwd.reverse().concat([[sx, sy]], fwd);
-  };
-
-  // Von innen nach außen säen → die Loop-Struktur um den Kern bleibt sauber
-  const seeds: [number, number][] = [];
-  const N = 46;
-  for (let i = 0; i < N; i++)
-    for (let j = 0; j < N; j++) {
-      const x = ((i + 0.5) / N) * size;
-      const y = ((j + 0.5) / N) * size;
-      if (inMask(x, y)) seeds.push([x, y]);
-    }
-  seeds.sort(
-    (a, b) =>
-      Math.hypot(a[0] - core[0], a[1] - core[1]) - Math.hypot(b[0] - core[0], b[1] - core[1]),
-  );
-
-  const ridges: [number, number][][] = [];
-  for (const [sx, sy] of seeds) {
-    if (tooClose(sx, sy, D_SEP)) continue;
-    const line = trace(sx, sy);
-    if (line.length < 8) continue;
-    for (const [x, y] of line) put(x, y);
-    ridges.push(line);
   }
+  cand.sort((a, b) => b.inten - a.inten);
+  const keep = cand.slice(0, 620);
 
-  // Ridges in Fragmente brechen — variable Länge (Puzzleteile, keine Dashes)
-  const pieces: Piece[] = [];
-  ridges.forEach((line, ri) => {
-    let i = 0;
-    let k = 0;
-    while (i < line.length - 3) {
-      const len = Math.round(7 + h1(ri * 9.7 + k * 3.3) * 16);
-      const seg = line.slice(i, Math.min(line.length, i + len));
-      if (seg.length >= 4) {
-        pieces.push({
-          d: "M " + seg.map((p) => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L "),
-          ri,
-        });
-      }
-      i += seg.length + 2 + Math.round(h1(ri * 4.1 + k * 8.9) * 3);
-      k++;
-    }
+  return keep.map((c) => {
+    const rr = r0 + ((c.g + 0.5) * (r1 - r0)) / rings;
+    const half = (Math.PI / S) * (0.65 + 0.95 * c.inten);
+    const a0 = c.th - half;
+    const a1 = c.th + half;
+    const p0x = cx + rr * Math.cos(a0);
+    const p0y = cy + rr * Math.sin(a0);
+    const p1x = cx + rr * Math.cos(a1);
+    const p1y = cy + rr * Math.sin(a1);
+    return {
+      d:
+        "M " + p0x.toFixed(1) + " " + p0y.toFixed(1) +
+        " A " + rr.toFixed(1) + " " + rr.toFixed(1) + " 0 0 1 " +
+        p1x.toFixed(1) + " " + p1y.toFixed(1),
+      // Sektor-kohärente Quellen-Zuordnung: Teile desselben Moments gehören
+      // meist zur selben Quelle (sonst wirkt es wie Konfetti)
+      ri: c.s,
+    };
   });
-  return pieces;
 }
 
 function place(pieces: Piece[], p: Progress): Placed[] {
@@ -205,15 +159,18 @@ export function VoiceprintFigure({
   size = 224,
   live = 0,
   recording = false,
+  seed = "local",
 }: {
   progress: Progress;
   size?: number;
-  /** Mikrofon-Pegel 0..1 — lässt die gesetzten Stücke während der Aufnahme atmen. */
+  /** Mikrofon-Pegel 0..1 — lässt die gesetzten Bögen während der Aufnahme atmen. */
   live?: number;
   recording?: boolean;
+  /** Account-Key (ws:<id> | em:<mail> | local) — jede Person, eigene Rosette. */
+  seed?: string;
 }) {
-  // Das Tracen ist der teure Teil und hängt NUR an der Größe → einmal pro Größe.
-  const geom = useMemo(() => buildFingerprint(size), [size]);
+  // Der Aufbau hängt nur an Größe + Person → einmal pro (size, seed).
+  const geom = useMemo(() => buildRosette(size, seed), [size, seed]);
   const pieces = useMemo(
     () => place(geom, progress),
     [geom, progress.core, progress.far, progress.near], // eslint-disable-line react-hooks/exhaustive-deps
@@ -227,7 +184,7 @@ export function VoiceprintFigure({
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
         {pieces.map((p, i) =>
           p.on ? (
-            // key trägt den Zustand: ein Stück, das NEU dazukommt, wird neu gemountet
+            // key trägt den Zustand: ein Teil, das NEU dazukommt, wird neu gemountet
             // und zeichnet sich dadurch sichtbar ein (das Puzzle setzt sich zusammen).
             <path
               key={`on-${i}`}
@@ -235,7 +192,7 @@ export function VoiceprintFigure({
               d={p.d}
               pathLength={1}
               stroke={COLOR[p.group]}
-              style={{ animationDelay: `${Math.min(p.order * 6, 1400)}ms` }}
+              style={{ animationDelay: `${Math.min(p.order * 4, 1400)}ms` }}
             />
           ) : (
             <path key={`off-${i}`} className="vp-fp-off" d={p.d} />
