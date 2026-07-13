@@ -429,7 +429,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// resize + reposition for size/position, and push the visual settings
 /// (style/color/idle/auto-hide) to the canvas. Called from `set_config`.
 pub fn apply_config(app: &AppHandle) {
-    let (orb_mode, show_bubble, size_mult, position, style, color_idle, color_working, color_done, color_error, idle_pulse, idle_mode, speed, appear, pill_color_mode, pill_reaction, quick) = {
+    let (orb_mode, show_bubble, size_mult, position, style, color_idle, color_working, color_done, color_error, idle_pulse, idle_mode, speed, appear, pill_color_mode, pill_reaction, pill_visual, pill_glow, quick) = {
         let st = app.state::<AppState>();
         let c = st.config.lock();
         (
@@ -448,6 +448,8 @@ pub fn apply_config(app: &AppHandle) {
             c.orb_appear_anim.clone(),
             c.orb_pill_color_mode.clone(),
             c.orb_pill_reaction.clone(),
+            c.orb_pill_visual.clone(),
+            c.orb_pill_glow.clone(),
             // Satellite quick-state so the orb reflects mode/language/cleanup
             // changes made from the main window (Settings / BigModeSwitch) live.
             crate::commands::orb_quick_json(&c),
@@ -512,6 +514,8 @@ pub fn apply_config(app: &AppHandle) {
             "appear": appear,
             "pillColorMode": pill_color_mode,
             "pillReaction": pill_reaction,
+            "pillVisual": pill_visual,
+            "pillGlow": pill_glow,
             "quick": quick,
         }),
     );

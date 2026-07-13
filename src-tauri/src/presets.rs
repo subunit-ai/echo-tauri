@@ -47,6 +47,8 @@ pub fn payload_from_config(c: &Config) -> Value {
         "appear": c.orb_appear_anim,
         "pill_color_mode": c.orb_pill_color_mode,
         "pill_reaction": c.orb_pill_reaction,
+        "pill_visual": c.orb_pill_visual,
+        "pill_glow": c.orb_pill_glow,
         "reactivity": {
             "noise_floor": c.orb_noise_floor,
             "gain": c.orb_gain,
@@ -72,6 +74,8 @@ fn apply_payload(c: &mut Config, p: &Value) {
     if let Some(s) = p.get("appear").and_then(Value::as_str) { c.orb_appear_anim = s.to_string(); }
     if let Some(s) = p.get("pill_color_mode").and_then(Value::as_str) { c.orb_pill_color_mode = s.to_string(); }
     if let Some(s) = p.get("pill_reaction").and_then(Value::as_str) { c.orb_pill_reaction = s.to_string(); }
+    if let Some(s) = p.get("pill_visual").and_then(Value::as_str) { c.orb_pill_visual = s.to_string(); }
+    if let Some(s) = p.get("pill_glow").and_then(Value::as_str) { c.orb_pill_glow = s.to_string(); }
     if let Some(r) = p.get("reactivity") {
         if let Some(v) = r.get("noise_floor").and_then(Value::as_f64) { c.orb_noise_floor = v as f32; }
         if let Some(v) = r.get("gain").and_then(Value::as_f64) { c.orb_gain = v as f32; }

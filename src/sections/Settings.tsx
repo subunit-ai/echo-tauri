@@ -38,13 +38,21 @@ import { SOUND_PRESETS, STOP_SOUND_PRESETS, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
-export type SettingsTab = "allgemein" | "dictation" | "transcription" | "overlay" | "voice" | "account";
+export type SettingsTab =
+  | "allgemein"
+  | "dictation"
+  | "transcription"
+  | "overlay"
+  | "pill"
+  | "voice"
+  | "account";
 type Tab = SettingsTab;
 const TABS: { key: Tab; labelKey: string }[] = [
   { key: "allgemein", labelKey: "settings.tabGeneral" },
   { key: "dictation", labelKey: "settings.tabDictation" },
   { key: "transcription", labelKey: "settings.tabTranscription" },
   { key: "overlay", labelKey: "settings.tabOverlay" },
+  { key: "pill", labelKey: "settings.tabPill" },
   { key: "voice", labelKey: "settings.tabVoice" },
   { key: "account", labelKey: "settings.tabAccount" },
 ];
@@ -415,7 +423,17 @@ function OrbProfiles({ cloudSynced }: { cloudSynced: boolean }) {
  *  here. A "Demo-Stimme" run drives a synthetic speaking envelope so the voice
  *  reaction is visible in-app, and the state legend (idle / active / done /
  *  error) lights up in sync with whatever the demo is currently playing. */
-function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => void }) {
+function OrbConfigurator({
+  c,
+  onStyle,
+  pinStyle,
+}: {
+  c: Config;
+  onStyle: (s: string) => void;
+  // Pin the preview to ONE style (the "Pille" tab always previews the pill,
+  // whatever style the overlay currently runs) — hides the ‹ › style cycler.
+  pinStyle?: string;
+}) {
   const { t } = useTranslation();
   const [demo, setDemo] = useState(true);
   const [previewState, setPreviewState] = useState<EngineState>("idle");
@@ -424,7 +442,7 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
   const [replayToken, setReplayToken] = useState(0);
 
   const visual: OrbVisual = {
-    style: c.orb_overlay_style,
+    style: pinStyle ?? c.orb_overlay_style,
     colors: {
       idle: c.orb_color_idle,
       working: c.orb_color_working,
@@ -441,6 +459,8 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
     appear: c.orb_appear_anim || "bloom",
     pillColorMode: c.orb_pill_color_mode || "color",
     pillReaction: c.orb_pill_reaction || "dynamik",
+    pillVisual: c.orb_pill_visual || "standard",
+    pillGlow: c.orb_pill_glow || "aus",
   };
   // The size slider visibly scales the preview too (clamped to the stage).
   const sizeFactor = c.orb_overlay_size ?? 1;
@@ -472,19 +492,27 @@ function OrbConfigurator({ c, onStyle }: { c: Config; onStyle: (s: string) => vo
   return (
     <div className="orb-config">
       <div className="oc-head">
-        <div className="oc-title">{t("settings.orbConfigurator")}</div>
-        <div className="oc-sub">{t("settings.orbConfiguratorHint")}</div>
+        <div className="oc-title">
+          {t(pinStyle ? "settings.pillConfigurator" : "settings.orbConfigurator")}
+        </div>
+        <div className="oc-sub">
+          {t(pinStyle ? "settings.pillConfiguratorHint" : "settings.orbConfiguratorHint")}
+        </div>
       </div>
       <div className="oc-stage" style={{ minHeight: stageMin }}>
-        <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label={t("settings.orbStylePrev")} title={styleLabel}>
-          ‹
-        </button>
+        {!pinStyle && (
+          <button className="oc-arrow" onClick={() => cycleStyle(-1)} aria-label={t("settings.orbStylePrev")} title={styleLabel}>
+            ‹
+          </button>
+        )}
         <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} replayToken={replayToken} />
-        <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label={t("settings.orbStyleNext")} title={styleLabel}>
-          ›
-        </button>
+        {!pinStyle && (
+          <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label={t("settings.orbStyleNext")} title={styleLabel}>
+            ›
+          </button>
+        )}
       </div>
-      <div className="oc-style-name">{styleLabel}</div>
+      {!pinStyle && <div className="oc-style-name">{styleLabel}</div>}
       <div className="oc-controls">
         <button className={`oc-demo ${demo ? "active" : ""}`} onClick={() => setDemo((d) => !d)}>
           {demo ? `■ ${t("settings.orbDemoStop")}` : `▶ ${t("settings.orbDemoPlay")}`}
@@ -1196,31 +1224,81 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                 ]}
               />
             </Row>
-            <Row name={t("settings.pillColorMode")} hint={t("settings.pillColorModeHint")}>
-              <Sel
-                value={
-                  ["idle_glass", "glass"].includes(c.orb_pill_color_mode)
-                    ? c.orb_pill_color_mode
-                    : "color"
-                }
-                onChange={(v) => set("orb_pill_color_mode", v)}
-                options={[
-                  ["color", t("settings.pillColorModeColor")],
-                  ["idle_glass", t("settings.pillColorModeIdleGlass")],
-                  ["glass", t("settings.pillColorModeGlass")],
-                ]}
-              />
-            </Row>
-            <Row name={t("settings.pillReaction")} hint={t("settings.pillReactionHint")}>
-              <Sel
-                value={c.orb_pill_reaction === "klassisch" ? "klassisch" : "dynamik"}
-                onChange={(v) => set("orb_pill_reaction", v)}
-                options={[
-                  ["dynamik", t("settings.pillReactionDynamik")],
-                  ["klassisch", t("settings.pillReactionKlassisch")],
-                ]}
-              />
-            </Row>
+          </>
+        )}
+
+        {tab === "pill" && (
+          <>
+            {/* The pill's own tab (TJ): everything INSIDE the V2 dome pill in
+                one place — live preview pinned to the pill, the visualizer
+                variants, and the glass options. The two pre-existing rows
+                (color mode, reaction) moved here from the Overlay tab
+                unchanged. Defaults = exactly the shipped Pille v2. */}
+            <OrbConfigurator c={c} onStyle={(v) => set("orb_overlay_style", v)} pinStyle="pill" />
+            {c.orb_overlay_style !== "pill" && (
+              <Row name={t("settings.pillNotActive")} hint={t("settings.pillNotActiveHint")}>
+                <button className="sub-tab" onClick={() => set("orb_overlay_style", "pill")}>
+                  {t("settings.pillActivate")}
+                </button>
+              </Row>
+            )}
+            <Group title={t("settings.secPillBars")}>
+              <Row name={t("settings.pillVisual")} hint={t("settings.pillVisualHint")}>
+                <Sel
+                  value={
+                    ["laufband", "zentrum", "welle", "matrix"].includes(c.orb_pill_visual)
+                      ? c.orb_pill_visual
+                      : "standard"
+                  }
+                  onChange={(v) => set("orb_pill_visual", v)}
+                  options={[
+                    ["standard", t("settings.pillVisualStandard")],
+                    ["laufband", t("settings.pillVisualLaufband")],
+                    ["zentrum", t("settings.pillVisualZentrum")],
+                    ["welle", t("settings.pillVisualWelle")],
+                    ["matrix", t("settings.pillVisualMatrix")],
+                  ]}
+                />
+              </Row>
+              <Row name={t("settings.pillReaction")} hint={t("settings.pillReactionHint")}>
+                <Sel
+                  value={c.orb_pill_reaction === "klassisch" ? "klassisch" : "dynamik"}
+                  onChange={(v) => set("orb_pill_reaction", v)}
+                  options={[
+                    ["dynamik", t("settings.pillReactionDynamik")],
+                    ["klassisch", t("settings.pillReactionKlassisch")],
+                  ]}
+                />
+              </Row>
+            </Group>
+            <Group title={t("settings.secPillGlass")}>
+              <Row name={t("settings.pillGlow")} hint={t("settings.pillGlowHint")}>
+                <Sel
+                  value={["status", "siri"].includes(c.orb_pill_glow) ? c.orb_pill_glow : "aus"}
+                  onChange={(v) => set("orb_pill_glow", v)}
+                  options={[
+                    ["aus", t("settings.pillGlowOff")],
+                    ["status", t("settings.pillGlowStatus")],
+                    ["siri", t("settings.pillGlowSiri")],
+                  ]}
+                />
+              </Row>
+              <Row name={t("settings.pillColorMode")} hint={t("settings.pillColorModeHint")}>
+                <Sel
+                  value={
+                    ["idle_glass", "glass"].includes(c.orb_pill_color_mode)
+                      ? c.orb_pill_color_mode
+                      : "color"
+                  }
+                  onChange={(v) => set("orb_pill_color_mode", v)}
+                  options={[
+                    ["color", t("settings.pillColorModeColor")],
+                    ["idle_glass", t("settings.pillColorModeIdleGlass")],
+                    ["glass", t("settings.pillColorModeGlass")],
+                  ]}
+                />
+              </Row>
+            </Group>
           </>
         )}
 

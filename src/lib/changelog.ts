@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.129",
+    date: "2026-07-13",
+    title: {
+      de: "Deine Pille, dein Look — eigener Einstellungs-Bereich",
+      en: "Your pill, your look — its own settings section",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neuer Reiter „Pille“ in den Einstellungen: alles, was in der Pille passiert, an einem Ort — mit Live-Vorschau.",
+        en: "New “Pill” tab in Settings: everything that happens inside the pill, in one place — with a live preview.",
+      },
+      {
+        kind: "feature",
+        de: "Vier neue Visualizer: Laufband (deine Sprache läuft durch), Zentrum (Ausschläge treiben aus der Mitte nach außen), Welle (leuchtender Wellenzug) und Matrix (Retro-Leuchtpunkte).",
+        en: "Four new visualizers: Ticker (your speech streams through), Center (peaks drift outward from the middle), Wave (a glowing waveform) and Matrix (retro light dots).",
+      },
+      {
+        kind: "feature",
+        de: "Beleuchtung: Das Glas selbst leuchtet und reagiert auf deine Stimme — in der Statusfarbe oder als mehrfarbige Siri-Aurora.",
+        en: "Illumination: the glass itself lights up and reacts to your voice — in the status color or as a multicolor Siri aurora.",
+      },
+      {
+        kind: "improvement",
+        de: "Alles optional: Ohne Änderung bleibt die Pille exakt wie gewohnt.",
+        en: "Everything is optional: untouched, the pill stays exactly as you know it.",
+      },
+    ],
+  },
+  {
     version: "0.5.128",
     date: "2026-07-12",
     title: {
