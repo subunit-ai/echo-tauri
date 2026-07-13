@@ -214,6 +214,8 @@ export function Orb() {
   const appear = useRef("bloom");
   const pillColorMode = useRef("color");
   const pillReaction = useRef("dynamik");
+  const pillVisual = useRef("standard");
+  const pillGlow = useRef("aus");
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
   // Which single satellite is expanded (null = just the icon chips). Hovering a
@@ -239,6 +241,10 @@ export function Orb() {
           pillColorMode.current = c.orb_pill_color_mode;
         if (typeof c.orb_pill_reaction === "string" && c.orb_pill_reaction)
           pillReaction.current = c.orb_pill_reaction;
+        if (typeof c.orb_pill_visual === "string" && c.orb_pill_visual)
+          pillVisual.current = c.orb_pill_visual;
+        if (typeof c.orb_pill_glow === "string" && c.orb_pill_glow)
+          pillGlow.current = c.orb_pill_glow;
       })
       .catch(() => {});
     orbQuick().then(setQuick).catch(() => {});
@@ -260,6 +266,8 @@ export function Orb() {
       appear?: string;
       pillColorMode?: string;
       pillReaction?: string;
+      pillVisual?: string;
+      pillGlow?: string;
       quick?: OrbQuick;
     }>("echo://orb-config", (e) => {
       const p = e.payload;
@@ -276,6 +284,10 @@ export function Orb() {
         pillColorMode.current = p.pillColorMode;
       if (typeof p.pillReaction === "string" && p.pillReaction)
         pillReaction.current = p.pillReaction;
+      if (typeof p.pillVisual === "string" && p.pillVisual)
+        pillVisual.current = p.pillVisual;
+      if (typeof p.pillGlow === "string" && p.pillGlow)
+        pillGlow.current = p.pillGlow;
       if (p.quick) setQuick(p.quick);
     });
     // Engagement from the Rust hit-test loop: shows/hides the islands AND drives
@@ -383,6 +395,8 @@ export function Orb() {
           appear: appear.current,
           pillColorMode: pillColorMode.current,
           pillReaction: pillReaction.current,
+          pillVisual: pillVisual.current,
+          pillGlow: pillGlow.current,
         },
         state.current,
         level.current,

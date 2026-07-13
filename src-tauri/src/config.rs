@@ -182,6 +182,18 @@ pub struct Config {
     /// v0.5.109 centre-out response). New field → container serde(default)
     /// hands existing installs the default, no migration guard needed.
     pub orb_pill_reaction: String,
+    /// Pill VISUALIZER — what plays inside the V2 dome pill while speaking:
+    /// "standard" (default — the nine bars exactly as before) | "laufband"
+    /// (loudness history flows right → left through the bars) | "zentrum"
+    /// (enters at the centre, drifts out to both rims) | "welle" (continuous
+    /// glowing waveform ribbon) | "matrix" (discrete LED dots). New field →
+    /// container serde(default), no migration guard needed.
+    pub orb_pill_visual: String,
+    /// Pill ILLUMINATION — opt-in light inside the glass: "aus" (default —
+    /// today's neutral capsule) | "status" (glows in the state color, follows
+    /// the voice) | "siri" (multicolor aurora riding the voice's timbre).
+    /// New field → container serde(default), no migration guard needed.
+    pub orb_pill_glow: String,
     pub orb_overlay_size: f32,
     pub orb_overlay_auto_hide: bool,
     /// Idle behaviour: "normal" | "dim" (semi-transparent at rest, instead of
@@ -497,6 +509,8 @@ impl Default for Config {
             orb_appear_anim: "bloom".to_string(),
             orb_pill_color_mode: "color".to_string(),
             orb_pill_reaction: "dynamik".to_string(),
+            orb_pill_visual: "standard".to_string(),
+            orb_pill_glow: "aus".to_string(),
             orb_overlay_size: 1.0,
             orb_overlay_auto_hide: false,
             orb_idle_mode: "normal".to_string(),
@@ -1250,6 +1264,19 @@ mod tests {
             Config::default().orb_pill_reaction,
             "dynamik",
             "default reaction is dynamik (what pill2 was)"
+        );
+
+        // The pill customization fields (Settings → "Pille") must default to
+        // today's exact look — the variants are strictly additive/opt-in.
+        assert_eq!(
+            Config::default().orb_pill_visual,
+            "standard",
+            "default pill visualizer is the untouched nine-bar look"
+        );
+        assert_eq!(
+            Config::default().orb_pill_glow,
+            "aus",
+            "default pill illumination is off (neutral glass)"
         );
 
         // The new V1 original pill is a real, selectable style — never migrated away.

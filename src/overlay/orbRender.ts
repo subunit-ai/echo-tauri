@@ -34,6 +34,18 @@ export interface OrbVisual {
    *  "klassisch" (the v0.5.109 centre-out response). Orthogonal to the pill
    *  SHAPE (pill = V2 dome, pillv1 = original 5-bar). */
   pillReaction?: string;
+  /** Pill VISUALIZER — what plays inside the V2 dome pill while speaking:
+   *  "standard" (default — the nine spectrum bars, exactly as before) |
+   *  "laufband" (loudness history flows right → left through the bars) |
+   *  "zentrum" (history enters at the centre and drifts out to both rims) |
+   *  "welle" (one continuous glowing waveform ribbon) | "matrix" (discrete
+   *  LED dots, retro VU). Resting look (dots) is shared by all of them. */
+  pillVisual?: string;
+  /** Pill ILLUMINATION — an opt-in light inside the glass: "aus" (default —
+   *  the neutral capsule, color only in the bars) | "status" (the glass glows
+   *  in the state color and follows the voice) | "siri" (a multicolor aurora
+   *  whose hues ride the voice's timbre — bass blue … treble pink). */
+  pillGlow?: string;
 }
 
 /** Neutral frost tone for the colorless pill modes. */
@@ -77,6 +89,13 @@ export interface OrbAnim {
    *  the recorder's tilt — get a full visual range and quiet voices still
    *  drive the pill (TJ: only the left bars ever moved). Null until used. */
   bandAgc: number[] | null;
+  /** Rolling loudness history for the pill's flow visuals (laufband/zentrum/
+   *  welle): one sample per frame, newest first. Always advanced inside the
+   *  pill case (cheap) so switching variants mid-session starts seamless. */
+  pillHist: number[];
+  /** Smoothed spectral centroid (0 bass … 1 sibilance) for the pill glow —
+   *  the light's position/hue rides the voice's timbre. */
+  pillCent: number;
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -96,6 +115,8 @@ export function newOrbAnim(): OrbAnim {
     col: null,
     barH: null,
     bandAgc: null,
+    pillHist: [],
+    pillCent: 0.5,
   };
 }
 
@@ -1508,6 +1529,35 @@ export function drawOrb(
         ? an.pulse
         : Math.max(an.pulse * 0.9, onset ? Math.min(1, 0.4 + lvl * 0.6) : 0);
 
+      // Opt-in customization (Settings → "Pille"): which visualizer plays in
+      // the glass and whether the glass itself is illuminated. Both default
+      // to today's exact look — unknown values fall through to the default
+      // branches, so a stale preset can never break the pill.
+      const viz = v.pillVisual ?? "standard";
+      const glow = v.pillGlow ?? "aus";
+      const flowViz = viz === "laufband" || viz === "zentrum";
+      // Rolling loudness history for the flow visuals — one sample per frame,
+      // newest first. Blend of broadband level and low-mid band: the envelope
+      // that reads as "my voice going in".
+      {
+        const amp = speaking ? Math.min(1, 0.55 * lvl + 0.5 * bandAt(0.3)) : 0;
+        an.pillHist.unshift(Number.isFinite(amp) ? amp : 0);
+        if (an.pillHist.length > 240) an.pillHist.length = 240;
+      }
+      // Smoothed spectral centroid for the glow — where the voice's energy
+      // sits right now (0 bass … 1 sibilance); the light leans toward it.
+      if (glow !== "aus") {
+        let s = 0;
+        let sw = 0;
+        for (let i = 0; i < 16; i++) {
+          s += an.bandEnv[i];
+          sw += an.bandEnv[i] * i;
+        }
+        const c0 = speaking && s > 0.02 ? sw / s / 15 : 0.5;
+        an.pillCent += (c0 - an.pillCent) * 0.06;
+        if (!Number.isFinite(an.pillCent)) an.pillCent = 0.5; // Selbstheilung
+      }
+
       // Longer + slimmer than v1 (TJ: mehr horizontale Länge).
       const W = size * 0.98;
       const H = W * 0.32;
@@ -1529,10 +1579,24 @@ export function drawOrb(
       };
 
       // 1) ambient halo — NEUTRAL white and very soft; the glass must not be
-      //    tinted by the state (color lives only in the bars).
+      //    tinted by the state (color lives only in the bars). With the opt-in
+      //    illumination the halo takes the light's tint instead — the pill
+      //    visibly radiates ("beleuchtet"), not just its inside.
+      const haloA = 0.14 + 0.1 * energy + 0.1 * an.pulse;
       ctx.save();
-      ctx.shadowColor = `rgba(255,255,255,${0.14 + 0.1 * energy + 0.1 * an.pulse})`;
-      ctx.shadowBlur = size * (0.05 + 0.03 * energy);
+      ctx.shadowColor =
+        glow === "status"
+          ? hexA(base, haloA + 0.24)
+          : glow === "siri"
+            ? hexA("#8f7bff", haloA + 0.24)
+            : `rgba(255,255,255,${haloA})`;
+      ctx.shadowBlur =
+        size *
+        (0.05 +
+          0.03 * energy +
+          // extra radiance ONLY for the known illumination modes — an unknown
+          // value must render byte-identical to the default (fall-through)
+          (glow === "status" || glow === "siri" ? 0.025 : 0));
       ctx.fillStyle = "rgba(255,255,255,0.04)";
       capsule();
       ctx.fill();
@@ -1556,6 +1620,71 @@ export function drawOrb(
       capsule();
       ctx.fillStyle = body;
       ctx.fill();
+
+      // 2b) inner illumination (opt-in "Beleuchtung", Settings → Pille): the
+      //     glass itself lights up and follows the voice. "status" = one soft
+      //     light in the smoothed state color that leans toward the voice's
+      //     spectral centroid; "siri" = a drifting multicolor aurora whose
+      //     hues ride the timbre (bass → blue, mids → violet, treble → pink)
+      //     and whose brightness rides the level. Clipped to the capsule and
+      //     screen-blended over the smoke so it reads as light IN the glass,
+      //     never as a painted tint. Default "aus" skips all of this.
+      if (glow === "status" || glow === "siri") {
+        const gEn = speaking
+          ? 0.5 + 0.5 * Math.min(1, lvl * 1.15 + an.pulse * 0.25)
+          : idleStill
+            ? 0.26
+            : 0.26 + 0.1 * Math.sin(ph * 0.045);
+        ctx.save();
+        capsule();
+        ctx.clip();
+        ctx.globalCompositeOperation = "screen";
+        if (glow === "status") {
+          const gx = cx + (an.pillCent - 0.5) * W * 0.55;
+          const g = ctx.createRadialGradient(gx, cy, 0, gx, cy, W * 0.5);
+          g.addColorStop(0, hexA(base, 0.52 * gEn));
+          g.addColorStop(0.55, hexA(base, 0.24 * gEn));
+          g.addColorStop(1, hexA(base, 0));
+          ctx.fillStyle = g;
+          ctx.fillRect(x0, y0, W, H);
+        } else {
+          // Siri aurora — three lights, each tied to a spectral region so the
+          // dominant hue literally answers the voice: speak deep and the blue
+          // lead swells, sibilants push the pink. At rest they drift gently.
+          const AURORA: [string, number][] = [
+            ["#4a8cff", 0.1], // blue ← bass
+            ["#a86bff", 0.45], // violet ← mids
+            ["#ff5fa2", 0.82], // pink ← treble
+          ];
+          // full-width wash first — the whole glass reads lit, the blobs on
+          // top give the light its motion
+          const wash = ctx.createLinearGradient(x0, cy, x0 + W, cy);
+          wash.addColorStop(0, hexA(AURORA[0][0], 0.16 * gEn));
+          wash.addColorStop(0.5, hexA(AURORA[1][0], 0.14 * gEn));
+          wash.addColorStop(1, hexA(AURORA[2][0], 0.16 * gEn));
+          ctx.fillStyle = wash;
+          ctx.fillRect(x0, y0, W, H);
+          for (let k = 0; k < AURORA.length; k++) {
+            const [colK, region] = AURORA[k];
+            const wob = Math.sin(ph * 0.011 + k * 2.09);
+            const gx =
+              cx +
+              wob * W * 0.24 +
+              (speaking ? (an.pillCent - 0.5) * W * 0.3 : 0) +
+              (region - 0.5) * W * 0.22;
+            const gy = cy + Math.sin(ph * 0.017 + k * 1.7) * H * 0.16;
+            const wgt = speaking ? 0.35 + 0.65 * bandNormAt(region) : 0.55 + 0.2 * wob;
+            const rr = W * (0.3 + 0.06 * Math.sin(ph * 0.021 + k * 1.3));
+            const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, rr);
+            g.addColorStop(0, hexA(colK, 0.6 * gEn * wgt));
+            g.addColorStop(0.6, hexA(colK, 0.26 * gEn * wgt));
+            g.addColorStop(1, hexA(colK, 0));
+            ctx.fillStyle = g;
+            ctx.fillRect(x0, y0, W, H);
+          }
+        }
+        ctx.restore();
+      }
 
       // 3) specular streak (top-left), clipped to the glass; sweeps in from
       //    the left while the pill materializes (light catching the lens).
@@ -1665,6 +1794,83 @@ export function drawOrb(
       ctx.save();
       ctx.shadowColor = hexA(base, 0.7);
       ctx.shadowBlur = Math.max(3, H * 0.18);
+      if (speaking && viz === "welle") {
+        // ★ Welle (Settings → Pille): a live oscilloscope trace — ONE glowing
+        // line whose amplitude is the loudness history and whose carrier
+        // phase advances with age, so the whole waveform visibly streams
+        // right → left while you speak. (A filled mirrored envelope was the
+        // first cut and read as a blob at pill size — the single line is the
+        // elegant, instantly-readable "voice wave".) Amplitude tapers toward
+        // the rims (the lens feel); the nine bar heights keep tracking the
+        // trace's envelope so the release morph starts seamless.
+        const M = 72;
+        const slot = Math.max(2, Math.min(20, 4 / sp));
+        const reach = (N - 1) * slot; // history span across the pill
+        const sampleAt = (k: number): { x: number; env: number; age: number } => {
+          const u = (k / (M - 1)) * 2 - 1;
+          const uL = u * (1.1 - 0.22 * u * u);
+          const domeY = 1.08 - 0.16 * uL * uL;
+          const edge = 1 - 0.4 * Math.pow(Math.abs(uL), 3);
+          const age = ((M - 1 - k) / (M - 1)) * reach;
+          const a0 = Math.floor(age);
+          const f = age - a0;
+          const h0 = an.pillHist[a0] ?? 0;
+          const h1 = an.pillHist[a0 + 1] ?? 0;
+          const h2 = an.pillHist[a0 + 2] ?? 0;
+          const h3 = an.pillHist[a0 + 3] ?? 0;
+          // 4-tap smoothing — per-frame samples are too jittery for a line
+          const sm = (h0 + (h1 - h0) * f) * 0.5 + h1 * 0.2 + h2 * 0.18 + h3 * 0.12;
+          return {
+            x: cx + (uL * span) / 2,
+            env:
+              H *
+              Math.min(0.4, (0.045 + 0.36 * Math.pow(sm, 0.9)) * domeY) *
+              Math.pow(edge, 0.7),
+            age,
+          };
+        };
+        const mzA =
+          ap < 1 && apStyle !== "none" && apStyle !== "fade"
+            ? Math.max(0, Math.min(1, (ap - 0.3) / 0.4))
+            : 1;
+        if (mzA > 0) {
+          const pts: { x: number; y: number }[] = [];
+          for (let k = 0; k < M; k++) {
+            const p = sampleAt(k);
+            // carrier rides the AGE: at a fixed x the phase advances every
+            // frame → the wave itself streams leftward with the history
+            pts.push({ x: p.x, y: cy - p.env * Math.sin(p.age * 0.55) });
+          }
+          const trace = () => {
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let k = 1; k < M; k++) {
+              const mx = (pts[k - 1].x + pts[k].x) / 2;
+              const my = (pts[k - 1].y + pts[k].y) / 2;
+              ctx.quadraticCurveTo(pts[k - 1].x, pts[k - 1].y, mx, my);
+            }
+            ctx.lineTo(pts[M - 1].x, pts[M - 1].y);
+          };
+          // wide soft pass = the light body, narrow bright pass = the trace
+          ctx.strokeStyle = hexA(base, 0.22 * mzA);
+          ctx.lineWidth = Math.max(3, H * 0.16);
+          trace();
+          ctx.stroke();
+          ctx.strokeStyle = hexA(base, 0.95 * mzA);
+          ctx.lineWidth = Math.max(1.4, H * 0.055);
+          trace();
+          ctx.stroke();
+        }
+        // hand the envelope to the bar smoother (seamless state morphs)
+        for (let i = 0; i < N; i++) {
+          const p = sampleAt(Math.round((i / (N - 1)) * (M - 1)));
+          if (!Number.isFinite(an.barH[i])) an.barH[i] = 0;
+          an.barH[i] += (p.env * 2 - an.barH[i]) * 0.5;
+        }
+        ctx.restore();
+        ctx.lineCap = "butt";
+        break;
+      }
       for (let i = 0; i < N; i++) {
         const u = (i - (N - 1) / 2) / ((N - 1) / 2); // -1..1 across the pill
         const uL = u * (1.1 - 0.22 * u * u); // dome: centre magnified, rims squeezed
@@ -1673,7 +1879,24 @@ export function drawOrb(
         const bx = cx + (uL * span) / 2;
 
         let tH: number;
-        if (speaking && spk) {
+        if (speaking && flowViz) {
+          // "Laufband"/"Zentrum" (Settings → Pille): the loudness history
+          // flows THROUGH the nine bars — each bar reads the history at an
+          // age proportional to its distance from the entry edge ("laufband":
+          // speech runs in on the right and marches left) or from the centre
+          // ("zentrum": syllables surface in the middle and drift out to both
+          // rims). Fractional reads make the wave travel smoothly instead of
+          // stepping; the speed slider drives the travel (frames per bar).
+          const slot = Math.max(2, Math.min(20, 4 / sp));
+          const age =
+            (viz === "laufband" ? N - 1 - i : Math.abs(i - (N - 1) / 2) * 2) * slot;
+          const a0 = Math.floor(age);
+          const f = age - a0;
+          const h0 = an.pillHist[a0] ?? 0;
+          const h1 = an.pillHist[a0 + 1] ?? 0;
+          const sm = h0 + (h1 - h0) * f;
+          tH = H * Math.min(0.85, 0.09 + 0.83 * Math.pow(sm, 0.8));
+        } else if (speaking && spk) {
           // "Dynamik": per-bar frequency colouring + flatter shape + more
           // contrast — every bar plays its own game (see the block above).
           const resp = Math.pow(spk[i], 0.85);
@@ -1715,11 +1938,13 @@ export function drawOrb(
         // State edges (release → transcribing → idle) keep the slow morph.
         if (!Number.isFinite(an.barH[i])) an.barH[i] = 0; // Selbstheilung
         const kBar = speaking
-          ? reactionDyn
-            ? tH > an.barH[i]
-              ? 0.32 + 0.42 * PHI[i]
-              : 0.14 + 0.16 * PHI[i]
-            : 0.55 // klassisch: the v0.5.109 uniform snap
+          ? flowViz
+            ? 0.5 // flow visuals: the history is already smooth — follow crisply
+            : reactionDyn
+              ? tH > an.barH[i]
+                ? 0.32 + 0.42 * PHI[i]
+                : 0.14 + 0.16 * PHI[i]
+              : 0.55 // klassisch: the v0.5.109 uniform snap
           : 0.16;
         an.barH[i] += (tH - an.barH[i]) * kBar;
         let hBar = an.barH[i];
@@ -1741,6 +1966,22 @@ export function drawOrb(
           ctx.beginPath();
           ctx.arc(bx, cy, (barW / 2) * Math.max(1, hBar / barW), 0, Math.PI * 2);
           ctx.fill();
+        } else if (viz === "matrix" && hBar > barW * 2.6) {
+          // ★ Matrix (Settings → Pille): the bar's smoothed height quantises
+          // into a column of discrete LED dots growing from the centre —
+          // retro VU. The height pipeline (reaction, AGC, morphs) is shared
+          // with the bars; only the drawing is discretised. Below the 2.6×
+          // threshold (resting dots, the idle breathing crest, tiny release
+          // tails) matrix falls through to the standard drawing, so at rest
+          // it is pixel-identical to the standard pill.
+          const nD = Math.max(2, Math.min(5, Math.round(hBar / (barW * 1.55))));
+          const gapD = Math.min(barW * 1.7, hBar / (nD - 1));
+          ctx.fillStyle = hexA(base, 0.92 * edgeA);
+          for (let j = 0; j < nD; j++) {
+            ctx.beginPath();
+            ctx.arc(bx, cy + (j - (nD - 1) / 2) * gapD, barW / 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
         } else {
           ctx.strokeStyle = hexA(base, 0.92 * edgeA);
           ctx.lineWidth = barW;

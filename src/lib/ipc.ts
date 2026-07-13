@@ -43,6 +43,10 @@ export interface Config {
   orb_pill_color_mode: string;
   /** Pill reaction type (V2 dome bars): "dynamik" | "klassisch". */
   orb_pill_reaction: string;
+  /** Pill visualizer: "standard" | "laufband" | "zentrum" | "welle" | "matrix". */
+  orb_pill_visual: string;
+  /** Pill illumination: "aus" | "status" | "siri". */
+  orb_pill_glow: string;
   /** How the islands are revealed: "hover" | "click". */
   orb_trigger: string;
   orb_speed: number;
