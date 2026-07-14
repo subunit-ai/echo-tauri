@@ -976,6 +976,8 @@
     "errBusy": "Gerade läuft eine andere Aufnahme — bitte kurz warten.",
     "errMic": "Mikrofon konnte nicht gestartet werden — Gerät in den Einstellungen prüfen.",
     "errChange": "Änderung fehlgeschlagen — bitte nochmal versuchen.",
-    "completeSub": "deines Stimmprofils"
+    "completeSub": "deines Stimmprofils",
+    "figFromTimbre": "Aus deinem Klang gezeichnet",
+    "figFromVoice": "Aus deiner Stimme gezeichnet · dein Klangprofil kommt beim nächsten Diktat dazu"
   }
 }
