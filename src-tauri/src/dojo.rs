@@ -136,6 +136,27 @@ pub const BETTER_TASKS: &[&str] = &[
     "Die Lösung ist gut und macht insgesamt einen schönen Eindruck.",
 ];
 
+/// Prompt-Golf tasks — "get an AI to do X" in as few, as precise words as
+/// possible. The user SPEAKS the prompt; it's scored on the prompt rubric plus a
+/// brevity bonus (fewest words, cleanest ask wins).
+pub const GOLF_TASKS: &[&str] = &[
+    "Bring eine KI dazu, einen wöchentlichen Statusreport aus Stichpunkten zu bauen.",
+    "Bring eine KI dazu, eine Einladung zu einem Termin höflich abzulehnen.",
+    "Bring eine KI dazu, einen Code-Abschnitt zu reviewen und Risiken zu nennen.",
+    "Bring eine KI dazu, einen langen Text in fünf Stichpunkten zusammenzufassen.",
+    "Bring eine KI dazu, eine E-Mail an einen Kunden freundlich, aber bestimmt zu formulieren.",
+    "Bring eine KI dazu, drei Namensvorschläge für ein Produkt zu liefern.",
+    "Bring eine KI dazu, einen Fehler im Code zu finden und die Ursache zu erklären.",
+    "Bring eine KI dazu, einen Fachtext für Einsteiger verständlich zu erklären.",
+    "Bring eine KI dazu, eine Tabelle mit Vor- und Nachteilen zu erstellen.",
+    "Bring eine KI dazu, einen Tweet mit maximal 200 Zeichen zu schreiben.",
+    "Bring eine KI dazu, aus Notizen eine klare Aufgabenliste zu machen.",
+    "Bring eine KI dazu, ein Meeting-Protokoll in Entscheidungen und To-dos zu gliedern.",
+    "Bring eine KI dazu, einen Satz in drei verschiedenen Tonlagen umzuschreiben.",
+    "Bring eine KI dazu, eine Idee mit einem konkreten Beispiel zu belegen.",
+    "Bring eine KI dazu, Rückfragen zu stellen, bevor sie eine Aufgabe löst.",
+];
+
 // ── Deterministic per-day exercise pick ──────────────────────────────────────
 
 /// djb2 (matches `analysis::pick_word_of_day`'s hash spirit) — stable across
@@ -152,6 +173,7 @@ pub enum Kind {
     Gauntlet,
     Tabu,
     Better,
+    Golf,
 }
 
 impl Kind {
@@ -160,6 +182,7 @@ impl Kind {
             Kind::Gauntlet => "gauntlet",
             Kind::Tabu => "tabu",
             Kind::Better => "better",
+            Kind::Golf => "golf",
         }
     }
 }
@@ -181,10 +204,11 @@ pub struct Exercise {
 /// task within that kind's catalog — same pattern as
 /// `analysis::pick_word_of_day`. Both inputs pure ⇒ trivially testable.
 pub fn pick_exercise(day: &str, day_num: i64) -> Exercise {
-    let kind = match day_num.rem_euclid(3) {
+    let kind = match day_num.rem_euclid(4) {
         0 => Kind::Gauntlet,
         1 => Kind::Tabu,
-        _ => Kind::Better,
+        2 => Kind::Better,
+        _ => Kind::Golf,
     };
     let h = djb2(day) as usize;
     match kind {
@@ -212,6 +236,15 @@ pub fn pick_exercise(day: &str, day_num: i64) -> Exercise {
             taboo: None,
             weak_sentence: Some(BETTER_TASKS[h % BETTER_TASKS.len()]),
         },
+        // Golf reuses `topic` for the "get an AI to do X" task string (dojo_today
+        // returns it under "topic", same as the Gauntlet).
+        Kind::Golf => Exercise {
+            kind,
+            topic: Some(GOLF_TASKS[h % GOLF_TASKS.len()]),
+            term: None,
+            taboo: None,
+            weak_sentence: None,
+        },
     }
 }
 
@@ -236,6 +269,10 @@ pub struct Breakdown {
     pub elevated: i64,
     /// True when the take was too short to score (below the word/second floor).
     pub too_short: bool,
+    /// Prompt-Golf only: the 5-criteria rubric booleans (goal/context/…). None
+    /// for the spoken drills, which leave `fillers`/`violations`/… as their signal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rubric: Option<serde_json::Value>,
 }
 
 fn clamp_score(raw: i64) -> i64 {
@@ -313,6 +350,32 @@ pub fn score_better(tokens: &[String], weak_hits: i64, vague_hits: i64) -> (i64,
     (clamp_score(raw), bd)
 }
 
+/// Below this many spoken words a golf prompt earns the brevity bonus.
+const GOLF_TERSE_WORDS: usize = 40;
+/// Above this many words the prompt is rambling — a length malus.
+const GOLF_VERBOSE_WORDS: usize = 80;
+const GOLF_TERSE_BONUS: i64 = 10;
+const GOLF_VERBOSE_PENALTY: i64 = 20;
+
+/// Prompt-Golf: score the SPOKEN prompt on the 5-criteria rubric (scaled to a
+/// 90-point ceiling: ÷20 ×18) plus a brevity bonus (≤ 40 words +10) minus a
+/// length malus (> 80 words −20), clamped 0..100. `fillers`/`violations`/… stay
+/// neutral; the rubric booleans ride along in `Breakdown::rubric`.
+pub fn score_golf(tokens: &[String], text: &str) -> (i64, Breakdown) {
+    let words = tokens.len();
+    let (rubric_score, rubric) = crate::prompt_coach::score_prompt(text); // 0..100, steps of 20
+    let base = rubric_score / 20 * 18; // 0..90
+    let mut raw = base;
+    if words <= GOLF_TERSE_WORDS {
+        raw += GOLF_TERSE_BONUS;
+    }
+    if words > GOLF_VERBOSE_WORDS {
+        raw -= GOLF_VERBOSE_PENALTY;
+    }
+    let bd = Breakdown { words, rubric: Some(rubric), ..Default::default() };
+    (clamp_score(raw), bd)
+}
+
 /// Score today's drill against the spoken transcript. Returns `(score, kind,
 /// breakdown)`. Pure given the transcript + the day's exercise; the command
 /// layer supplies the transcript and the filler-count inputs.
@@ -341,6 +404,7 @@ fn score_for(
             let vague = tokens.iter().filter(|t| analysis::is_discourse_filler(t)).count() as i64;
             score_better(&tokens, weak, vague)
         }
+        Kind::Golf => score_golf(&tokens, text),
     }
 }
 
@@ -518,6 +582,7 @@ mod tests {
         assert!(GAUNTLET_TOPICS.len() >= 20, "gauntlet {}", GAUNTLET_TOPICS.len());
         assert!(TABU_TASKS.len() >= 20, "tabu {}", TABU_TASKS.len());
         assert!(BETTER_TASKS.len() >= 20, "better {}", BETTER_TASKS.len());
+        assert!(GOLF_TASKS.len() >= 15, "golf {}", GOLF_TASKS.len());
         for t in TABU_TASKS {
             assert_eq!(t.taboo.len(), 3);
             for w in t.taboo {
@@ -642,17 +707,19 @@ mod tests {
 
     #[test]
     fn pick_exercise_kind_rotates_daily() {
-        // Three consecutive day numbers must cycle through all three kinds.
+        // Four consecutive day numbers must cycle through all four kinds.
         let k0 = pick_exercise("2026-01-01", 0).kind;
         let k1 = pick_exercise("2026-01-02", 1).kind;
         let k2 = pick_exercise("2026-01-03", 2).kind;
         let k3 = pick_exercise("2026-01-04", 3).kind;
+        let k4 = pick_exercise("2026-01-05", 4).kind;
         assert_eq!(k0, Kind::Gauntlet);
         assert_eq!(k1, Kind::Tabu);
         assert_eq!(k2, Kind::Better);
-        assert_eq!(k3, Kind::Gauntlet); // wraps
+        assert_eq!(k3, Kind::Golf);
+        assert_eq!(k4, Kind::Gauntlet); // wraps
         // Negative day numbers (rem_euclid) still land in-range.
-        assert_eq!(pick_exercise("1969-12-31", -1).kind, Kind::Better);
+        assert_eq!(pick_exercise("1969-12-31", -1).kind, Kind::Golf);
     }
 
     #[test]
@@ -663,5 +730,29 @@ mod tests {
         assert!(t.term.is_some() && t.taboo.is_some() && t.topic.is_none());
         let b = pick_exercise("2026-01-03", 2);
         assert!(b.weak_sentence.is_some() && b.term.is_none() && b.topic.is_none());
+        // Golf carries its task in `topic`, everything else empty.
+        let gf = pick_exercise("2026-01-04", 3);
+        assert_eq!(gf.kind, Kind::Golf);
+        assert!(gf.topic.is_some() && gf.term.is_none() && gf.weak_sentence.is_none());
+    }
+
+    #[test]
+    fn golf_short_precise_beats_rambling() {
+        // A short, precise prompt hits 4 rubric criteria (goal/constraints/format/
+        // negative) → 80/100 → base 72 + brevity 10 = 82.
+        let precise = "Erstelle eine Tabelle mit genau 3 Zeilen, nicht mehr.";
+        let ptoks = analysis::tokenize(precise);
+        let (s, bd) = score_golf(&ptoks, precise);
+        assert!(s >= 70, "precise golf prompt should score high, was {s}");
+        assert!(bd.rubric.is_some(), "golf breakdown carries the rubric");
+        assert_eq!(bd.violations.len(), 0); // spoken-drill fields stay neutral
+        assert_eq!(bd.fillers, 0);
+        // A long, rambling prompt with no rubric markers → base low, length malus.
+        let rambly_text = vec!["blah"; 85].join(" ");
+        let rtoks = analysis::tokenize(&rambly_text);
+        assert_eq!(rtoks.len(), 85);
+        let (rs, _) = score_golf(&rtoks, &rambly_text);
+        assert!(rs < 40, "rambling golf prompt should score low, was {rs}");
+        assert!(rs < s, "precise must beat rambling");
     }
 }

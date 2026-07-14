@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.139",
+    date: "2026-07-15",
+    title: {
+      de: "Der Prompt-Coach: besser mit KI sprechen — messbar",
+      en: "The prompt coach: talk to AI better — measurably",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Echo erkennt automatisch, wenn du in ein KI-Tool diktierst (Cursor, Claude, ChatGPT, Prompt-Konsole …) und bewertet jeden Prompt still nach fünf Kriterien: Ziel, Kontext, Constraints, Format-Vorgabe, Negativ-Anweisungen. Komplett lokal, null Verzögerung.",
+        en: "Echo automatically recognizes when you dictate into an AI tool (Cursor, Claude, ChatGPT, prompt console …) and quietly scores every prompt on five criteria: goal, context, constraints, output format, negative instructions. Fully local, zero delay.",
+      },
+      {
+        kind: "feature",
+        de: "Neuer Prompts-Tab: dein Durchschnitts-Score mit Trend, welche Kriterien deine Prompts systematisch auslassen (mit konkretem Hebel-Tipp), Scores pro App und deine letzten Prompts.",
+        en: "New Prompts tab: your average score with trend, which criteria your prompts systematically miss (with a concrete lever tip), per-app scores and your latest prompts.",
+      },
+      {
+        kind: "feature",
+        de: "Pattern des Tages: Zwölf Prompt-Techniken (Rollen-Priming, Few-Shot-Beispiele, Format-Vorgabe, Schritt-für-Schritt …) — wende das heutige Pattern in einem echten Prompt an und Echo erkennt es: +30 XP.",
+        en: "Pattern of the day: twelve prompting techniques (role priming, few-shot examples, output format, step-by-step …) — apply today's pattern in a real prompt and Echo detects it: +30 XP.",
+      },
+      {
+        kind: "feature",
+        de: "Prompt-Golf im Dojo: Bring eine KI in unter 40 Wörtern dazu, genau das Richtige zu tun — bewertet nach der gleichen Rubrik, Kürze gibt Bonus.",
+        en: "Prompt golf in the dojo: get an AI to do exactly the right thing in under 40 words — scored on the same rubric, brevity earns a bonus.",
+      },
+    ],
+  },
+  {
     version: "0.5.138",
     date: "2026-07-15",
     title: {

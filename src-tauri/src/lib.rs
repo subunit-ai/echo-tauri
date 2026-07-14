@@ -28,6 +28,7 @@ mod meet_local; // lokales Meet-Backend (Pro): geteilte Diarisierung aus crates/
 mod meeting_capture; // mic + system-loopback → mixed 16k track for meeting transcripts
 mod meeting_detect;
 mod models;
+mod prompt_coach; // Prompt-Coach (Welle 5): post-hoc rubric scoring + prompt patterns
 mod prompt_console;
 mod presets; // per-account orb profiles (local-first)
 mod rarity; // Wortdex rarity tables (embedded wordfreq bands, offline)
@@ -155,6 +156,8 @@ pub fn run() {
             commands::speech_profile_trend,
             commands::wortdex_list,
             commands::achievements_list,
+            commands::prompt_coach_stats,
+            commands::prompt_pattern_today,
             commands::learning_words_progress,
             commands::word_pack_get,
             commands::word_pack_fetch,

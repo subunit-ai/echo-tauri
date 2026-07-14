@@ -631,6 +631,17 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
+    // Prompt-Coach (Welle 5): a dictation into a KI/prompt surface — a native AI
+    // chat / code editor / terminal, a KI browser tab, OR the explicit "Konsole
+    // als Ziel" route — is scored post-hoc against the 5-criteria rubric (pure,
+    // offline, < 1 ms) and its target app is remembered. Inert for non-prompt
+    // targets. This rides alongside everything below: an is_prompt dictation is
+    // still delivered + stored + coached exactly like any other.
+    let is_prompt = crate::auto_mode::is_prompt_target(&app_name, &url, &title)
+        || cfg.prompt_console_as_target;
+    let prompt_score: Option<i64> =
+        is_prompt.then(|| crate::prompt_coach::score_prompt(&result.text).0);
+
     // Stats: legacy global config counters + per-account lifetime totals (the
     // Home dashboard reads the latter — real, account-scoped). Word/char counts
     // come from the actually delivered text so "time saved" is a genuine
@@ -660,6 +671,10 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
             "cleanup_ms": cleanup_ms,
             "style": style,
             "duration_s": duration_s,
+            // Prompt-Coach: the target app + (for prompts) the rubric score.
+            "target_app": app_name,
+            "is_prompt": if is_prompt { 1 } else { 0 },
+            "prompt_score": prompt_score, // Option<i64> → number or null
         });
         crate::store::add_history(&entry, history_size);
         use tauri::Emitter;
@@ -675,6 +690,12 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Gamification: recognize taught vocabulary (word of the day, coach words)
     // in the delivered text and celebrate it — XP, event, native notification.
     maybe_award_vocab(app, &cfg, &account, &result.text, now as i64);
+    // Prompt-Coach pattern-of-the-day: for a prompt dictation, reward today's
+    // pattern when it's recognized (same XP ledger + reward event as the vocab
+    // coach). Inline + deterministic; a no-op for non-prompt targets.
+    if is_prompt {
+        crate::prompt_coach::maybe_award_pattern(app, &cfg, &account, &result.text, now as i64);
+    }
     // Wortdex: grow the collection from the same delivered text. Detached —
     // context extraction rescans the text per hit and every find is an SQLite
     // write, none of which may delay the Done state (Codex-Review #141).
@@ -1667,6 +1688,110 @@ pub fn achievements_list(state: State<'_, AppState>) -> Vec<serde_json::Value> {
             })
         })
         .collect()
+}
+
+// ---- Prompt-Coach (Welle 5) ----
+
+/// Prompt-Coach dashboard over the last `days` (default 30). Reads the prompt
+/// dictations from history and re-derives the rubric per row (deterministic, so
+/// it matches what was scored at capture). `enough` gates the UI until there's a
+/// meaningful sample (≥ 5 prompts). All local, no network.
+#[tauri::command]
+pub fn prompt_coach_stats(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+    let _ = &state; // history is a single local store (not account-partitioned)
+    let days = days.unwrap_or(30).clamp(1, 365);
+    let rows = crate::store::prompt_history_since(days);
+    let prompts = rows.len() as i64;
+
+    let mut score_sum = 0i64;
+    let mut scored = 0i64;
+    let (mut goal, mut context, mut constraints, mut format, mut negative) = (0i64, 0i64, 0i64, 0i64, 0i64);
+    // app -> (n, score_sum, scored_n)
+    let mut by_app: std::collections::HashMap<String, (i64, i64, i64)> = std::collections::HashMap::new();
+    for (_ts, app, score, text) in &rows {
+        let (_s, rub) = crate::prompt_coach::score_prompt(text);
+        goal += rub["goal"].as_bool().unwrap_or(false) as i64;
+        context += rub["context"].as_bool().unwrap_or(false) as i64;
+        constraints += rub["constraints"].as_bool().unwrap_or(false) as i64;
+        format += rub["format"].as_bool().unwrap_or(false) as i64;
+        negative += rub["negative"].as_bool().unwrap_or(false) as i64;
+        let key = if app.is_empty() { "—".to_string() } else { app.clone() };
+        let e = by_app.entry(key).or_insert((0, 0, 0));
+        e.0 += 1;
+        if let Some(sc) = score {
+            score_sum += *sc;
+            scored += 1;
+            e.1 += *sc;
+            e.2 += 1;
+        }
+    }
+    let avg_score = if scored > 0 { (score_sum as f64 / scored as f64).round() as i64 } else { 0 };
+    // Hit rate over ALL prompts (every prompt row has a re-derived rubric),
+    // rounded to 2 decimals.
+    let rate = |c: i64| -> f64 {
+        if prompts > 0 {
+            (c as f64 / prompts as f64 * 100.0).round() / 100.0
+        } else {
+            0.0
+        }
+    };
+
+    // Top 6 apps by prompt count.
+    let mut apps: Vec<(i64, serde_json::Value)> = by_app
+        .into_iter()
+        .map(|(app, (n, ssum, sn))| {
+            let avg = if sn > 0 { (ssum as f64 / sn as f64).round() as i64 } else { 0 };
+            (n, serde_json::json!({ "app": app, "n": n, "avg": avg }))
+        })
+        .collect();
+    apps.sort_by(|a, b| b.0.cmp(&a.0));
+    let apps: Vec<serde_json::Value> = apps.into_iter().take(6).map(|(_, v)| v).collect();
+
+    // Score trend by local day (oldest first), avg rounded to an integer.
+    let trend: Vec<serde_json::Value> = crate::store::prompt_trend_since(days)
+        .into_iter()
+        .map(|(day, avg, n)| serde_json::json!({ "day": day, "avg": avg.round() as i64, "n": n }))
+        .collect();
+
+    // Most recent prompts (rows are already newest-first), head = first 80 chars.
+    let recent: Vec<serde_json::Value> = rows
+        .iter()
+        .take(10)
+        .map(|(ts, app, score, text)| {
+            let head: String = text.chars().take(80).collect();
+            serde_json::json!({ "ts": ts, "app": app, "score": score, "head": head })
+        })
+        .collect();
+
+    serde_json::json!({
+        "enough": prompts >= 5,
+        "prompts": prompts,
+        "avg_score": avg_score,
+        "rubric_rates": {
+            "goal": rate(goal),
+            "context": rate(context),
+            "constraints": rate(constraints),
+            "format": rate(format),
+            "negative": rate(negative),
+        },
+        "by_app": apps,
+        "trend": trend,
+        "recent": recent,
+    })
+}
+
+/// Today's prompt pattern for the home card: its id (i18n key), the XP it earns,
+/// and whether it was already applied+rewarded today.
+#[tauri::command]
+pub fn prompt_pattern_today(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let day = crate::store::today_local();
+    let pat = crate::prompt_coach::pick_pattern(&day);
+    serde_json::json!({
+        "id": pat.id,
+        "xp": crate::prompt_coach::PROMPT_PATTERN_XP,
+        "done_today": crate::store::learning_event_exists(&account, &day, "prompt_pattern"),
+    })
 }
 
 /// Native reward notification, best-effort. DE for German UIs, EN otherwise —
