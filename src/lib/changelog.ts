@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.136",
+    date: "2026-07-14",
+    title: {
+      de: "Dein Sprechprofil: sechs Dimensionen deiner Rhetorik, analysiert",
+      en: "Your speech profile: six dimensions of your rhetoric, analyzed",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Sprechprofil-Radar: Echo analysiert lokal, WIE du sprichst — Wortschatz-Vielfalt (MTLD), Präzision, Klarheit, Struktur, Aktiv-Stil und Flüssigkeit, verdichtet zu einem Rhetorik-Score. Neuer Tab im Wortschatz-Bereich.",
+        en: "Speech profile radar: Echo locally analyzes HOW you speak — vocabulary diversity (MTLD), precision, clarity, structure, active style and fluency, condensed into one rhetoric score. New tab in the Vocabulary section.",
+      },
+      {
+        kind: "feature",
+        de: "Fortschritt sichtbar: Das Radar zeigt deine Vorperiode als Geister-Umriss, jede Dimension hat einen Tages-Trend — du siehst, ob deine Rhetorik sich wirklich bewegt.",
+        en: "Progress made visible: the radar overlays your previous period as a ghost outline and every dimension carries a daily trend — you see whether your rhetoric actually moves.",
+      },
+      {
+        kind: "feature",
+        de: "Ehrliche Messwerte statt Bauchgefühl: Absicherungs-Floskeln, Passiv-Anteil, Schachtelsätze, Füllwortquote, Satz-Rhythmus und mehr — mit Erklärung, was jede Zahl bedeutet, und konkreten Hinweisen, wenn sich etwas verschlechtert.",
+        en: "Honest measurements instead of gut feeling: hedging phrases, passive share, nested sentences, filler rate, sentence rhythm and more — each explained, with concrete pointers when something drifts.",
+      },
+      {
+        kind: "improvement",
+        de: "Wortdex-Feinschliff: Fund-Zitate respektieren jetzt strikt deine Verlaufs-Einstellungen, die Erkennung läuft vollständig neben dem Diktat (null Verzögerung), und einige Vornamen zählen nicht mehr fälschlich als seltene Wörter.",
+        en: "Wortdex polish: find quotes now strictly respect your history settings, detection runs fully off the dictation path (zero delay), and a few first names no longer count as rare words.",
+      },
+    ],
+  },
+  {
     version: "0.5.134",
     date: "2026-07-14",
     title: {

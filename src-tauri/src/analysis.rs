@@ -57,7 +57,7 @@ fn normalize_word(raw: &str) -> String {
 }
 
 /// Split on sentence terminators (. ! ? …) → trimmed non-empty sentences.
-fn split_sentences(text: &str) -> Vec<String> {
+pub fn split_sentences(text: &str) -> Vec<String> {
     text.split(|c| c == '.' || c == '!' || c == '?' || c == '…')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -228,6 +228,14 @@ const WEAK_WORDS: &[&str] = &[
     "erklären", "wirklich", "richtig", "klar", "nett", "super", "cool", "spannend", "leicht",
     "teuer", "billig", "etwas", "sowas", "krass", "mega", "voll", "echt", "total", "ziemlich",
 ];
+
+static WEAK_WORDS_SET: Lazy<HashSet<&'static str>> = Lazy::new(|| WEAK_WORDS.iter().copied().collect());
+
+/// True when `w` is one of the curated over-used / weak German words (the
+/// Sprechprofil precision pass counts these; the Learning coach flags them).
+pub fn is_weak_word(w: &str) -> bool {
+    WEAK_WORDS_SET.contains(w)
+}
 
 /// One curated alternative: the richer word + an optional ONE-sentence note on
 /// why/when it is stronger (curated for the most important entries).

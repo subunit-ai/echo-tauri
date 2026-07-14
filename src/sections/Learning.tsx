@@ -11,6 +11,8 @@ import {
   onHistoryChanged,
   onLearningReward,
   onWordFind,
+  speechProfile,
+  speechProfileTrend,
   wordOfDay,
   wortdexList,
   type Achievement,
@@ -19,6 +21,10 @@ import {
   type LearningAnalysis,
   type LearningSuggestions,
   type LearningXp,
+  type SpeechDimension,
+  type SpeechInsight,
+  type SpeechProfile,
+  type SpeechTrend,
   type WordFind,
   type WordFreq,
   type WordOfDay,
@@ -26,6 +32,8 @@ import {
 } from "../lib/ipc";
 import { Avatar } from "../components/Avatar";
 import { TierRing } from "../components/TierRing";
+import { RadarChart, type RadarAxis } from "../components/charts/RadarChart";
+import { Sparkline } from "../components/charts/Sparkline";
 import { levelForXp } from "../lib/level";
 import { useConfig } from "../state/ConfigContext";
 
@@ -915,9 +923,334 @@ function AchievementsTab() {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  Sprechprofil — the rhetoric-analysis radar (§ Learning tab 4).
+// ════════════════════════════════════════════════════════════════════════
+
+/** The six dimensions in radar order (top, then clockwise). Also the card
+ *  order — the backend already delivers them in this sequence, but pinning it
+ *  here keeps the radar and the cards in lock-step regardless. */
+const SPEECH_DIMS = ["variety", "precision", "clarity", "structure", "active", "fluency"] as const;
+
+/** How each raw metric value is rendered. One deterministic rule per metric key,
+ *  so a value never guesses its own unit:
+ *    num1    — one decimal, no unit          (mtld 82.4, rhythmSd 6.8, avgSentence 11.2)
+ *    int     — integer, thousands-grouped    (distinctWords 2.140, connBuckets 4, p90Sentence 24)
+ *    lixInt  — integer, no grouping          (lix 42)
+ *    per1000 — one decimal + "/ 1000 W."     (all *Rate metrics: 1.9 / 1000 W.)
+ *    pct     — value×100 + " %"              (all *Share + hapaxRate: 0.42 → 42 %)
+ *    ratio2  — two decimals, no unit         (connDensity 0.31, wpmCv 0.22) */
+const METRIC_FMT: Record<string, "num1" | "int" | "lixInt" | "per1000" | "pct" | "ratio2"> = {
+  mtld: "num1",
+  eleganceRate: "per1000",
+  distinctWords: "int",
+  hapaxRate: "pct",
+  weakRate: "per1000",
+  vagueRate: "per1000",
+  hedgeRate: "per1000",
+  lix: "lixInt",
+  nestedShare: "pct",
+  avgSentence: "num1",
+  p90Sentence: "int",
+  connDensity: "ratio2",
+  connBuckets: "int",
+  passiveShare: "pct",
+  nominalRate: "per1000",
+  fillerRate: "per1000",
+  wpmCv: "ratio2",
+  rhythmSd: "num1",
+};
+
+/** A small circled "i" that reveals a one-line explanation. Same interaction
+ *  grammar as the coach's alt-chip (#140): hover shows it, a click pins it open
+ *  for keyboard + touch. The bubble anchors to the dot's left edge and extends
+ *  rightward (CSS), which stays on-screen for every dot in this section. */
+function InfoDot({ tip }: { tip: string }) {
+  const [pinned, setPinned] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`speech-info${pinned ? " pinned" : ""}`}
+      data-tip={tip}
+      aria-label={tip}
+      aria-expanded={pinned}
+      onClick={(e) => {
+        e.stopPropagation();
+        setPinned((p) => !p);
+      }}
+      onBlur={() => setPinned(false)}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.5" />
+        <path d="M12 11v5" strokeLinecap="round" />
+        <circle cx="12" cy="7.6" r="0.6" fill="currentColor" stroke="none" />
+      </svg>
+    </button>
+  );
+}
+
+/** Severity glyph for an insight: 1 = praise (check), 2 = neutral hint (info),
+ *  3 = clear flag (alert triangle). All stroke-SVG, inherit currentColor. */
+function SeverityIcon({ severity }: { severity: 1 | 2 | 3 }) {
+  if (severity === 1)
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    );
+  if (severity === 3)
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+        <path d="M12 9v4M12 17h.01" />
+      </svg>
+    );
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 11v5M12 8h.01" />
+    </svg>
+  );
+}
+
+/** Up/down chevron for the overall-vs-ghost delta. */
+function DeltaArrow({ up }: { up: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {up ? <path d="m6 15 6-6 6 6" /> : <path d="m6 9 6 6 6-6" />}
+    </svg>
+  );
+}
+
+/** One dimension: score + a slim level bar, the trend sparkline of this
+ *  dimension's daily score, and every sub-metric as a labelled row with its own
+ *  info tooltip. */
+function DimensionCard({
+  dim,
+  trend,
+}: {
+  dim: SpeechDimension;
+  /** Daily scores for THIS dimension (ascending), feeding the sparkline. */
+  trend: number[];
+}) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const nf = (v: number, dec: number) =>
+    v.toLocaleString(lang, { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+  const fmt = (m: { key: string; value: number }): string => {
+    const kind = METRIC_FMT[m.key] ?? "num1";
+    switch (kind) {
+      case "per1000":
+        return `${nf(m.value, 1)} ${t("learning.speech.unitPer1000")}`;
+      case "pct":
+        return `${nf(m.value * 100, 0)} %`;
+      case "int":
+        return nf(m.value, 0);
+      case "lixInt":
+        return Math.round(m.value).toString();
+      case "ratio2":
+        return nf(m.value, 2);
+      default:
+        return nf(m.value, 1);
+    }
+  };
+
+  return (
+    <div className="speech-dim-card">
+      <div className="speech-dim-head">
+        <span className="speech-dim-title">
+          {t(`learning.speech.dim.${dim.key}.name`)}
+          <InfoDot tip={t(`learning.speech.dim.${dim.key}.info`)} />
+        </span>
+        <span className="speech-dim-score">{Math.round(dim.score)}</span>
+      </div>
+      <div className="speech-score-bar" aria-hidden="true">
+        <span className="speech-score-fill" style={{ width: `${Math.max(0, Math.min(100, dim.score))}%` }} />
+      </div>
+      <div className="speech-dim-spark">
+        <Sparkline values={trend} height={26} />
+      </div>
+      <div className="speech-metrics">
+        {dim.metrics.map((m) => (
+          <div key={m.key} className="speech-metric-row">
+            <span className="speech-metric-label">
+              {t(`learning.speech.metric.${m.key}.name`)}
+              <InfoDot tip={t(`learning.speech.metric.${m.key}.info`)} />
+            </span>
+            <span className="speech-metric-val">{fmt(m)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One recommendation card — severity-tinted icon, the finding, the concrete
+ *  tip. Both texts come from i18n by insight id, with {{delta}} interpolated as
+ *  a rounded percent (direction is already baked into each id's wording). */
+function InsightCard({ insight }: { insight: SpeechInsight }) {
+  const { t } = useTranslation();
+  const delta = Math.round(Math.abs(insight.delta) * 100);
+  return (
+    <div className={`speech-insight sev-${insight.severity}`}>
+      <span className="speech-insight-icon" aria-hidden="true">
+        <SeverityIcon severity={insight.severity} />
+      </span>
+      <div className="speech-insight-body">
+        <div className="speech-insight-finding">
+          {t(`learning.speech.insights.${insight.id}.finding`, { delta })}
+        </div>
+        <div className="speech-insight-tip">
+          {t(`learning.speech.insights.${insight.id}.tip`, { delta })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The Sprechprofil tab: hero radar + big rhetoric score, the six dimension
+ *  cards, and up to four insight recommendations. Refreshes on every dictation
+ *  (onHistoryChanged) and on the 7/30/90 range switch. 100 % local. */
+function SpeechProfileTab() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const [days, setDays] = useState<number>(30);
+  const [profile, setProfile] = useState<SpeechProfile | null>(null);
+  const [trend, setTrend] = useState<SpeechTrend | null>(null);
+
+  const refresh = useCallback((d: number) => {
+    speechProfile(d).then(setProfile).catch(() => {});
+    speechProfileTrend(d).then(setTrend).catch(() => {});
+  }, []);
+  useEffect(() => refresh(days), [days, refresh]);
+  useEffect(() => {
+    const un = onHistoryChanged(() => refresh(days));
+    return () => {
+      un.then((f) => f());
+    };
+  }, [days, refresh]);
+
+  const rangeSwitcher = (
+    <div className="sub-tabs speech-range">
+      {RANGES.map((d) => (
+        <button key={d} className={`sub-tab ${days === d ? "active" : ""}`} onClick={() => setDays(d)}>
+          {t(`activity.range${d}`)}
+        </button>
+      ))}
+    </div>
+  );
+
+  // First load — nothing to show yet.
+  if (profile === null) {
+    return (
+      <div>
+        {rangeSwitcher}
+        <div className="empty" aria-busy="true">
+          {t("learning.speech.loading")}
+        </div>
+      </div>
+    );
+  }
+
+  // Too little material for meaningful scores → the friendly hint, not a broken
+  // radar of zeros.
+  if (!profile.enough_data) {
+    return (
+      <div>
+        {rangeSwitcher}
+        <div className="speech-empty">
+          <div className="speech-empty-title">{t("learning.speech.emptyTitle")}</div>
+          <p className="speech-empty-hint">{t("learning.speech.emptyHint", { count: profile.total_words })}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Radar axes — kept in the canonical dimension order so the shape is stable.
+  const byKey = new Map(profile.dimensions.map((d) => [d.key, d]));
+  const orderedDims = SPEECH_DIMS.map((k) => byKey.get(k)).filter((d): d is SpeechDimension => !!d);
+  const axes: RadarAxis[] = orderedDims.map((d) => ({
+    key: d.key,
+    label: t(`learning.speech.dim.${d.key}.name`),
+    score: d.score,
+  }));
+  const ghostScores = profile.ghost?.scores ?? null;
+
+  // Per-dimension daily trend for the sparklines.
+  const dimTrend = (key: string): number[] =>
+    (trend?.days ?? []).map((d) => d.scores[key]).filter((v) => Number.isFinite(v));
+
+  const ghostDelta = profile.ghost ? Math.round(profile.overall - profile.ghost.overall) : null;
+  const insights = profile.insights.slice(0, 4);
+
+  return (
+    <div>
+      {rangeSwitcher}
+
+      {/* Hero — radar left, big rhetoric score + ghost delta right. */}
+      <div className="chart-card speech-hero">
+        <div className="speech-hero-radar">
+          <RadarChart axes={axes} ghost={ghostScores} />
+        </div>
+        <div className="speech-hero-side">
+          <div className="speech-hero-label">{t("learning.speech.overallLabel")}</div>
+          <div className="speech-hero-score">{Math.round(profile.overall)}</div>
+          <div className="speech-hero-of">{t("learning.speech.scoreOf100")}</div>
+          {ghostDelta !== null && ghostDelta !== 0 ? (
+            <div className={`speech-delta ${ghostDelta > 0 ? "up" : "down"}`}>
+              <DeltaArrow up={ghostDelta > 0} />
+              <span className="speech-delta-num">
+                {ghostDelta > 0 ? "+" : "−"}
+                {Math.abs(ghostDelta)}
+              </span>
+              <span className="speech-delta-label">{t("learning.speech.vsGhost")}</span>
+            </div>
+          ) : (
+            <div className="speech-delta neutral">{t("learning.speech.noGhost")}</div>
+          )}
+          <div className="speech-hero-words">
+            {t("learning.speech.wordsAnalysed", { count: profile.total_words.toLocaleString(lang) })}
+          </div>
+        </div>
+      </div>
+
+      {/* The six dimensions. */}
+      <div className="chart-head" style={{ marginBottom: 12, marginTop: 20 }}>
+        <div>
+          <div className="chart-title">{t("learning.speech.dimTitle")}</div>
+          <div className="chart-sub">{t("learning.speech.dimSub")}</div>
+        </div>
+      </div>
+      <div className="speech-dim-grid">
+        {orderedDims.map((d) => (
+          <DimensionCard key={d.key} dim={d} trend={dimTrend(d.key)} />
+        ))}
+      </div>
+
+      {/* Recommendations. */}
+      {insights.length > 0 && (
+        <>
+          <div className="chart-head" style={{ marginBottom: 12, marginTop: 20 }}>
+            <div>
+              <div className="chart-title">{t("learning.speech.insightsTitle")}</div>
+              <div className="chart-sub">{t("learning.speech.insightsSub")}</div>
+            </div>
+          </div>
+          <div className="speech-insights">
+            {insights.map((ins) => (
+              <InsightCard key={ins.id} insight={ins} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Learning() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"coach" | "dex" | "achievements">("coach");
+  const [tab, setTab] = useState<"coach" | "dex" | "speech" | "achievements">("coach");
   const [wortdex, setWortdex] = useState<WortdexData | null>(null);
 
   // The collection is loaded once at section level (so the Wortdex tab count
@@ -962,6 +1295,12 @@ export function Learning() {
           )}
         </button>
         <button
+          className={`sub-tab ${tab === "speech" ? "active" : ""}`}
+          onClick={() => setTab("speech")}
+        >
+          {t("learning.speech.tab")}
+        </button>
+        <button
           className={`sub-tab ${tab === "achievements" ? "active" : ""}`}
           onClick={() => setTab("achievements")}
         >
@@ -971,6 +1310,7 @@ export function Learning() {
 
       {tab === "coach" && <CoachTab />}
       {tab === "dex" && <WortdexTab data={wortdex} />}
+      {tab === "speech" && <SpeechProfileTab />}
       {tab === "achievements" && <AchievementsTab />}
     </div>
   );

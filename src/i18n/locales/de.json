@@ -1039,6 +1039,167 @@
       "streak_30": "Eiserne Zunge",
       "level_5": "Aufsteiger",
       "level_10": "Eloquenz-Adept"
+    },
+    "speech": {
+      "tab": "Sprechprofil",
+      "overallLabel": "Rhetorik-Score",
+      "overallSub": "Wie du sprichst – deterministisch und lokal analysiert.",
+      "vsGhost": "ggü. Vorperiode",
+      "vsGhostUp": "besser als die Vorperiode",
+      "vsGhostDown": "unter der Vorperiode",
+      "noGhost": "Erste Messung – ab jetzt siehst du den Fortschritt.",
+      "wordsAnalysed": "{{count}} Wörter analysiert",
+      "loading": "Analysiere dein Sprechprofil…",
+      "emptyTitle": "Noch nicht genug Daten",
+      "emptyHint": "Diktiere ~500 Wörter, dann zeichnet Echo dein Sprechprofil. Bisher: {{count}} Wörter.",
+      "dimTitle": "Deine sechs Dimensionen",
+      "dimSub": "Jede Dimension fasst mehrere Kennzahlen zu einem Score (0–100) zusammen.",
+      "insightsTitle": "Empfehlungen",
+      "insightsSub": "Konkrete Ansätze, abgeleitet aus deinen jüngsten Veränderungen.",
+      "unitPer1000": "/ 1000 W.",
+      "scoreOf100": "von 100",
+      "dim": {
+        "variety": {
+          "name": "Vielfalt",
+          "info": "Wie abwechslungsreich dein Wortschatz ist – misst die Bandbreite und den Anteil seltener, gehobener Wörter."
+        },
+        "precision": {
+          "name": "Präzision",
+          "info": "Wie treffend du formulierst – belohnt konkrete Begriffe, bestraft Allerwelts-, vage und absichernde Wörter."
+        },
+        "clarity": {
+          "name": "Klarheit",
+          "info": "Wie leicht deine Sätze zu verstehen sind – aus Satzlänge, Lesbarkeit und Verschachtelung."
+        },
+        "structure": {
+          "name": "Struktur",
+          "info": "Wie gut du Gedanken verknüpfst – misst Menge und Vielfalt deiner Verbindungswörter."
+        },
+        "active": {
+          "name": "Aktiv-Stil",
+          "info": "Wie aktiv und konkret dein Stil ist – wenig Passiv und wenig Nominalstil heben den Score."
+        },
+        "fluency": {
+          "name": "Flüssigkeit",
+          "info": "Wie flüssig du sprichst – aus Füllwörtern, Tempo-Stabilität und Satz-Rhythmus."
+        }
+      },
+      "metric": {
+        "mtld": {
+          "name": "Wortschatz-Vielfalt (MTLD)",
+          "info": "Misst, wie lange du sprichst, bevor sich dein Wortschatz wiederholt. Höher ist besser – unabhängig von der Textlänge."
+        },
+        "eleganceRate": {
+          "name": "Gehobene Wörter",
+          "info": "Anteil anspruchsvoller, präziser Begriffe je 1000 Wörter. Mehr davon wirkt gewählter."
+        },
+        "distinctWords": {
+          "name": "Verschiedene Wörter",
+          "info": "Anzahl unterschiedlicher Wörter im ausgewerteten Zeitraum."
+        },
+        "hapaxRate": {
+          "name": "Einmal-Wörter",
+          "info": "Anteil der Wörter, die du genau einmal benutzt hast – ein Indiz für Wortschatz-Breite."
+        },
+        "weakRate": {
+          "name": "Allerwelts-Wörter",
+          "info": "Blasse Universalwörter wie „Sache“, „Ding“, „machen“ je 1000 Wörter. Weniger ist präziser."
+        },
+        "vagueRate": {
+          "name": "Vage Begriffe",
+          "info": "Unscharfe Wörter wie „irgendwie“, „eigentlich“, „so“ je 1000 Wörter. Weniger wirkt bestimmter."
+        },
+        "hedgeRate": {
+          "name": "Absicherungs-Floskeln",
+          "info": "Relativierer wie „ich glaube“, „vielleicht“, „vermutlich“ je 1000 Wörter. Weniger klingt souveräner."
+        },
+        "lix": {
+          "name": "Lesbarkeits-Index",
+          "info": "Lesbarkeit aus Satzlänge und Anteil langer Wörter. Niedriger heißt leichter verständlich."
+        },
+        "nestedShare": {
+          "name": "Schachtelsätze",
+          "info": "Anteil der Sätze mit tiefen Nebensatz-Verschachtelungen. Weniger ist klarer."
+        },
+        "avgSentence": {
+          "name": "Ø Satzlänge",
+          "info": "Durchschnittliche Wörter pro Satz. Kürzere Sätze sind meist verständlicher."
+        },
+        "p90Sentence": {
+          "name": "Lange Sätze (p90)",
+          "info": "Länge deiner längsten 10 % der Sätze (in Wörtern). Ausreißer nach oben erschweren das Zuhören."
+        },
+        "connDensity": {
+          "name": "Verbindungswörter",
+          "info": "Dichte logischer Verknüpfer wie „weil“, „dennoch“, „folglich“ je Satz. Mehr Struktur ist besser."
+        },
+        "connBuckets": {
+          "name": "Konnektoren-Vielfalt",
+          "info": "Wie viele verschiedene Arten von Verbindungswörtern du nutzt (begründend, gegensätzlich, zeitlich …)."
+        },
+        "passiveShare": {
+          "name": "Passiv-Anteil",
+          "info": "Anteil der Sätze im Passiv. Aktive Sätze wirken direkter und lebendiger."
+        },
+        "nominalRate": {
+          "name": "Nominalstil",
+          "info": "Substantivierte Verben (auf -ung, -heit …) je 1000 Wörter. Weniger davon klingt konkreter."
+        },
+        "fillerRate": {
+          "name": "Füllwörter",
+          "info": "Verzögerer wie „ähm“, „also“, „quasi“ je 1000 Wörter. Weniger wirkt souveräner."
+        },
+        "wpmCv": {
+          "name": "Tempo-Stabilität",
+          "info": "Wie gleichmäßig dein Sprechtempo ist. Niedriger heißt ruhiger und kontrollierter."
+        },
+        "rhythmSd": {
+          "name": "Satz-Rhythmus",
+          "info": "Wie stark deine Satzlängen variieren. Etwas Abwechslung hält das Zuhören spannend."
+        }
+      },
+      "insights": {
+        "hedging_up": {
+          "finding": "Deine Absicherungs-Floskeln sind um {{delta}} % gestiegen.",
+          "tip": "Streiche „ich glaube“, „vielleicht“, „irgendwie“ – sag den Kern direkt."
+        },
+        "weak_up": {
+          "finding": "Allerwelts-Wörter haben um {{delta}} % zugenommen.",
+          "tip": "Ersetze „Sache“, „Ding“, „machen“ durch das präzise Wort, das du wirklich meinst."
+        },
+        "filler_up": {
+          "finding": "Deine Füllwort-Quote ist um {{delta}} % gestiegen.",
+          "tip": "Halte kurz inne statt zu füllen – eine Pause wirkt souveräner als ein „ähm“."
+        },
+        "filler_down": {
+          "finding": "Stark – deine Füllwörter sind um {{delta}} % gesunken.",
+          "tip": "Weiter so: bewusste Pausen halten den Redefluss ruhig und klar."
+        },
+        "passive_up": {
+          "finding": "Passiv-Konstruktionen sind um {{delta}} % gestiegen.",
+          "tip": "Sprich aktiv: „Wir entscheiden das“ statt „Es wird entschieden“."
+        },
+        "nesting_up": {
+          "finding": "Schachtelsätze haben um {{delta}} % zugenommen.",
+          "tip": "Teile lange Sätze auf – ein Gedanke pro Satz macht es leichter zu folgen."
+        },
+        "variety_up": {
+          "finding": "Dein Wortschatz ist um {{delta}} % vielfältiger geworden.",
+          "tip": "Bleib neugierig – neue Wörter aus dem Wortdex festigen den Effekt."
+        },
+        "elegance_up": {
+          "finding": "Du nutzt {{delta}} % mehr gehobene Wörter.",
+          "tip": "Setze gehobene Begriffe gezielt ein – Wirkung entsteht durch Auswahl, nicht durch Menge."
+        },
+        "monotone_rhythm": {
+          "finding": "Dein Satz-Rhythmus ist zuletzt sehr gleichförmig.",
+          "tip": "Wechsle kurze und lange Sätze bewusst ab – das erzeugt Spannung beim Zuhören."
+        },
+        "connectors_low": {
+          "finding": "Du nutzt auffällig wenige Verbindungswörter.",
+          "tip": "Verknüpfe Gedanken explizit: „weil“, „dennoch“, „folglich“ führen dein Publikum."
+        }
+      }
     }
   },
   "vp": {

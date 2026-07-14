@@ -145,9 +145,17 @@ mod tests {
         }
         // ASR noise / non-words are absent from the tables.
         assert_eq!(lookup("xyzqwrtz"), None);
-        // First names are excluded at generation time.
+        // First names are excluded at generation time — including umlaut and
+        // transliteration variants (Codex-Review #141 proved "bastian"/"björn"
+        // sat in the EN table via a list typo).
         assert_eq!(lookup("thomas"), None);
         assert_eq!(lookup("rahel"), None);
+        assert_eq!(lookup("bastian"), None);
+        assert_eq!(lookup("björn"), None);
+        assert_eq!(lookup("bjoern"), None);
+        assert_eq!(lookup("jörg"), None);
+        assert_eq!(lookup("jürgen"), None);
+        assert_eq!(lookup("günther"), None);
     }
 
     #[test]

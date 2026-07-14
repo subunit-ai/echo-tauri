@@ -118,6 +118,9 @@ function EngineErrorToasts() {
     // specific toast (the native notification covers selten/legendär in the
     // background; this is the in-app counterpart, and the only cue for notable).
     const find = onWordFind((f) => {
+      // xp = 0 → find beyond the daily XP cap: the event only refreshes the
+      // Wortdex views; celebrating a reward that gives nothing would confuse.
+      if (f.xp <= 0) return;
       const key =
         f.band === 3
           ? "learning.findToastLegendary"

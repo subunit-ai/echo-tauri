@@ -154,7 +154,16 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             deleted    INTEGER NOT NULL DEFAULT 0,
             dirty      INTEGER NOT NULL DEFAULT 1,
             PRIMARY KEY (account, id)
-         );",
+         );
+         CREATE TABLE IF NOT EXISTS speech_daily (
+            account    TEXT    NOT NULL,
+            day        TEXT    NOT NULL,
+            payload    TEXT    NOT NULL DEFAULT '{}',
+            version    INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account, day)
+         );
+         CREATE INDEX IF NOT EXISTS idx_speech_daily_account ON speech_daily(account, day DESC);",
     )?;
     // Migration (v0.5.80): note_folders became cloud-synced, gaining deleted +
     // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
@@ -391,6 +400,10 @@ pub fn clear_history() {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
     let _ = conn.execute("DELETE FROM history", []);
+    // "Verlauf leeren" must not leave dictation excerpts behind: the Wortdex
+    // keeps the WORDS (they are the collection), but the first-find context
+    // sentences are history derivatives and go with it (Codex-Review #141).
+    let _ = conn.execute("UPDATE word_finds SET context = ''", []);
 }
 
 // ---- Per-day usage stats (Activity dashboard — account-scoped, never pruned) ----
@@ -637,6 +650,151 @@ pub fn backfill_daily_stats(account: &str) {
         );
     }
     log::info!("store: backfilled daily_stats for {n_days} day(s)");
+}
+
+// ---- Sprechprofil (speech_daily) ----
+// Per-day raw speech metrics cached once, aggregated into windows at read time.
+// Payload holds ROHWERTE only (never scores); see speech_profile.rs.
+
+/// SQLite's notion of a LOCAL date `n` days back ('YYYY-MM-DD'); empty when the
+/// store isn't initialized.
+pub fn local_date_offset(n: i64) -> String {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return String::new() };
+    conn.query_row(
+        "SELECT date('now', ?1, 'localtime')",
+        params![format!("-{} days", n)],
+        |r| r.get(0),
+    )
+    .unwrap_or_default()
+}
+
+/// All history rows within the last `days` local days as
+/// `(local_day, text, duration_s, ts)`. The input for per-day speech metrics.
+pub fn history_day_rows(days: u32) -> Vec<(String, String, f64, i64)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime') AS day, text, duration_s, ts
+               FROM history
+               WHERE ts >= CAST(strftime('%s', date('now', ?1, 'localtime')) AS INTEGER)
+               ORDER BY ts ASC, id ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<f64>>(2)?.unwrap_or(0.0),
+            r.get::<_, i64>(3)?,
+        ))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Per-day stripped-hesitation totals over the last `days` (day → count).
+pub fn filler_removed_day_map(days: u32) -> std::collections::HashMap<String, f64> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return std::collections::HashMap::new() };
+    let sql = "SELECT day, SUM(count) FROM filler_removed
+               WHERE day >= date('now', ?1, 'localtime')
+               GROUP BY day";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return std::collections::HashMap::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).map(|(d, c)| (d, c as f64)).collect(),
+        Err(_) => std::collections::HashMap::new(),
+    }
+}
+
+/// Cached daily row `(payload, version, updated_at)` for `account`/`day`.
+pub fn speech_daily_get(account: &str, day: &str) -> Option<(String, i64, i64)> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT payload, version, updated_at FROM speech_daily WHERE account = ?1 AND day = ?2",
+        params![account, day],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)),
+    )
+    .ok()
+}
+
+/// Insert or overwrite a cached daily row.
+pub fn speech_daily_upsert(account: &str, day: &str, payload: &str, version: i64, updated_at: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO speech_daily (account, day, payload, version, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(account, day) DO UPDATE SET
+            payload = excluded.payload,
+            version = excluded.version,
+            updated_at = excluded.updated_at",
+        params![account, day, payload, version, updated_at],
+    );
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Ensure the last `days_back` local days are cached & fresh, then return
+/// `(day, DayStats)` ascending. A cached row is reused when its `version` matches
+/// AND it is at least as new as the day's latest history ts (stale otherwise).
+pub fn speech_daily_collect(
+    account: &str,
+    days_back: u32,
+) -> Vec<(String, crate::speech_profile::DayStats)> {
+    use crate::speech_profile::{self, DayStats};
+    let rows = history_day_rows(days_back);
+    let stripped = filler_removed_day_map(days_back);
+
+    // Group texts by local day + track that day's newest history ts.
+    let mut by_day: std::collections::BTreeMap<String, (Vec<(String, f64)>, i64)> =
+        std::collections::BTreeMap::new();
+    for (day, text, dur, ts) in rows {
+        let e = by_day.entry(day).or_insert_with(|| (Vec::new(), 0));
+        e.0.push((text, dur));
+        if ts > e.1 {
+            e.1 = ts;
+        }
+    }
+
+    let version = speech_profile::SPEECH_METRICS_VERSION;
+    let now = now_secs();
+    let mut out = Vec::with_capacity(by_day.len());
+    for (day, (texts, max_ts)) in by_day {
+        let cached = speech_daily_get(account, &day);
+        let fresh = cached
+            .as_ref()
+            .map(|(_, v, upd)| *v == version && *upd >= max_ts)
+            .unwrap_or(false);
+        let stats = if fresh {
+            cached.and_then(|(p, _, _)| DayStats::from_payload(&p)).unwrap_or_default()
+        } else {
+            let sf = stripped.get(&day).copied().unwrap_or(0.0);
+            let s = speech_profile::compute_day(&texts, sf);
+            speech_daily_upsert(account, &day, &s.to_payload(), version, now);
+            s
+        };
+        out.push((day, stats));
+    }
+    out
+}
+
+/// One-time full backfill of `speech_daily` from all retained history (guarded by
+/// `config.speech_daily_seeded`; mirrors `backfill_daily_stats`). Runs off the
+/// main thread at startup — MTLD + heuristics per day are heavier than the plain
+/// word counts of `daily_stats`.
+pub fn backfill_speech_daily(account: &str) {
+    let _ = speech_daily_collect(account, 3650);
+    log::info!("store: backfilled speech_daily");
 }
 
 // ---- Learning gamification ----
@@ -1677,6 +1835,57 @@ pub fn list_vcand(status: &str) -> Vec<Value> {
 mod tests {
     use super::*;
 
+    /// Real-data sanity (contract §Tests 5): run the whole speech-profile
+    /// pipeline against a WAL-safe COPY of a real echo.db and prove that no
+    /// metric degenerates (NaN / out-of-range / empty radar). Ignored by
+    /// default — run explicitly:
+    ///   ECHO_REAL_DB=/path/to/copy.db cargo test --no-default-features \
+    ///     --lib real_data_sanity -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_data_sanity() {
+        let Ok(path) = std::env::var("ECHO_REAL_DB") else {
+            eprintln!("ECHO_REAL_DB not set — skipping");
+            return;
+        };
+        init_at(std::path::Path::new(&path)).expect("init real copy");
+        let rows = speech_daily_collect("sanity", 365);
+        assert!(!rows.is_empty(), "no history days found in real DB");
+        let win = crate::speech_profile::aggregate(rows.iter().map(|(_, s)| s));
+        let scored = crate::speech_profile::score(&win);
+        let dims = [
+            ("variety", scored.variety),
+            ("precision", scored.precision),
+            ("clarity", scored.clarity),
+            ("structure", scored.structure),
+            ("active", scored.active),
+            ("fluency", scored.fluency),
+        ];
+        eprintln!(
+            "REAL-DATA PROFILE: days={} words={} overall={:.1} dims={:?}\nmetrics={:?}",
+            rows.len(),
+            win.words,
+            scored.overall,
+            dims,
+            scored.metrics
+        );
+        assert!(win.words > 0.0);
+        assert!(scored.overall.is_finite());
+        assert!((0.0..=100.0).contains(&scored.overall));
+        for (k, v) in dims {
+            assert!(v.is_finite() && (0.0..=100.0).contains(&v), "score {k} degenerate: {v}");
+            assert!(v > 0.0, "score {k} is flat zero — radar would degenerate");
+        }
+        // Full command-shaped payload from the REAL data — dumped so the UI
+        // proof can render against the genuine wire format, not a hand mock.
+        let texts = history_texts_since(365);
+        let payload = crate::speech_profile::build_profile(&win, &texts, None, &win, &win, 30);
+        if let Ok(out) = std::env::var("ECHO_PROFILE_DUMP") {
+            let _ = std::fs::write(&out, serde_json::to_string_pretty(&payload).unwrap());
+            eprintln!("payload dumped to {out}");
+        }
+    }
+
     /// One sequential round-trip over the whole store API (the connection is a
     /// process-wide singleton, so a single test keeps it deterministic).
     #[test]
@@ -1936,6 +2145,32 @@ mod tests {
         assert_eq!(learning_kind_count("em:w", "word_find", Some("2026-07-14")), 2);
         assert_eq!(learning_kind_count("em:w", "word_find", None), 3);
         assert_eq!(learning_kind_count("em:x", "word_find", None), 0);
+
+        // Sprechprofil daily cache: compute-from-history, reuse, stale + version
+        // recompute. History currently holds the two backfill rows (today).
+        let ver = crate::speech_profile::SPEECH_METRICS_VERSION;
+        let sp = speech_daily_collect("em:sp", 30);
+        assert_eq!(sp.len(), 1, "one active day");
+        assert_eq!(&sp[0].0, &today);
+        assert_eq!(sp[0].1.words, 5.0); // "eins zwei drei" + "vier fünf"
+        assert_eq!(sp[0].1.tokens, 5.0);
+        let (_, ver0, upd0) = speech_daily_get("em:sp", &today).expect("cached row");
+        assert_eq!(ver0, ver);
+        // Fresh row is reused, not rewritten (updated_at unchanged).
+        let _ = speech_daily_collect("em:sp", 30);
+        let (_, _, upd1) = speech_daily_get("em:sp", &today).unwrap();
+        assert_eq!(upd1, upd0, "fresh row reused");
+        // Stale (updated_at older than the day's history ts) → recompute.
+        speech_daily_upsert("em:sp", &today, "{}", ver, 1);
+        let _ = speech_daily_collect("em:sp", 30);
+        let (_, _, upd2) = speech_daily_get("em:sp", &today).unwrap();
+        assert!(upd2 > 1, "stale row recomputed");
+        // Old version (even if time-fresh) → recompute to the current version.
+        speech_daily_upsert("em:sp", &today, "{}", 0, now_epoch + 1_000_000);
+        let _ = speech_daily_collect("em:sp", 30);
+        let (payv, verv, _) = speech_daily_get("em:sp", &today).unwrap();
+        assert_eq!(verv, ver, "old-version row recomputed");
+        assert_ne!(payv, "{}", "payload recomputed, not the stub");
 
         let _ = std::fs::remove_file(&path);
     }

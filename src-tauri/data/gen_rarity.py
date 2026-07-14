@@ -14,7 +14,7 @@ OUT_DIR = sys.argv[1] if len(sys.argv) > 1 else "."
 # Common first names (de + international) — never collectible items.
 NAMES = set("""
 adrian alexander alexandra alina amelie andrea andreas angela angelika anja anke anna anne annika anton antonia
-barbara bastianben benedikt benjamin bernd bettina bianca birgit bjoern brigitte carina carla carlos caroline
+barbara bastian ben benedikt benjamin bernd bettina bianca birgit bjoern brigitte carina carla carlos caroline
 carsten charlotte christa christian christiane christina christoph christopher claudia clemens constantin
 cornelia daniel daniela david denis dennis diana dieter dirk dominik dorothea edith elena eleni elias elisabeth
 elke emil emilia emily emma erik erika ernst esther eva fabian felix ferdinand finn florian frank franz frauke
@@ -34,8 +34,10 @@ robert roland rolf romy rosa rudolf ruth sabine sabrina samuel sandra sara sarah
 simone sofia sofie sonja sophia sophie stefan stefanie steffen stephan stephanie susanne sven tanja theo
 theodor theresa thomas thorsten till tim timo tobias tom torsten ulrich ulrike ursula uta ute uwe valentin
 valentina vanessa vera verena viktor viktoria vincent volker walter werner wilhelm willi wolfgang xaver yannick
-yvonne rahel rasmus
+yvonne rahel rasmus jörg björn jürgen günther günter rené andré sören jörn käthe jürg götz
 """.split())
+NAMES |= {n.replace("ö","oe").replace("ü","ue").replace("ä","ae") for n in NAMES}
+NAMES |= {n.replace("oe","ö").replace("ue","ü").replace("ae","ä") for n in list(NAMES)}
 
 WORD_RE = re.compile(r"^[a-zäöüß]+$")
 
