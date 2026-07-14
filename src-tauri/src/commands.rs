@@ -675,6 +675,9 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Gamification: recognize taught vocabulary (word of the day, coach words)
     // in the delivered text and celebrate it — XP, event, native notification.
     maybe_award_vocab(app, &cfg, &account, &result.text, now as i64);
+    // Wortdex: grow the collection from the same delivered text (local rarity
+    // tables — no network, same latency budget as the vocab award above).
+    maybe_award_finds(app, &cfg, &account, &result.text, now as i64);
     // Long recordings are NOT stored separately anymore — they land in the normal
     // history above like any dictation (TJ 2026-07-03). The former meeting store +
     // long-form diarization are retired.
@@ -1424,6 +1427,231 @@ pub fn maybe_award_vocab(app: &AppHandle, cfg: &Config, account: &str, text: &st
     push_learning_score_detached(cfg.clone(), account.to_string());
 }
 
+// ---- Wortdex: collectible word finds ----
+
+/// XP per NEW find, by band. Deliberately below the word-of-the-day reward —
+/// finds happen in passing, taught words are the actual work.
+fn find_xp(band: crate::rarity::Band) -> i64 {
+    match band {
+        crate::rarity::Band::Notable => 10,
+        crate::rarity::Band::Rare => 25,
+        crate::rarity::Band::Legendary => 100,
+    }
+}
+
+/// At most this many finds earn XP per local day — everything beyond is still
+/// recorded in the collection, just without XP (anti-farming backstop).
+const FIND_XP_DAILY_CAP: i64 = 3;
+
+/// Scan one delivered dictation for collectible words (rarity tables) and
+/// grow the Wortdex: every sighting bumps the collection, a NEW find awards
+/// XP (day-capped) and the rarest new find of the dictation is celebrated via
+/// `echo://word-find` + native notification (band >= selten).
+///
+/// Precision guards, in order: real sentences only (>= 8 tokens), the user's
+/// own vocabulary terms never count (taught, not found), and a dictation whose
+/// unique tokens are >40 % collectible is dropped entirely — that is someone
+/// reading a word list, not speaking.
+/// Pure detection core (unit-testable): collectible hits of one dictation,
+/// rarest first — or None when a precision gate rejects the whole text.
+/// Gates: >= 8 tokens (real sentences only), own vocabulary excluded (taught,
+/// not found), and >40 % collectible unique tokens on a longer text = someone
+/// reading a word list → drop everything.
+fn detect_finds(
+    text: &str,
+    own: &std::collections::HashSet<String>,
+) -> Option<Vec<(String, crate::rarity::Band, u16)>> {
+    let tokens = crate::analysis::tokenize(text);
+    if tokens.len() < 8 {
+        return None;
+    }
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut uniq: Vec<&String> = Vec::new();
+    for t in &tokens {
+        if seen.insert(t.as_str()) {
+            uniq.push(t);
+        }
+    }
+    let mut hits: Vec<(String, crate::rarity::Band, u16)> = uniq
+        .iter()
+        .filter_map(|t| {
+            if own.contains(t.as_str()) {
+                return None;
+            }
+            crate::rarity::lookup(t).map(|(b, d)| ((*t).clone(), b, d))
+        })
+        .collect();
+    if hits.is_empty() {
+        return None;
+    }
+    if uniq.len() >= 15 && hits.len() * 5 > uniq.len() * 2 {
+        log::info!(
+            "wortdex: skipped anomalous dictation ({} of {} unique tokens collectible)",
+            hits.len(),
+            uniq.len()
+        );
+        return None;
+    }
+    // Rarest first — the celebration slot and the XP budget go to the deepest words.
+    hits.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
+    Some(hits)
+}
+
+pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &str, now: i64) {
+    let day = crate::store::today_local();
+    if day.is_empty() {
+        return;
+    }
+    let own: std::collections::HashSet<String> = cfg
+        .vocabulary
+        .iter()
+        .flat_map(|e| [e.write_as.trim().to_lowercase(), e.sounds_like.trim().to_lowercase()])
+        .collect();
+    let Some(hits) = detect_finds(text, &own) else { return };
+    let surfaces = crate::analysis::surface_forms(text);
+    let mut awarded_today =
+        crate::store::learning_kind_count(account, "word_find", Some(&day));
+    let mut celebrated: Option<serde_json::Value> = None;
+    let mut any_new = false;
+    for (word, band, dex) in hits {
+        let display = surfaces.get(word.as_str()).cloned().unwrap_or_else(|| word.clone());
+        let context = crate::analysis::context_sentence(text, &word);
+        let is_new = crate::store::word_find_record(
+            account,
+            &word,
+            &display,
+            band.as_i64(),
+            dex as i64,
+            &context,
+            now,
+        );
+        if !is_new {
+            continue;
+        }
+        any_new = true;
+        let mut xp = 0;
+        if awarded_today < FIND_XP_DAILY_CAP
+            && crate::store::learning_award(account, &day, "word_find", &word, find_xp(band), now)
+        {
+            awarded_today += 1;
+            xp = find_xp(band);
+        }
+        if celebrated.is_none() && xp > 0 {
+            let (n, r, l) = crate::store::word_find_band_counts(account);
+            celebrated = Some(serde_json::json!({
+                "word": word,
+                "display": display,
+                "band": band.as_i64(),
+                "dex": dex,
+                "xp": xp,
+                "counts": { "notable": n, "rare": r, "legendary": l },
+            }));
+            if band >= crate::rarity::Band::Rare {
+                notify_find(app, &cfg.ui_language, &display, band, xp);
+            }
+        }
+    }
+    if let Some(payload) = celebrated {
+        use tauri::Emitter;
+        let _ = app.emit("echo://word-find", payload);
+    }
+    if any_new {
+        push_learning_score_detached(cfg.clone(), account.to_string());
+    }
+}
+
+/// Native find notification (de/en like notify_reward) — only for selten and
+/// legendaer; bemerkenswert stays an in-app toast so notifications stay special.
+fn notify_find(app: &AppHandle, ui_language: &str, display: &str, band: crate::rarity::Band, xp: i64) {
+    let de = ui_language.to_lowercase().starts_with("de");
+    let legendary = band == crate::rarity::Band::Legendary;
+    let title = match (de, legendary) {
+        (true, true) => "Legendäres Wort entdeckt!",
+        (true, false) => "Seltenes Wort entdeckt!",
+        (false, true) => "Legendary word discovered!",
+        (false, false) => "Rare word discovered!",
+    };
+    let body = if de {
+        format!("„{display}“ ist jetzt in deinem Wortdex — +{xp} XP")
+    } else {
+        format!("“{display}” is now in your Wortdex — +{xp} XP")
+    };
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
+/// The collection for the Wortdex tab: rows + per-band counts. 100% local.
+#[tauri::command]
+pub fn wortdex_list(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let (notable, rare, legendary) = crate::store::word_find_band_counts(&account);
+    serde_json::json!({
+        "finds": crate::store::word_finds_list(&account, 2000),
+        "counts": { "notable": notable, "rare": rare, "legendary": legendary },
+    })
+}
+
+/// Achievement catalog: (id, target). Computed on demand from existing data —
+/// no persistence, no migration, always consistent with the ledgers. Each id
+/// doubles as an equippable account title (learning.titles.<id> in the UI);
+/// `config.learning_title` stores the equipped id.
+const ACHIEVEMENTS: &[(&str, i64)] = &[
+    ("first_notable", 1),
+    ("first_rare", 1),
+    ("first_legendary", 1),
+    ("finds_10", 10),
+    ("finds_50", 50),
+    ("finds_200", 200),
+    ("wod_7", 7),
+    ("wod_30", 30),
+    ("coach_25", 25),
+    ("streak_7", 7),
+    ("streak_30", 30),
+    ("level_5", 5),
+    ("level_10", 10),
+];
+
+/// All achievements with progress + earned state (and, where the ledgers can
+/// date it, the moment it was earned).
+#[tauri::command]
+pub fn achievements_list(state: State<'_, AppState>) -> Vec<serde_json::Value> {
+    let account = crate::presets::account_key(&state.config.lock());
+    let (notable, rare, legendary) = crate::store::word_find_band_counts(&account);
+    let finds_total = notable + rare + legendary;
+    let wod = crate::store::learning_kind_count(&account, "word_of_day", None);
+    let coach = crate::store::learning_kind_count(&account, "coach_word", None);
+    let (_, longest_streak, _, _) = compute_streak(&account);
+    let (level, _, _) = level_for_xp(crate::store::learning_xp(&account, None));
+    ACHIEVEMENTS
+        .iter()
+        .map(|(id, target)| {
+            let (progress, earned_ts): (i64, Option<i64>) = match *id {
+                "first_notable" => (notable.min(1), crate::store::word_find_first_ts(&account, 1)),
+                "first_rare" => (rare.min(1), crate::store::word_find_first_ts(&account, 2)),
+                "first_legendary" => {
+                    (legendary.min(1), crate::store::word_find_first_ts(&account, 3))
+                }
+                "finds_10" | "finds_50" | "finds_200" => (
+                    finds_total,
+                    crate::store::word_finds_nth_ts(&account, *target as u32),
+                ),
+                "wod_7" | "wod_30" => (wod, None),
+                "coach_25" => (coach, None),
+                "streak_7" | "streak_30" => (longest_streak, None),
+                "level_5" | "level_10" => (level, None),
+                _ => (0, None),
+            };
+            serde_json::json!({
+                "id": id,
+                "target": target,
+                "progress": progress.min(*target),
+                "earned": progress >= *target,
+                "earned_ts": if progress >= *target { earned_ts } else { None },
+            })
+        })
+        .collect()
+}
+
 /// Native reward notification, best-effort. DE for German UIs, EN otherwise —
 /// the backend has no i18n catalog (only de/en ship as bundled UI languages).
 fn notify_reward(app: &AppHandle, ui_language: &str, events: &[serde_json::Value]) {
@@ -1479,6 +1707,9 @@ fn push_learning_score(cfg: &Config, account: &str) {
             "xp_total": crate::store::learning_xp(account, None),
             "words": crate::store::learning_distinct_words(account),
             "name": name,
+            // Equipped achievement title (id) — rendered locale-side by every
+            // client; unknown/empty ids are simply not shown.
+            "title": cfg.learning_title,
         }));
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);
@@ -2192,6 +2423,60 @@ mod meet_local_stubs {
 }
 #[cfg(not(feature = "local-meet"))]
 pub use meet_local_stubs::*;
+
+#[cfg(test)]
+mod wortdex_tests {
+    use super::detect_finds;
+
+    fn own(words: &[&str]) -> std::collections::HashSet<String> {
+        words.iter().map(|w| w.to_string()).collect()
+    }
+
+    #[test]
+    fn normal_sentence_yields_rarest_first() {
+        // Real sentence, two collectibles: "eloquenz" (selten) beats
+        // "diskrepanz" (bemerkenswert) for the celebration slot.
+        let hits = detect_finds(
+            "Die Diskrepanz zwischen Anspruch und Eloquenz war heute wirklich bemerkenswert groß",
+            &own(&[]),
+        )
+        .expect("must detect");
+        assert_eq!(hits[0].0, "eloquenz");
+        assert!(hits.iter().any(|h| h.0 == "diskrepanz"));
+    }
+
+    #[test]
+    fn short_texts_are_gated() {
+        assert!(detect_finds("Diskrepanz ist groß", &own(&[])).is_none());
+    }
+
+    #[test]
+    fn own_vocabulary_never_counts() {
+        let hits = detect_finds(
+            "Die Diskrepanz zwischen den beiden Angeboten war am Ende wirklich enorm",
+            &own(&["diskrepanz"]),
+        );
+        assert!(hits.is_none(), "taught words are not finds");
+    }
+
+    #[test]
+    fn word_list_reading_is_dropped_entirely() {
+        // 16 unique tokens, nearly all collectible → anomaly gate.
+        let listing = "Diskrepanz Eloquenz Redundanz kohärent stringent obsolet \
+                       sukzessive antizipieren Tautologie prägnant ephemer apodiktisch \
+                       ubiquitär Apotheose eklatant marginal";
+        assert!(detect_finds(listing, &own(&[])).is_none());
+    }
+
+    #[test]
+    fn everyday_dictation_stays_quiet() {
+        assert!(detect_finds(
+            "Bitte schick mir die Datei morgen früh, dann schaue ich sie mir direkt an",
+            &own(&[]),
+        )
+        .is_none());
+    }
+}
 
 #[cfg(test)]
 mod stats_tests {

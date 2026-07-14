@@ -91,6 +91,9 @@ export interface Config {
   account_email: string;
   display_name: string; // full name — auto-seeded from JWT on login, user-editable
   nickname: string; // Spitzname — how Echo addresses the user (greeting + account panel)
+  /** Equipped Wortdex title: an achievement id (learning.titles.<id>) or "" —
+   *  shown on the account card and carried into the leaderboard. */
+  learning_title: string;
   last_cloud_mode: string;
   auto_update_check: boolean;
   autostart_enabled: boolean;
@@ -600,7 +603,7 @@ export const wordOfDay = () => invoke<WordOfDay>("word_of_day");
 export interface LearningEvent {
   ts: number;
   day: string;
-  kind: "word_of_day" | "coach_word";
+  kind: "word_of_day" | "coach_word" | "word_find";
   word: string;
   xp: number;
 }
@@ -622,6 +625,11 @@ export interface LeaderboardRow {
   xp: number;
   words: number;
   me?: boolean;
+  /** Server-side additions (newer servers only — treat as optional). `xp_total`
+   *  is the lifetime XP that drives the row's level ring; `title` is an equipped
+   *  achievement id (learning.titles.<id>). Both may be absent on old servers. */
+  xp_total?: number;
+  title?: string;
 }
 export interface Leaderboard {
   available: boolean;
@@ -638,3 +646,58 @@ export interface LearningReward {
 }
 export const onLearningReward = (cb: (r: LearningReward) => void): Promise<UnlistenFn> =>
   listen<LearningReward>("echo://learning-reward", (e) => cb(e.payload));
+
+// ---- Wortdex (collectible rare words) + achievements ----
+
+/** Rarity band of a collectible word: 1 = notable, 2 = rare, 3 = legendary
+ *  (higher = rarer, mirrors rarity::Band). */
+export type Band = 1 | 2 | 3;
+
+export interface BandCounts {
+  notable: number;
+  rare: number;
+  legendary: number;
+}
+
+/** One collected word in the Wortdex. `dex` is its immutable "Nr." in the
+ *  rarity table; `context` is the (possibly empty) first-sighting sentence;
+ *  `count` is how often it has been spoken. Epoch SECONDS for the timestamps. */
+export interface WordFind {
+  word: string;
+  display: string;
+  band: Band;
+  dex: number;
+  count: number;
+  first_ts: number;
+  last_ts: number;
+  context: string;
+}
+export interface WortdexData {
+  finds: WordFind[];
+  counts: BandCounts;
+}
+/** The whole collection, newest-first, plus per-band totals. 100 % local. */
+export const wortdexList = () => invoke<WortdexData>("wortdex_list");
+
+/** A milestone. `id` doubles as an equippable account title
+ *  (learning.titles.<id>); `earned_ts` is set only for the datable ones. */
+export interface Achievement {
+  id: string;
+  target: number;
+  progress: number;
+  earned: boolean;
+  earned_ts: number | null;
+}
+export const achievementsList = () => invoke<Achievement[]>("achievements_list");
+
+/** Fired at most once per dictation, for the rarest NEW collectible word. */
+export interface WordFindEvent {
+  word: string;
+  display: string;
+  band: Band;
+  dex: number;
+  xp: number;
+  counts: BandCounts;
+}
+export const onWordFind = (cb: (f: WordFindEvent) => void): Promise<UnlistenFn> =>
+  listen<WordFindEvent>("echo://word-find", (e) => cb(e.payload));

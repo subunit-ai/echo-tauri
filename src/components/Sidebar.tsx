@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -7,6 +8,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "./Avatar";
+import { TierRing } from "./TierRing";
+import { learningXp, onLearningReward, onWordFind } from "../lib/ipc";
 import { useConfig } from "../state/ConfigContext";
 
 export type Section =
@@ -295,17 +298,37 @@ function AccountCard({
   const emailLocal = email ? email.split("@")[0] : "";
   const loggedIn = !!email;
   const plan = config?.plan ?? "free";
+  const wornTitle = config?.learning_title?.trim() || "";
 
   const primary = nickname || name || emailLocal || t("account.guest");
 
+  // Learning level drives the avatar's tier ring. Loaded on mount, kept live by
+  // the same reward + word-find events the Learning section listens to.
+  const [level, setLevel] = useState(0);
+  useEffect(() => {
+    const load = () => learningXp().then((x) => setLevel(x.level)).catch(() => {});
+    load();
+    const un1 = onLearningReward(load);
+    const un2 = onWordFind(load);
+    return () => {
+      un1.then((f) => f());
+      un2.then((f) => f());
+    };
+  }, []);
+
   return (
     <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
-      <Avatar name={nickname || name || email} size={40} />
+      <TierRing level={level} size={40}>
+        <Avatar name={nickname || name || email} size={40} />
+      </TierRing>
       <span className="sa-meta">
         <span className="sa-name">{primary}</span>
         <span className="sa-sub">
           {loggedIn ? (
-            <span className={`sa-plan sa-plan--${plan}`}>{t(`header.plan.${plan}`)}</span>
+            <>
+              <span className={`sa-plan sa-plan--${plan}`}>{t(`header.plan.${plan}`)}</span>
+              {wornTitle && <span className="sa-title">{t(`learning.titles.${wornTitle}`)}</span>}
+            </>
           ) : (
             t("account.notSignedIn")
           )}

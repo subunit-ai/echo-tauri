@@ -626,6 +626,44 @@ pub fn matches_inflected(base: &str, token: &str) -> bool {
     false
 }
 
+/// Original surface forms by lowercase token ("diskrepanz" → "Diskrepanz"),
+/// first occurrence wins — the Wortdex shows the word as it was delivered.
+pub fn surface_forms(text: &str) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let mut cur = String::new();
+    let mut flush = |cur: &mut String, map: &mut std::collections::HashMap<String, String>| {
+        if cur.chars().count() >= 3 && cur.chars().any(|c| c.is_alphabetic()) {
+            let key: String = cur.chars().flat_map(|c| c.to_lowercase()).collect();
+            map.entry(key).or_insert_with(|| std::mem::take(cur));
+        }
+        cur.clear();
+    };
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            cur.push(ch);
+        } else {
+            flush(&mut cur, &mut map);
+        }
+    }
+    flush(&mut cur, &mut map);
+    map
+}
+
+/// First sentence containing `token` (lowercase), capped for card display —
+/// the "Erstfund" context quote in the Wortdex.
+pub fn context_sentence(text: &str, token: &str) -> String {
+    for s in split_sentences(text) {
+        if tokenize(&s).iter().any(|t| t == token) {
+            let mut out: String = s.chars().take(160).collect();
+            if s.chars().count() > 160 {
+                out.push('…');
+            }
+            return out;
+        }
+    }
+    String::new()
+}
+
 /// Scan one dictation for taught vocabulary: returns whether today's word of
 /// the day was used plus every coach word (suggested alternatives + past words
 /// of the day) that appears — base words, deduped, in `coach` iteration order
