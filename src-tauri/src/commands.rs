@@ -675,9 +675,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
     // Gamification: recognize taught vocabulary (word of the day, coach words)
     // in the delivered text and celebrate it — XP, event, native notification.
     maybe_award_vocab(app, &cfg, &account, &result.text, now as i64);
-    // Wortdex: grow the collection from the same delivered text (local rarity
-    // tables — no network, same latency budget as the vocab award above).
-    maybe_award_finds(app, &cfg, &account, &result.text, now as i64);
+    // Wortdex: grow the collection from the same delivered text. Detached —
+    // context extraction rescans the text per hit and every find is an SQLite
+    // write, none of which may delay the Done state (Codex-Review #141).
+    {
+        let (app2, cfg2, account2, text2) = (app.clone(), cfg.clone(), account.clone(), result.text.clone());
+        std::thread::spawn(move || maybe_award_finds(&app2, &cfg2, &account2, &text2, now as i64));
+    }
     // Long recordings are NOT stored separately anymore — they land in the normal
     // history above like any dictation (TJ 2026-07-03). The former meeting store +
     // long-form diarization are retired.
@@ -1515,7 +1519,13 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
     let mut any_new = false;
     for (word, band, dex) in hits {
         let display = surfaces.get(word.as_str()).cloned().unwrap_or_else(|| word.clone());
-        let context = crate::analysis::context_sentence(text, &word);
+        // Privacy: with history disabled the user opted out of keeping dictation
+        // text — the find keeps the WORD, never the sentence (Codex-Review #141).
+        let context = if cfg.history_enabled {
+            crate::analysis::context_sentence(text, &word)
+        } else {
+            String::new()
+        };
         let is_new = crate::store::word_find_record(
             account,
             &word,
@@ -1536,7 +1546,10 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
             awarded_today += 1;
             xp = find_xp(band);
         }
-        if celebrated.is_none() && xp > 0 {
+        // Emit for the rarest new find even beyond the daily XP cap — an open
+        // Wortdex must refresh on every growth; the UI gates its toast on
+        // xp > 0 (Codex-Review #141). Notifications stay XP-only.
+        if celebrated.is_none() {
             let (n, r, l) = crate::store::word_find_band_counts(account);
             celebrated = Some(serde_json::json!({
                 "word": word,
@@ -1546,7 +1559,7 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
                 "xp": xp,
                 "counts": { "notable": n, "rare": r, "legendary": l },
             }));
-            if band >= crate::rarity::Band::Rare {
+            if xp > 0 && band >= crate::rarity::Band::Rare {
                 notify_find(app, &cfg.ui_language, &display, band, xp);
             }
         }
@@ -1586,7 +1599,7 @@ pub fn wortdex_list(state: State<'_, AppState>) -> serde_json::Value {
     let account = crate::presets::account_key(&state.config.lock());
     let (notable, rare, legendary) = crate::store::word_find_band_counts(&account);
     serde_json::json!({
-        "finds": crate::store::word_finds_list(&account, 2000),
+        "finds": crate::store::word_finds_list(&account, 5000),
         "counts": { "notable": notable, "rare": rare, "legendary": legendary },
     })
 }
@@ -1740,6 +1753,58 @@ pub fn learning_xp(state: State<'_, AppState>) -> serde_json::Value {
         "distinct_words": crate::store::learning_distinct_words(&account),
         "events": crate::store::learning_events_recent(&account, 10),
     })
+}
+
+/// Deterministic Sprechprofil: six rhetoric dimensions (0–100) over the last
+/// `days` (default 30) with sub-metrics, a "ghost" polygon (the same window one
+/// period earlier) and rule-based insights (recent 7 days vs. the previous 30).
+/// 100% local, no network.
+///
+/// `(async)`: on a cold cache the per-day backfill tokenizes up to ~5000 history
+/// texts and runs MTLD + the heuristic passes; as a sync command that would
+/// freeze the Learning tab on open. Warm calls only recompute days with new
+/// dictations (the rest come straight from `speech_daily`).
+#[tauri::command(async)]
+pub fn speech_profile(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let days = days.unwrap_or(30).clamp(1, 3650);
+    // Window + one period earlier (ghost) + a 37-day span for the insight
+    // baseline (recent 7 days vs. the previous 30).
+    let lookback = (days * 2).max(37);
+    let rows = crate::store::speech_daily_collect(&account, lookback);
+
+    // ISO day cutoffs: window is [today-(days-1) .. today]; ghost the period
+    // before it; insight windows at 6 / 36 days back.
+    let win_from = crate::store::local_date_offset((days - 1) as i64);
+    let ghost_from = crate::store::local_date_offset((days * 2 - 1) as i64);
+    let recent_from = crate::store::local_date_offset(6);
+    let base_from = crate::store::local_date_offset(36);
+
+    let pick = |lo: &str, hi: Option<&str>| {
+        crate::speech_profile::aggregate(
+            rows.iter()
+                .filter(|(d, _)| d.as_str() >= lo && hi.map_or(true, |h| d.as_str() < h))
+                .map(|(_, s)| s),
+        )
+    };
+    let window = pick(&win_from, None);
+    let ghost = pick(&ghost_from, Some(&win_from));
+    let recent7 = pick(&recent_from, None);
+    let prev30 = pick(&base_from, Some(&recent_from));
+
+    let window_texts = crate::store::history_texts_since(days);
+    crate::speech_profile::build_profile(&window, &window_texts, Some(&ghost), &recent7, &prev30, days)
+}
+
+/// Per-day Sprechprofil trend (overall + the six scores per day, ascending, only
+/// days with ≥ 50 words) for the dimension sparklines. Local; `(async)` for the
+/// same cold-cache reason as `speech_profile`.
+#[tauri::command(async)]
+pub fn speech_profile_trend(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let days = days.unwrap_or(30).clamp(1, 3650);
+    let rows = crate::store::speech_daily_collect(&account, days);
+    crate::speech_profile::build_trend(&rows)
 }
 
 /// Community leaderboard („wer erweitert seinen Wortschatz am meisten?“):

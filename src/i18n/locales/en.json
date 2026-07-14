@@ -1037,6 +1037,167 @@
       "streak_30": "Iron Tongue",
       "level_5": "The Ascendant",
       "level_10": "Eloquence Adept"
+    },
+    "speech": {
+      "tab": "Speech profile",
+      "overallLabel": "Rhetoric score",
+      "overallSub": "How you speak – analysed deterministically and locally.",
+      "vsGhost": "vs. previous period",
+      "vsGhostUp": "better than last period",
+      "vsGhostDown": "below last period",
+      "noGhost": "First reading – from now on you'll see your progress.",
+      "wordsAnalysed": "{{count}} words analysed",
+      "loading": "Analysing your speech profile…",
+      "emptyTitle": "Not enough data yet",
+      "emptyHint": "Dictate ~500 words and Echo will draw your speech profile. So far: {{count}} words.",
+      "dimTitle": "Your six dimensions",
+      "dimSub": "Each dimension rolls several metrics into one score (0–100).",
+      "insightsTitle": "Recommendations",
+      "insightsSub": "Concrete pointers, drawn from your most recent changes.",
+      "unitPer1000": "/ 1000 w.",
+      "scoreOf100": "of 100",
+      "dim": {
+        "variety": {
+          "name": "Variety",
+          "info": "How varied your vocabulary is – measures range and the share of rare, elevated words."
+        },
+        "precision": {
+          "name": "Precision",
+          "info": "How precisely you phrase things – rewards concrete terms, penalises weak, vague and hedging words."
+        },
+        "clarity": {
+          "name": "Clarity",
+          "info": "How easy your sentences are to follow – from sentence length, readability and nesting."
+        },
+        "structure": {
+          "name": "Structure",
+          "info": "How well you connect ideas – measures the amount and variety of your linking words."
+        },
+        "active": {
+          "name": "Active voice",
+          "info": "How active and concrete your style is – little passive and little nominal style raise the score."
+        },
+        "fluency": {
+          "name": "Fluency",
+          "info": "How fluently you speak – from fillers, pace stability and sentence rhythm."
+        }
+      },
+      "metric": {
+        "mtld": {
+          "name": "Vocabulary variety (MTLD)",
+          "info": "Measures how long you speak before your vocabulary repeats. Higher is better – independent of text length."
+        },
+        "eleganceRate": {
+          "name": "Elevated words",
+          "info": "Share of sophisticated, precise terms per 1000 words. More of them reads as more refined."
+        },
+        "distinctWords": {
+          "name": "Distinct words",
+          "info": "Number of different words in the analysed window."
+        },
+        "hapaxRate": {
+          "name": "One-off words",
+          "info": "Share of words you used exactly once – a signal of vocabulary breadth."
+        },
+        "weakRate": {
+          "name": "Filler nouns",
+          "info": "Pale catch-all words like “thing”, “stuff”, “do” per 1000 words. Fewer is more precise."
+        },
+        "vagueRate": {
+          "name": "Vague terms",
+          "info": "Fuzzy words like “somehow”, “actually”, “sort of” per 1000 words. Fewer sounds more definite."
+        },
+        "hedgeRate": {
+          "name": "Hedging phrases",
+          "info": "Qualifiers like “I think”, “maybe”, “probably” per 1000 words. Fewer sounds more assured."
+        },
+        "lix": {
+          "name": "Readability index",
+          "info": "Readability from sentence length and share of long words. Lower means easier to follow."
+        },
+        "nestedShare": {
+          "name": "Nested sentences",
+          "info": "Share of sentences with deep sub-clause nesting. Fewer is clearer."
+        },
+        "avgSentence": {
+          "name": "Avg. sentence length",
+          "info": "Average words per sentence. Shorter sentences are usually easier to understand."
+        },
+        "p90Sentence": {
+          "name": "Long sentences (p90)",
+          "info": "Length of your longest 10% of sentences (in words). Upward outliers make listening harder."
+        },
+        "connDensity": {
+          "name": "Linking words",
+          "info": "Density of logical connectors like “because”, “yet”, “therefore” per sentence. More structure is better."
+        },
+        "connBuckets": {
+          "name": "Connector variety",
+          "info": "How many different kinds of linking words you use (causal, contrastive, temporal …)."
+        },
+        "passiveShare": {
+          "name": "Passive share",
+          "info": "Share of sentences in the passive voice. Active sentences feel more direct and alive."
+        },
+        "nominalRate": {
+          "name": "Nominal style",
+          "info": "Nominalised verbs (‑tion, ‑ment …) per 1000 words. Fewer of them sounds more concrete."
+        },
+        "fillerRate": {
+          "name": "Fillers",
+          "info": "Hesitations like “uh”, “like”, “basically” per 1000 words. Fewer reads as more assured."
+        },
+        "wpmCv": {
+          "name": "Pace stability",
+          "info": "How even your speaking pace is. Lower means calmer and more controlled."
+        },
+        "rhythmSd": {
+          "name": "Sentence rhythm",
+          "info": "How much your sentence lengths vary. Some variation keeps listening engaging."
+        }
+      },
+      "insights": {
+        "hedging_up": {
+          "finding": "Your hedging phrases rose by {{delta}} %.",
+          "tip": "Cut “I think”, “maybe”, “somehow” – state the point directly."
+        },
+        "weak_up": {
+          "finding": "Filler nouns went up by {{delta}} %.",
+          "tip": "Swap “thing”, “stuff”, “do” for the precise word you actually mean."
+        },
+        "filler_up": {
+          "finding": "Your filler rate rose by {{delta}} %.",
+          "tip": "Pause instead of filling – a beat of silence beats an “uh”."
+        },
+        "filler_down": {
+          "finding": "Nice – your fillers dropped by {{delta}} %.",
+          "tip": "Keep it up: deliberate pauses keep your delivery calm and clear."
+        },
+        "passive_up": {
+          "finding": "Passive constructions rose by {{delta}} %.",
+          "tip": "Go active: “We decide this” instead of “It is decided”."
+        },
+        "nesting_up": {
+          "finding": "Nested sentences went up by {{delta}} %.",
+          "tip": "Break up long sentences – one idea per sentence is easier to follow."
+        },
+        "variety_up": {
+          "finding": "Your vocabulary grew {{delta}} % more varied.",
+          "tip": "Stay curious – new words from the Wortdex lock in the effect."
+        },
+        "elegance_up": {
+          "finding": "You're using {{delta}} % more elevated words.",
+          "tip": "Use elevated terms deliberately – impact comes from choice, not volume."
+        },
+        "monotone_rhythm": {
+          "finding": "Your sentence rhythm has been very uniform lately.",
+          "tip": "Alternate short and long sentences on purpose – it creates tension for the listener."
+        },
+        "connectors_low": {
+          "finding": "You use noticeably few linking words.",
+          "tip": "Connect ideas explicitly: “because”, “yet”, “therefore” guide your audience."
+        }
+      }
     }
   },
   "vp": {

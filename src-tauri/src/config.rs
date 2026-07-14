@@ -467,6 +467,10 @@ pub struct Config {
     /// One-time guard: has the history → `daily_stats` backfill run yet?
     /// (fresh installs have nothing to backfill → true from the start).
     pub daily_stats_seeded: bool,
+    /// One-time guard: has the history → `speech_daily` (Sprechprofil) backfill
+    /// been kicked off yet? Old configs default false; the command also fills
+    /// gaps lazily, so this is only a warm-up.
+    pub speech_daily_seeded: bool,
 
     pub total_transcriptions: i64,
     pub total_audio_seconds: f64,
@@ -631,6 +635,7 @@ impl Default for Config {
             daily_word_goal: 500,
             weekly_word_goal: 3000,
             daily_stats_seeded: false,
+            speech_daily_seeded: false,
 
             total_transcriptions: 0,
             total_audio_seconds: 0.0,

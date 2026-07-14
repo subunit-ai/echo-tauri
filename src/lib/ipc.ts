@@ -701,3 +701,73 @@ export interface WordFindEvent {
 }
 export const onWordFind = (cb: (f: WordFindEvent) => void): Promise<UnlistenFn> =>
   listen<WordFindEvent>("echo://word-find", (e) => cb(e.payload));
+
+// ---- Sprechprofil (rhetoric analysis radar) --------------------------------
+// Deterministic, 100 % local analysis of HOW the user speaks across six
+// dimensions. The engine (src-tauri) computes these from the dictation history;
+// this UI only displays them. `score` is always 0–100 (higher = better);
+// `metrics` carry the raw sub-values that make up the score, each `value` in the
+// unit the UI formats per metric key (rates per 1000 words, shares 0–1, counts…).
+
+/** One raw sub-value behind a dimension score (e.g. mtld, hedgeRate). The `key`
+ *  drives its label, tooltip and number formatting in the UI. */
+export interface SpeechMetric {
+  key: string;
+  value: number;
+}
+
+/** One of the six rhetoric dimensions: variety | precision | clarity |
+ *  structure | active | fluency. `score` 0–100, `metrics` its raw inputs. */
+export interface SpeechDimension {
+  key: string;
+  score: number;
+  metrics: SpeechMetric[];
+}
+
+/** A detected trend worth surfacing. `severity`: 1 = praise/info (green),
+ *  2 = neutral hint, 3 = clear amber flag. `delta` is a fraction (0.31 = 31 %),
+ *  interpolated into the finding/tip text as a percentage. */
+export interface SpeechInsight {
+  id: string;
+  severity: 1 | 2 | 3;
+  delta: number;
+}
+
+/** The comparison baseline ("ghost") — the previous window's scores, drawn as a
+ *  dimmed polygon behind the current one so progress is visible at a glance. */
+export interface SpeechGhost {
+  overall: number;
+  /** dimension key → score (0–100). */
+  scores: Record<string, number>;
+}
+
+export interface SpeechProfile {
+  window_days: number;
+  total_words: number;
+  /** False → too few analysed words for meaningful scores; show the hint. */
+  enough_data: boolean;
+  overall: number;
+  dimensions: SpeechDimension[];
+  ghost: SpeechGhost | null;
+  insights: SpeechInsight[];
+}
+
+/** One day in the trend: the overall score, per-dimension scores and the word
+ *  count that day. Ascending by day. */
+export interface SpeechTrendDay {
+  day: string;
+  overall: number;
+  scores: Record<string, number>;
+  words: number;
+}
+
+export interface SpeechTrend {
+  days: SpeechTrendDay[];
+}
+
+/** The full profile over the last `days` (7 / 30 / 90). 100 % local. */
+export const speechProfile = (days = 30) =>
+  invoke<SpeechProfile>("speech_profile", { days });
+/** The day-by-day score trend that feeds the per-dimension sparklines. */
+export const speechProfileTrend = (days = 30) =>
+  invoke<SpeechTrend>("speech_profile_trend", { days });

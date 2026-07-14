@@ -1797,3 +1797,389 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ================================================================
+   Sprechprofil — rhetoric-analysis radar (Learning tab 4).
+   Dark-first Liquid Glass, same recipe as the rest of this file: every colour
+   resolves from tokens, so Dark / Light / Liquid all fall out for free. The
+   ONLY hue that tokens.css does not neutralise for the zero-hue black theme is
+   --amber — so the two amber-carrying spots (a regression delta, a sev-3
+   insight) route through local --sev-* vars that a [data-theme="black"] block
+   at the end remaps to a brightness ramp. --emerald / --cyan are already greyed
+   by tokens.css, so praise + the whole radar go monochrome with no override.
+   ================================================================ */
+
+.speech-range {
+  margin-bottom: 16px;
+}
+
+/* ---- Radar chart (components/charts/RadarChart.tsx) ---- */
+.radar-chart {
+  display: block;
+  overflow: visible;
+}
+.radar-ring {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.radar-spoke {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+/* Previous window — dimmed dashed outline behind the current shape, so progress
+   reads as the solid polygon pushing outward past the ghost. */
+.radar-ghost {
+  fill: color-mix(in srgb, var(--ink3) 9%, transparent);
+  stroke: var(--ink3);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.75;
+}
+/* Current profile — the one cyan accent (grey in the black theme, so monochrome). */
+.radar-area {
+  fill: color-mix(in srgb, var(--cyan) 22%, transparent);
+  stroke: var(--cyan);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.radar-dot {
+  fill: var(--cyan);
+}
+.radar-label {
+  fill: var(--ink2);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font);
+}
+
+/* ---- Hero: radar + big rhetoric score ---- */
+.speech-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(180px, 0.88fr);
+  gap: 20px;
+  align-items: center;
+}
+@media (max-width: 720px) {
+  .speech-hero {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+}
+.speech-hero-radar {
+  min-width: 0;
+}
+.speech-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .speech-hero-side {
+    align-items: center;
+  }
+}
+.speech-hero-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+.speech-hero-score {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.speech-hero-of {
+  font-size: 12px;
+  color: var(--ink3);
+}
+/* Local severity tokens — remapped to greys under [data-theme="black"] below. */
+.speech-delta {
+  --sev-ok: var(--emerald);
+  --sev-amber: var(--amber);
+  --sev-amber-bg: var(--amber-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 4px 11px 4px 8px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.speech-delta.up {
+  color: var(--sev-ok);
+  background: color-mix(in srgb, var(--sev-ok) 13%, transparent);
+}
+.speech-delta.down {
+  color: var(--sev-amber);
+  background: var(--sev-amber-bg);
+}
+.speech-delta.neutral {
+  color: var(--ink3);
+  background: transparent;
+  padding: 0;
+  margin-top: 10px;
+  font-weight: 500;
+  font-size: 12px;
+  max-width: 240px;
+}
+.speech-delta-label {
+  color: var(--ink2);
+  font-weight: 500;
+  font-size: 11.5px;
+}
+.speech-hero-words {
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+
+/* ---- Dimension cards ---- */
+.speech-dim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+.speech-dim-card {
+  position: relative;
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-card);
+  padding: 15px 16px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  overflow: visible; /* let the metric tooltips escape the card */
+}
+.speech-dim-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.speech-dim-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.speech-dim-score {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.speech-score-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bg-deep);
+  margin: 9px 0 4px;
+  overflow: hidden;
+}
+.speech-score-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cyan);
+}
+.speech-dim-spark {
+  margin: 4px 0 10px;
+  opacity: 0.9;
+}
+.speech-metrics {
+  display: flex;
+  flex-direction: column;
+}
+.speech-metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+}
+.speech-metric-row + .speech-metric-row {
+  border-top: 1px solid var(--line);
+}
+.speech-metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink2);
+  min-width: 0;
+}
+.speech-metric-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ---- Info dot (hover tooltip + click-pin, #140 grammar) ---- */
+.speech-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  color: var(--ink3);
+  cursor: pointer;
+  line-height: 0;
+  vertical-align: middle;
+  transition: color 0.15s var(--ease-out);
+}
+.speech-info:hover,
+.speech-info:focus-visible,
+.speech-info.pinned {
+  color: var(--cyan-ink);
+}
+/* The bubble floats OVER neighbouring rows → --menu-bg (opaque per theme), not a
+   glass token, exactly as the coach tooltip (activity.css :1111). Centred on the
+   dot and kept narrow (200px): the dots span roughly x≈100…700 across a 900-wide
+   pane, and centring a 200px bubble keeps BOTH extremes on-screen — a wider or
+   edge-anchored bubble clipped the left screen edge (leftmost card) or the right
+   (rightmost column). Position-agnostic, so it also survives the 2↔3 column reflow. */
+.speech-info::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+  z-index: 40;
+  width: max-content;
+  max-width: 200px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  color: var(--ink);
+  background: var(--menu-bg);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--border-strong, var(--line2));
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out);
+}
+.speech-info:hover::after,
+.speech-info:focus-visible::after,
+.speech-info.pinned::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ---- Insight / recommendation cards ---- */
+.speech-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.speech-insight {
+  --sev-ok: var(--emerald);
+  --sev-amber: var(--amber);
+  --sev-amber-bg: var(--amber-bg);
+  --sev-amber-line: var(--amber-line);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+}
+.speech-insight-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.speech-insight.sev-1 .speech-insight-icon {
+  color: var(--sev-ok);
+  background: color-mix(in srgb, var(--sev-ok) 15%, transparent);
+}
+.speech-insight.sev-2 .speech-insight-icon {
+  color: var(--ink2);
+  background: color-mix(in srgb, var(--ink3) 15%, transparent);
+}
+.speech-insight.sev-3 {
+  border-color: var(--sev-amber-line);
+}
+.speech-insight.sev-3 .speech-insight-icon {
+  color: var(--sev-amber);
+  background: var(--sev-amber-bg);
+}
+.speech-insight-body {
+  min-width: 0;
+}
+.speech-insight-finding {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.speech-insight-tip {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+/* ---- Empty / not-enough-data state ---- */
+.speech-empty {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r);
+  box-shadow: inset 0 1px 0 var(--rim);
+}
+.speech-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.speech-empty-hint {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* ---- Zero-hue black theme: remap the only hue tokens.css leaves coloured
+   (--amber) to a brightness ramp. sev-3 / a regression delta = brightest
+   (draws the eye); praise (emerald) is already greyed upstream but we lift it a
+   touch so it doesn't read as disabled. ---- */
+:root[data-theme="black"] .speech-delta,
+:root[data-theme="black"] .speech-insight {
+  --sev-ok: #c6c6c9;
+  --sev-amber: #f0f0f2;
+  --sev-amber-bg: rgba(255, 255, 255, 0.07);
+  --sev-amber-line: rgba(255, 255, 255, 0.16);
+}

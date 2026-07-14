@@ -38,6 +38,7 @@ mod overlay;
 mod recorder;
 mod sound; // native record-start cue (instant even when the window is hidden)
 mod store; // SQLite history + meetings + orb profiles (echo.db)
+mod speech_profile; // deterministic Sprechprofil engine (6 rhetoric dimensions, offline)
 mod transcribe;
 mod vocab_suggest; // auto-vocab spelling guess via the Abo cleanup backend
 mod voiceprint; // persistenter Account-Stimmabdruck (/v1/voiceprints, opt-in + adaptiv)
@@ -149,6 +150,8 @@ pub fn run() {
             commands::word_of_day,
             commands::learning_xp,
             commands::learning_leaderboard,
+            commands::speech_profile,
+            commands::speech_profile_trend,
             commands::wortdex_list,
             commands::achievements_list,
             commands::account_stats,
@@ -318,6 +321,23 @@ pub fn run() {
                         store::backfill_daily_stats(&account);
                         c.daily_stats_seeded = true;
                         let _ = c.save();
+                    }
+                }
+
+                // One-time warm-up of the Sprechprofil per-day cache from history.
+                // MTLD + heuristics per day are heavier than daily_stats' word
+                // counts, so this runs OFF the main thread; the command also fills
+                // any gaps lazily, so a missed/incomplete run is self-healing.
+                {
+                    let mut c = st.config.lock();
+                    if !c.speech_daily_seeded {
+                        let account = crate::presets::account_key(&c);
+                        c.speech_daily_seeded = true;
+                        let _ = c.save();
+                        drop(c);
+                        std::thread::spawn(move || {
+                            crate::store::backfill_speech_daily(&account);
+                        });
                     }
                 }
             }
