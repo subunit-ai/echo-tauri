@@ -1200,6 +1200,28 @@
           "tip": "Verknüpfe Gedanken explizit: „weil“, „dennoch“, „folglich“ führen dein Publikum."
         }
       }
+    },
+    "loop": {
+      "reportTitle": "Deine Echo-Woche",
+      "reportSub": "Woche vom {{date}}",
+      "reportXpLabel": "XP",
+      "reportFinds": "neue Funde",
+      "reportDismiss": "Ausblenden",
+      "packTitle": "Dein Wochenpaket",
+      "packWeek": "Woche vom {{date}}",
+      "packEmptyIntro": "Sieben Wörter, kuratiert für deinen Stil — mit Bedeutung, Beispiel und einer persönlichen Begründung. Lass dir dein Paket für diese Woche zusammenstellen.",
+      "packCurate": "Paket kuratieren lassen",
+      "packCurating": "~40 Sekunden — dein Paket wird kuratiert",
+      "packError": "Kuratieren fehlgeschlagen — dein bisheriges Paket bleibt.",
+      "dueTitle": "Zur Festigung fällig",
+      "dueSub": "Benutz sie im echten Diktat — das bringt XP und hebt die Stufe.",
+      "dueLastUsed": "zuletzt {{when}}",
+      "ownTitle": "Dein Wortbesitz",
+      "ownSub": "Wie fest die gelehrten Wörter dir schon gehören.",
+      "ownLegend": "Benutzt: mindestens einmal im echten Diktat gesprochen. Gefestigt: an mehreren Tagen wiederholt. Gemeistert: über viele Tage fest verankert.",
+      "stageUsed": "Benutzt",
+      "stageFortified": "Gefestigt",
+      "stageMastered": "Gemeistert"
     }
   },
   "vp": {

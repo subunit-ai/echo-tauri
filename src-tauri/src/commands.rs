@@ -682,6 +682,10 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         let (app2, cfg2, account2, text2) = (app.clone(), cfg.clone(), account.clone(), result.text.clone());
         std::thread::spawn(move || maybe_award_finds(&app2, &cfg2, &account2, &text2, now as i64));
     }
+    // Lern-Loop weekly report: inline, not detached — it needs `state`/`cfg` to
+    // persist its once-per-week guard, and it's a cheap guard-check (two string
+    // compares) on all but the first dictation of a new calendar week.
+    maybe_weekly_report(app, &state, &cfg, &account, now as i64);
     // Long recordings are NOT stored separately anymore — they land in the normal
     // history above like any dictation (TJ 2026-07-03). The former meeting store +
     // long-form diarization are retired.
@@ -1849,6 +1853,331 @@ pub fn learning_leaderboard(state: State<'_, AppState>) -> serde_json::Value {
     unavailable
 }
 
+// ── Lern-Loop (Welle 3): ownership stages, weekly word packs, weekly report ──
+//
+// Spaced repetition over REAL dictations. The XP ledger already records one row
+// per (account, day, kind, word), so distinct usage DAYS per taught word are
+// readable straight from it — no new detection write path. Stages and due-state
+// are pure functions of that footprint (below), unit-tested in isolation.
+
+/// Ownership stage of a taught word from its usage footprint. Pure — the sole
+/// source of truth for the three tiers, unit-tested at the boundaries.
+/// `span_days` = last_day − first_day (in days).
+///   used      — ≥1 usage day (the floor)
+///   fortified — ≥3 usage days AND span ≥7 days
+///   mastered  — ≥5 usage days AND span ≥21 days
+fn word_stage(use_days: i64, span_days: i64) -> &'static str {
+    if use_days >= 5 && span_days >= 21 {
+        "mastered"
+    } else if use_days >= 3 && span_days >= 7 {
+        "fortified"
+    } else {
+        "used"
+    }
+}
+
+/// Whether a taught word is DUE for a refresh dictation. Pure, unit-tested.
+/// `days_since_last` = today − last_day. used → ≥3 d, fortified → ≥7 d,
+/// mastered → never (it's owned).
+fn word_due(stage: &str, days_since_last: i64) -> bool {
+    match stage {
+        "used" => days_since_last >= 3,
+        "fortified" => days_since_last >= 7,
+        _ => false,
+    }
+}
+
+/// Ownership board for the Lern-Loop: every taught word with its stage, usage
+/// footprint and due-state, `due` first then oldest `last_day` first. 100% local
+/// (reads the XP ledger); the UI renders the spaced-repetition queue from this.
+#[tauri::command]
+pub fn learning_words_progress(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let today_n = day_number(&crate::store::today_local());
+    let usage = crate::store::learning_word_usage(&account);
+    let mut due_count = 0i64;
+    // (due, last_day_number, payload) — sorted after the pass.
+    let mut rows: Vec<(bool, i64, serde_json::Value)> = Vec::with_capacity(usage.len());
+    for (word, use_days, first_day, last_day) in usage {
+        let last_n = day_number(&last_day);
+        let span = match (day_number(&first_day), last_n) {
+            (Some(f), Some(l)) => l - f,
+            _ => 0,
+        };
+        let stage = word_stage(use_days, span);
+        // Days since last use — only meaningful with both dates parsed.
+        let since_last = match (today_n, last_n) {
+            (Some(t), Some(l)) => t - l,
+            _ => 0,
+        };
+        let due = word_due(stage, since_last);
+        if due {
+            due_count += 1;
+        }
+        rows.push((
+            due,
+            last_n.unwrap_or(0),
+            serde_json::json!({
+                "word": word,
+                "stage": stage,
+                "use_days": use_days,
+                "first_day": first_day,
+                "last_day": last_day,
+                "due": due,
+            }),
+        ));
+    }
+    // due first (true before false), then last_day ascending (stalest first).
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    let words: Vec<serde_json::Value> = rows.into_iter().map(|(_, _, v)| v).collect();
+    serde_json::json!({ "words": words, "due_count": due_count })
+}
+
+/// Shape a cached pack payload (`{"words":[{word,meaning,example,why}]}`) into
+/// the wire response, enriching every word with its LIVE `use_days` from the XP
+/// ledger (a cached pack never goes stale on progress).
+fn pack_response(week: &str, payload: &str, usage: &[(String, i64, String, String)]) -> serde_json::Value {
+    let parsed: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::json!({}));
+    let items = parsed.get("words").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let use_days: std::collections::HashMap<String, i64> =
+        usage.iter().map(|(w, d, _, _)| (w.to_lowercase(), *d)).collect();
+    let words: Vec<serde_json::Value> = items
+        .iter()
+        .map(|it| {
+            let word = it.get("word").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let n = use_days.get(&word.to_lowercase()).copied().unwrap_or(0);
+            serde_json::json!({
+                "word": word,
+                "meaning": it.get("meaning").and_then(|v| v.as_str()).unwrap_or(""),
+                "example": it.get("example").and_then(|v| v.as_str()).unwrap_or(""),
+                "why": it.get("why").and_then(|v| v.as_str()).unwrap_or(""),
+                "use_days": n,
+            })
+        })
+        .collect();
+    serde_json::json!({ "week": week, "source": "llm", "words": words })
+}
+
+/// This week's personalized word pack from cache. `use_days` per word is read
+/// LIVE from the ledger; no cache yet → `source:"none"`, empty words. 100% local.
+#[tauri::command]
+pub fn word_pack_get(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    let week = week_monday(&crate::store::today_local());
+    match crate::store::word_pack_get(&account, &week) {
+        Some(payload) => {
+            let usage = crate::store::learning_word_usage(&account);
+            pack_response(&week, &payload, &usage)
+        }
+        None => serde_json::json!({ "week": week, "source": "none", "words": [] }),
+    }
+}
+
+/// Fetch a fresh personalized word pack from the server, cache it for this week,
+/// and register its words for detection + XP (the coach_word path). Mirrors
+/// `word_upgrade_curate`'s endpoint/auth recipe. `(async)`: the lane really takes
+/// ~37 s (timeout 50 s), so a sync command would freeze the tab; on ANY failure
+/// or an empty pack it returns `{"source":"error"}` and never touches the cache.
+/// Subscription mode only.
+#[tauri::command(async)]
+pub fn word_pack_fetch(state: State<'_, AppState>) -> serde_json::Value {
+    let err = || serde_json::json!({ "source": "error" });
+    let cfg = state.config.lock().clone();
+    if cfg.mode != "subunit" {
+        return err();
+    }
+    let account = crate::presets::account_key(&cfg);
+    let day = crate::store::today_local();
+    if day.is_empty() {
+        return err();
+    }
+    let week = week_monday(&day);
+
+    // Local request context: over-used words (top 8), the user's domain
+    // vocabulary (top non-weak content words), and everything already known so
+    // the server never re-teaches (coach universe + past words of the day + the
+    // words of every prior pack, deduped, capped at 60).
+    let texts = crate::store::history_texts_since(30);
+    let stats = crate::analysis::learning(&texts);
+    let overused: Vec<serde_json::Value> = stats
+        .overused_words
+        .iter()
+        .take(8)
+        .map(|o| serde_json::json!({ "word": o.word, "count": o.count }))
+        .collect();
+    let domain_words: Vec<String> = stats
+        .top_words
+        .iter()
+        .filter(|w| !crate::analysis::is_weak_word(&w.word))
+        .take(10)
+        .map(|w| w.word.clone())
+        .collect();
+    let mut known: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut push_known = |w: String, known: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+        let c = w.trim().to_lowercase();
+        if !c.is_empty() && seen.insert(c.clone()) {
+            known.push(c);
+        }
+    };
+    for w in crate::store::suggested_words_all() {
+        push_known(w, &mut known, &mut seen);
+    }
+    for w in crate::store::wod_words_before(&day, 200) {
+        push_known(w, &mut known, &mut seen);
+    }
+    for payload in crate::store::word_packs_payloads(&account) {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&payload) {
+            if let Some(arr) = v.get("words").and_then(|x| x.as_array()) {
+                for it in arr {
+                    if let Some(w) = it.get("word").and_then(|x| x.as_str()) {
+                        push_known(w.to_string(), &mut known, &mut seen);
+                    }
+                }
+            }
+        }
+    }
+    known.truncate(60);
+
+    let mut body = serde_json::json!({
+        "overused": overused,
+        "domain_words": domain_words,
+        "known_words": known,
+    });
+    if cfg.language != "auto" {
+        body["language"] = serde_json::json!(cfg.language);
+    }
+
+    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/word-packs");
+    let mut req = crate::http::client()
+        .post(&url)
+        .timeout(std::time::Duration::from_secs(50)) // lane runs ~37 s
+        .json(&body);
+    if !cfg.subunit_access_token.is_empty() {
+        req = req.bearer_auth(&cfg.subunit_access_token);
+    } else if !cfg.subunit_api_key.is_empty() {
+        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+    } else {
+        return err();
+    }
+    let Ok(resp) = req.send() else { return err() };
+    if !resp.status().is_success() {
+        return err();
+    }
+    let Ok(j) = resp.json::<serde_json::Value>() else { return err() };
+    let Some(pack) = j.get("pack").and_then(|v| v.as_array()) else { return err() };
+    let items: Vec<serde_json::Value> = pack
+        .iter()
+        .filter_map(|p| {
+            let word = p.get("word")?.as_str()?.trim().to_string();
+            if word.is_empty() {
+                return None;
+            }
+            let s = |k: &str| p.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            Some(serde_json::json!({
+                "word": word,
+                "meaning": s("meaning"),
+                "example": s("example"),
+                "why": s("why"),
+            }))
+        })
+        .collect();
+    if items.is_empty() {
+        return err(); // never overwrite the cache with an empty pack
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let payload = serde_json::json!({ "words": items }).to_string();
+    crate::store::word_pack_upsert(&account, &week, &payload, now);
+    // Registering the words on the coach path wires detection + XP automatically.
+    let pack_words: Vec<String> = items
+        .iter()
+        .filter_map(|i| i.get("word").and_then(|v| v.as_str()).map(str::to_string))
+        .collect();
+    crate::store::suggested_words_add(&pack_words, "pack", now);
+    let usage = crate::store::learning_word_usage(&account);
+    pack_response(&week, &payload, &usage)
+}
+
+/// The newest weekly report (or null when none has been generated yet). 100%
+/// local — `maybe_weekly_report` builds and persists them on the dictation path.
+#[tauri::command]
+pub fn weekly_report_get(state: State<'_, AppState>) -> serde_json::Value {
+    let account = crate::presets::account_key(&state.config.lock());
+    match crate::store::weekly_report_latest(&account) {
+        Some(p) => serde_json::from_str(&p).unwrap_or(serde_json::Value::Null),
+        None => serde_json::Value::Null,
+    }
+}
+
+/// Once-per-week guard: on the FIRST dictation of a new calendar week, build the
+/// deterministic report for the week that just CLOSED (XP this week vs. before,
+/// new finds), persist it, emit `echo://weekly-report` + a native notification,
+/// and stamp the guard so it fires exactly once. Cheap enough to run inline on
+/// the dictation path: two string compares when not due, a handful of COUNT
+/// queries otherwise (no network). An empty previous week is silently skipped
+/// (guard still advances) so nobody gets a "0 XP" notification on/after install.
+fn maybe_weekly_report(app: &AppHandle, state: &State<'_, AppState>, cfg: &Config, account: &str, now: i64) {
+    if !cfg.weekly_report_enabled {
+        return;
+    }
+    let today = crate::store::today_local();
+    if today.is_empty() {
+        return;
+    }
+    let this_mo = week_monday(&today);
+    if this_mo == cfg.last_weekly_report_week {
+        return; // already handled this week (the common case, 2 string ops)
+    }
+    let Some(this_dn) = day_number(&this_mo) else { return };
+    let prev_mo = day_string(this_dn - 7);
+    let prevprev_mo = day_string(this_dn - 14);
+    let xp = crate::store::learning_xp_between(account, &prev_mo, &this_mo);
+    let xp_before = crate::store::learning_xp_between(account, &prevprev_mo, &prev_mo);
+    // UTC-midnight epoch of the week bounds (day_number × 86400) — the same
+    // date→epoch convention `history_texts_since` uses; a few hours of week-edge
+    // skew is immaterial for a coarse weekly count.
+    let from_ts = day_number(&prev_mo).unwrap_or(0) * 86_400;
+    let finds = crate::store::word_finds_between(account, from_ts, this_dn * 86_400);
+
+    // Advance the guard regardless (so a genuinely empty week reports once and
+    // moves on); only build/announce a report when the closed week had activity.
+    let updated = {
+        let mut c = state.config.lock();
+        c.last_weekly_report_week = this_mo.clone();
+        c.clone()
+    };
+    let _ = updated.save();
+
+    if xp == 0 && finds == 0 {
+        return; // empty week → no report, no notification
+    }
+    let payload = serde_json::json!({
+        "week_prev": prev_mo,
+        "xp": xp,
+        "xp_before": xp_before,
+        "finds": finds,
+    });
+    crate::store::weekly_report_upsert(account, &prev_mo, &payload.to_string(), now);
+    use tauri::Emitter;
+    let _ = app.emit("echo://weekly-report", payload);
+    notify_weekly(app, &cfg.ui_language, xp, finds);
+}
+
+/// Native weekly-report notification (de/en like `notify_reward`).
+fn notify_weekly(app: &AppHandle, ui_language: &str, xp: i64, finds: i64) {
+    let de = ui_language.to_lowercase().starts_with("de");
+    let (title, body) = if de {
+        ("Deine Echo-Woche", format!("Letzte Woche: +{xp} XP und {finds} neue Funde."))
+    } else {
+        ("Your Echo week", format!("Last week: +{xp} XP and {finds} new finds."))
+    };
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title(title).body(body).show();
+}
+
 /// All stored meetings, newest first (each with its store `id`).
 #[tauri::command]
 pub fn meetings_list() -> Vec<serde_json::Value> {
@@ -2558,5 +2887,43 @@ mod stats_tests {
         // Zero words → zero saved, no panic.
         assert_eq!(time_saved_seconds(0, 0.0), 0.0);
         assert_eq!(time_saved_seconds(-5, 0.0), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod learning_loop_tests {
+    use super::{word_due, word_stage};
+
+    #[test]
+    fn stage_thresholds() {
+        // Floor: any usage day, no span requirement.
+        assert_eq!(word_stage(1, 0), "used");
+        assert_eq!(word_stage(2, 30), "used"); // days too few for fortified
+
+        // fortified needs ≥3 days AND span ≥7.
+        assert_eq!(word_stage(3, 7), "fortified"); // exactly on both bounds
+        assert_eq!(word_stage(3, 6), "used"); // span one short → not fortified
+        assert_eq!(word_stage(2, 7), "used"); // days one short → not fortified
+        assert_eq!(word_stage(4, 20), "fortified"); // ≥3 days, span ≥7 but <21
+
+        // mastered needs ≥5 days AND span ≥21.
+        assert_eq!(word_stage(5, 21), "mastered"); // exactly on both bounds
+        assert_eq!(word_stage(5, 20), "fortified"); // span one short → still fortified
+        assert_eq!(word_stage(4, 21), "fortified"); // days one short → still fortified
+        assert_eq!(word_stage(9, 40), "mastered");
+    }
+
+    #[test]
+    fn due_windows() {
+        // used → due at ≥3 days since last use.
+        assert!(!word_due("used", 2));
+        assert!(word_due("used", 3)); // exact boundary
+        assert!(word_due("used", 10));
+        // fortified → due at ≥7 days.
+        assert!(!word_due("fortified", 6));
+        assert!(word_due("fortified", 7)); // exact boundary
+        // mastered → never due.
+        assert!(!word_due("mastered", 3));
+        assert!(!word_due("mastered", 100));
     }
 }

@@ -472,6 +472,16 @@ pub struct Config {
     /// gaps lazily, so this is only a warm-up.
     pub speech_daily_seeded: bool,
 
+    /// Master toggle for the weekly Echo report (Lern-Loop, Welle 3). Opt-out —
+    /// an existing config that predates the field keeps it ON.
+    #[serde(default = "default_true")]
+    pub weekly_report_enabled: bool,
+    /// Guard: the week key (Monday, 'YYYY-MM-DD') during which the last weekly
+    /// report was generated, so the report fires exactly once per completed
+    /// week. Empty on fresh installs; the first dictation of a new week seeds it.
+    #[serde(default)]
+    pub last_weekly_report_week: String,
+
     pub total_transcriptions: i64,
     pub total_audio_seconds: f64,
     /// One-time guard: has the legacy global counters → per-account `account_stats`
@@ -636,6 +646,8 @@ impl Default for Config {
             weekly_word_goal: 3000,
             daily_stats_seeded: false,
             speech_daily_seeded: false,
+            weekly_report_enabled: true,
+            last_weekly_report_week: String::new(),
 
             total_transcriptions: 0,
             total_audio_seconds: 0.0,

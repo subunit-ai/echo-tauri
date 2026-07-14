@@ -11,9 +11,14 @@ import {
   onHistoryChanged,
   onLearningReward,
   onWordFind,
+  onWeeklyReport,
   speechProfile,
   speechProfileTrend,
+  weeklyReportGet,
   wordOfDay,
+  wordPackFetch,
+  wordPackGet,
+  wordsProgress,
   wortdexList,
   type Achievement,
   type Band,
@@ -25,11 +30,17 @@ import {
   type SpeechInsight,
   type SpeechProfile,
   type SpeechTrend,
+  type WeeklyReport,
   type WordFind,
   type WordFreq,
   type WordOfDay,
+  type WordPack,
+  type WordProgress,
+  type WordsProgress,
+  type WordStage,
   type WortdexData,
 } from "../lib/ipc";
+import { useToast } from "../state/ToastContext";
 import { Avatar } from "../components/Avatar";
 import { TierRing } from "../components/TierRing";
 import { RadarChart, type RadarAxis } from "../components/charts/RadarChart";
@@ -259,6 +270,232 @@ function WordOfDayCard({ wod }: { wod: WordOfDay }) {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  Lern-Loop (Welle 3) — the coach that actually teaches. Ownership levels per
+//  taught word, a "due for reinforcement" queue, a personalised weekly pack,
+//  and a Monday week-in-review. All of it sits at the top of the Coach tab.
+// ════════════════════════════════════════════════════════════════════════
+
+/** Close/dismiss glyph (stroke-SVG, no emojis). */
+const CloseIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+);
+
+/** Stage → i18n label. `used` (Benutzt) → `fortified` (Gefestigt) → `mastered`
+ *  (Gemeistert), the three ownership levels a taught word climbs. */
+const STAGE_LABEL: Record<WordStage, string> = {
+  used: "learning.loop.stageUsed",
+  fortified: "learning.loop.stageFortified",
+  mastered: "learning.loop.stageMastered",
+};
+
+/** Whole-day distance from `day` (YYYY-MM-DD, local midnight) to today, clamped
+ *  at 0. Feeds a locale-correct RelativeTimeFormat ("vor 3 Tagen" / "yesterday"). */
+function daysSince(day: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const then = new Date(`${day}T00:00:00`);
+  return Math.max(0, Math.round((today.getTime() - then.getTime()) / 86400000));
+}
+
+/** Three progress dots for how many DISTINCT days a word has been used:
+ *  0 → none lit, 1–2 → one, 3–4 → two, 5+ → all three (mastery in reach). */
+function UseDots({ days }: { days: number }) {
+  const filled = days >= 5 ? 3 : days >= 3 ? 2 : days >= 1 ? 1 : 0;
+  return (
+    <span className="loop-dots" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className={`loop-dot${i < filled ? " on" : ""}`} />
+      ))}
+    </span>
+  );
+}
+
+/** Monday's week-in-review. Sits at the very top of the coach until dismissed
+ *  (localStorage, keyed by the reviewed week). XP with its delta to the week
+ *  before — arrow + colour — and the week's new collectible finds. */
+function WeeklyReportCard({
+  report,
+  onDismiss,
+}: {
+  report: WeeklyReport;
+  onDismiss: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const delta = report.xp - report.xp_before;
+  const date = new Date(`${report.week_prev}T00:00:00`).toLocaleDateString(lang, {
+    day: "numeric",
+    month: "long",
+  });
+  return (
+    <div className="chart-card loop-report">
+      <button
+        type="button"
+        className="loop-report-close"
+        aria-label={t("learning.loop.reportDismiss")}
+        onClick={onDismiss}
+      >
+        <CloseIcon />
+      </button>
+      <div className="loop-report-eyebrow">{t("learning.loop.reportTitle")}</div>
+      <div className="loop-report-stats">
+        <div className="loop-report-stat">
+          <div className="loop-report-numline">
+            <span className="loop-report-num">{report.xp.toLocaleString(lang)}</span>
+            {delta !== 0 && (
+              <span className={`loop-report-delta ${delta > 0 ? "up" : "down"}`}>
+                <DeltaArrow up={delta > 0} />
+                {delta > 0 ? "+" : "−"}
+                {Math.abs(delta).toLocaleString(lang)}
+              </span>
+            )}
+          </div>
+          <span className="loop-report-lbl">{t("learning.loop.reportXpLabel")}</span>
+        </div>
+        <div className="loop-report-stat">
+          <span className="loop-report-num">{report.finds.toLocaleString(lang)}</span>
+          <span className="loop-report-lbl">{t("learning.loop.reportFinds")}</span>
+        </div>
+      </div>
+      <div className="loop-report-sub">{t("learning.loop.reportSub", { date })}</div>
+    </div>
+  );
+}
+
+/** The personalised weekly pack. `source: "none"` → an invitation + the curate
+ *  button (which crosses the slow LLM path, so it shows a skeleton with the
+ *  "~40 seconds" hint); `source: "llm"` → the seven curated words, each with a
+ *  meaning, an italic example and its personal "why" as an accent-bordered note. */
+function WeekPackCard({
+  pack,
+  loading,
+  onFetch,
+}: {
+  pack: WordPack | null;
+  loading: boolean;
+  onFetch: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const date = pack
+    ? new Date(`${pack.week}T00:00:00`).toLocaleDateString(lang, { day: "numeric", month: "long" })
+    : "";
+  return (
+    <div className="chart-card loop-pack">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">{t("learning.loop.packTitle")}</div>
+          {pack && <div className="chart-sub">{t("learning.loop.packWeek", { date })}</div>}
+        </div>
+      </div>
+      {loading ? (
+        <div className="loop-pack-loading" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="loop-pack-skel" aria-hidden="true">
+              <span className="skeleton-bar" style={{ width: "34%" }} />
+              <span className="skeleton-bar" style={{ width: "72%" }} />
+              <span className="skeleton-bar" style={{ width: "58%" }} />
+            </div>
+          ))}
+          <p className="loop-pack-hint">{t("learning.loop.packCurating")}</p>
+        </div>
+      ) : !pack || pack.source === "none" || pack.words.length === 0 ? (
+        <div className="loop-pack-empty">
+          <p className="loop-pack-intro">{t("learning.loop.packEmptyIntro")}</p>
+          <button type="button" className="loop-pack-btn" onClick={onFetch}>
+            {t("learning.loop.packCurate")}
+          </button>
+        </div>
+      ) : (
+        <ol className="loop-pack-list">
+          {pack.words.map((w) => (
+            <li key={w.word} className="loop-pack-row">
+              <div className="loop-pack-wordline">
+                <span className="loop-pack-word">{w.word}</span>
+                <UseDots days={w.use_days} />
+              </div>
+              <div className="loop-pack-meaning">{w.meaning}</div>
+              <div className="loop-pack-example">{w.example}</div>
+              <div className="loop-pack-why">{w.why}</div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** The reinforcement queue — the taught words whose next spaced-repetition slot
+ *  is open. One row each: word, its ownership-stage chip, and when it was last
+ *  used (locale-correct relative time). A count badge rides the title. */
+function DueCard({ words, count }: { words: WordProgress[]; count: number }) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+  const due = words.filter((w) => w.due);
+  return (
+    <div className="chart-card loop-due">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">
+            {t("learning.loop.dueTitle")}
+            <span className="loop-badge">{count}</span>
+          </div>
+          <div className="chart-sub">{t("learning.loop.dueSub")}</div>
+        </div>
+      </div>
+      <div className="loop-due-list">
+        {due.map((w) => (
+          <div key={w.word} className="loop-due-row">
+            <span className="loop-due-word">{w.word}</span>
+            <span className={`loop-stage-chip stage-${w.stage}`}>{t(STAGE_LABEL[w.stage])}</span>
+            <span className="loop-due-ago">
+              {t("learning.loop.dueLastUsed", { when: rtf.format(-daysSince(w.last_day), "day") })}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Ownership overview — a stat chip per stage (used · fortified · mastered),
+ *  same grammar as the Wortdex band chips, plus the level rules behind an info
+ *  tooltip (--menu-bg). */
+function OwnershipCard({ words }: { words: WordProgress[] }) {
+  const { t } = useTranslation();
+  const stats: { key: WordStage; n: number }[] = [
+    { key: "used", n: words.filter((w) => w.stage === "used").length },
+    { key: "fortified", n: words.filter((w) => w.stage === "fortified").length },
+    { key: "mastered", n: words.filter((w) => w.stage === "mastered").length },
+  ];
+  return (
+    <div className="chart-card loop-own">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">
+            {t("learning.loop.ownTitle")}
+            <InfoDot tip={t("learning.loop.ownLegend")} />
+          </div>
+          <div className="chart-sub">{t("learning.loop.ownSub")}</div>
+        </div>
+      </div>
+      <div className="loop-stats">
+        {stats.map((s) => (
+          <div key={s.key} className={`loop-stat loop-stat--${s.key}`}>
+            <span className="loop-stat-dot" aria-hidden="true" />
+            <span className="loop-stat-num">{s.n}</span>
+            <span className="loop-stat-label">{t(STAGE_LABEL[s.key])}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** The upgrade coach. One suggestion is one line: word, tally, arrow, its
  *  alternatives as chips — every row the same height at rest.
  *
@@ -352,6 +589,7 @@ function UpgradeCoach({
  *  a word-find too. */
 function CoachTab() {
   const { t, i18n } = useTranslation();
+  const toast = useToast();
 
   const [wod, setWod] = useState<WordOfDay | null>(null);
   const [xp, setXp] = useState<LearningXp | null>(null);
@@ -364,6 +602,15 @@ function CoachTab() {
   // transcript reaches the history they are *gone* from it — counting the
   // history could never surface them.
   const [stripped, setStripped] = useState<WordFreq[]>([]);
+
+  // ── Lern-Loop (Welle 3) state ──────────────────────────────────────────
+  const [progress, setProgress] = useState<WordsProgress | null>(null);
+  const [pack, setPack] = useState<WordPack | null>(null);
+  const [packLoading, setPackLoading] = useState(false);
+  const [report, setReport] = useState<WeeklyReport | null>(null);
+  const [reportDismissed, setReportDismissed] = useState(
+    () => localStorage.getItem("echo:weeklyReportDismissed") ?? "",
+  );
 
   // Word of the day + XP state: range-independent, but BOTH change the moment
   // a dictation uses a taught word OR lands a new collectible word — refresh on
@@ -387,6 +634,56 @@ function CoachTab() {
   useEffect(() => {
     learningLeaderboard().then(setLb).catch(() => setLb(null));
   }, []);
+
+  // Ownership levels: local truth that shifts the moment a dictation uses a
+  // taught word (it levels up / a due slot closes) or a reward lands — so this
+  // follows the same two events the gamification header does.
+  useEffect(() => {
+    const load = () => wordsProgress().then(setProgress).catch(() => {});
+    load();
+    const un = onHistoryChanged(load);
+    const unr = onLearningReward(load);
+    return () => {
+      un.then((f) => f());
+      unr.then((f) => f());
+    };
+  }, []);
+
+  // Weekly pack — the cached pack, read once (instant/local). The slow LLM
+  // curation is user-triggered, never on the paint path.
+  useEffect(() => {
+    wordPackGet().then(setPack).catch(() => {});
+  }, []);
+
+  // Weekly report — the cached one on mount, then kept live by the Monday event.
+  useEffect(() => {
+    weeklyReportGet().then(setReport).catch(() => {});
+    const un = onWeeklyReport(setReport);
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  // Curate this week's pack. Up to ~50 s on the server; a failure keeps the
+  // cached pack and only toasts, never blanks the card.
+  const fetchPack = useCallback(async () => {
+    setPackLoading(true);
+    try {
+      const p = await wordPackFetch();
+      if (p.source === "error") toast(t("learning.loop.packError"), "error");
+      else setPack(p);
+    } catch {
+      toast(t("learning.loop.packError"), "error");
+    } finally {
+      setPackLoading(false);
+    }
+  }, [toast, t]);
+
+  const dismissReport = useCallback(() => {
+    if (!report) return;
+    localStorage.setItem("echo:weeklyReportDismissed", report.week_prev);
+    setReportDismissed(report.week_prev);
+  }, [report]);
 
   // The fast path: analysis, the curated local suggestions and the strip
   // counters are ALL pure local IPC (never network), so they can safely follow
@@ -456,8 +753,24 @@ function CoachTab() {
 
   return (
     <div>
+      {/* Week-in-review — the very top of the coach, until dismissed. */}
+      {report && reportDismissed !== report.week_prev && (
+        <WeeklyReportCard report={report} onDismiss={dismissReport} />
+      )}
+
       {xp && <XpCard xp={xp} />}
       {wod && <WordOfDayCard wod={wod} />}
+
+      {/* The personalised weekly pack — directly under the word of the day. */}
+      <WeekPackCard pack={pack} loading={packLoading} onFetch={fetchPack} />
+
+      {/* Reinforcement queue — only when something is actually due. */}
+      {progress && progress.due_count > 0 && (
+        <DueCard words={progress.words} count={progress.due_count} />
+      )}
+
+      {/* Ownership overview — the stage counters, once any word is being learnt. */}
+      {progress && progress.words.length > 0 && <OwnershipCard words={progress.words} />}
 
       {/* Achievements — its own full-width box now. It used to share a
           two-column grid with the leaderboard, which squeezed the rows until the
