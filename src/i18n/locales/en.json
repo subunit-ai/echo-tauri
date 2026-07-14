@@ -974,6 +974,8 @@
     "errBusy": "Another recording is running — please wait a moment.",
     "errMic": "Could not start the microphone — check the device in settings.",
     "errChange": "Change failed — please try again.",
-    "completeSub": "of your voice profile"
+    "completeSub": "of your voice profile",
+    "figFromTimbre": "Drawn from the sound of your voice",
+    "figFromVoice": "Drawn from your voice · your tone profile follows with your next dictation"
   }
 }

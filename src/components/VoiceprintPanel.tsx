@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ChladniLoader } from "./ChladniLoader";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Toggle } from "./Toggle";
-import { VoiceprintFigure } from "./VoiceprintFigure";
+import { VoiceprintFigure, type VoiceData } from "./VoiceprintFigure";
 
 /**
  * Stimmabdruck — Verwaltung + Visualisierung des persistenten Account-Voiceprints
@@ -31,6 +31,9 @@ type Me = {
     farfield_samples?: number;
     last_learned_at: number | null;
   };
+  /** v3: die abgeleiteten Figur-Daten der ECHTEN Stimme (Klangfarbe + Einweg-
+   *  Projektion des Embeddings). Fehlt bei alten Servern → Seed-Fallback. */
+  voice?: VoiceData | null;
 };
 
 const MIN_S = 20;
@@ -159,6 +162,7 @@ export function VoiceprintPanel({ seed = "local" }: { seed?: string }) {
             live={level}
             recording={false}
             seed={seed}
+            voice={me?.voice}
           />
         )}
         <div className="vp-hero-side">
@@ -166,6 +170,14 @@ export function VoiceprintPanel({ seed = "local" }: { seed?: string }) {
             <>
               <div className="vp-pct">{Math.round(completeness * 100)}%</div>
               <div className="vp-pct-sub">{t("vp.completeSub")}</div>
+              {/* Ehrlich sagen, woraus die Figur gezeichnet ist: aus dem gemessenen
+                  Klang, aus dem Stimmvektor allein — oder (kein Hinweis) aus dem
+                  Account-Fallback. Nie behaupten, was nicht gemessen wurde. */}
+              {me.voice?.spectrum ? (
+                <div className="vp-fig-src">{t("vp.figFromTimbre")}</div>
+              ) : me.voice?.sketch ? (
+                <div className="vp-fig-src">{t("vp.figFromVoice")}</div>
+              ) : null}
               {me.model_match === false && <div className="vp-warn">{t("vp.reenrollHint")}</div>}
               <div className="vp-progress-legend">
                 <div>

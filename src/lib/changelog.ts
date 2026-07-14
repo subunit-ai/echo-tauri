@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.131",
+    date: "2026-07-14",
+    title: {
+      de: "Dein Stimmabdruck ist jetzt wirklich deiner",
+      en: "Your voiceprint is now really yours",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Stimmabdruck wird aus deiner echten Stimme gezeichnet statt aus deinem Konto: Der Abstand vom Zentrum ist die Tonhöhe, die Helligkeit eines Rings ist die Energie, die deine Stimme dort trägt — deine Klangfarbe, gemessen aus deinen eigenen Aufnahmen.",
+        en: "Your voiceprint is now drawn from your actual voice instead of your account: distance from the centre is pitch, the brightness of a ring is the energy your voice carries there — your timbre, measured from your own recordings.",
+      },
+      {
+        kind: "improvement",
+        de: "Er wird schärfer, je mehr du diktierst: jede Aufnahme verfeinert die Klangfarbe. Solange noch keine vorliegt, zeichnet Echo den Abdruck aus deinem Stimmprofil — die Figur sagt dir jetzt selbst, woraus sie entstanden ist.",
+        en: "It sharpens the more you dictate: every recording refines the timbre. Until there is one, Echo draws the print from your voice profile — and the figure now tells you what it was drawn from.",
+      },
+      {
+        kind: "improvement",
+        de: "Deine Stimmdaten bleiben dabei auf dem Server: gezeichnet wird nur aus zwei abgeleiteten, nicht rückrechenbaren Größen — dein Stimmvektor selbst wird nie ausgeliefert.",
+        en: "Your voice data stays on the server: the drawing uses only two derived values that cannot be reversed — your voice vector itself is never handed out.",
+      },
+    ],
+  },
+  {
     version: "0.5.130",
     date: "2026-07-14",
     title: {

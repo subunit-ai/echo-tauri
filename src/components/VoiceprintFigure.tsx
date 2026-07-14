@@ -89,26 +89,103 @@ function vdc(i: number): number {
   return (n >>> 0) / 4294967296;
 }
 
-/** Stimm-Charakter aus dem Seed: Formant-Hüllkurve + Phasen (= Stimmenfarbe). */
-function makeVoice(seed: string) {
+/**
+ * Die Figur-Daten, die der Server aus der ECHTEN Stimme ableitet (`/v1/voiceprints/me`
+ * → `voice`). Beides ist owner-only und nicht invertierbar — der Embedding-Vektor
+ * selbst verlässt den Server nie (siehe voiceprints_store.voice_figure).
+ */
+export type VoiceData = {
+  /** 32 Mel-Bänder (80–7600 Hz), 0..1 — die Klangfarbe: welche Frequenzen diese
+   *  Stimme trägt. NULL, solange seit dem Server-v3 keine Aufnahme lief. */
+  spectrum?: number[] | null;
+  /** 24 Zahlen aus der Einweg-Projektion des Stimm-Embeddings — die Formvariation
+   *  (Rhythmus, Zonen, Verformung), damit zwei ähnliche Klangfarben nicht gleich
+   *  aussehen. NULL bei fremder Embedder-Version. */
+  sketch?: number[] | null;
+};
+
+/** Lineare Interpolation einer 0..1-Kurve an der Stelle x ∈ [0,1]. */
+function sampleCurve(curve: number[], x: number): number {
+  const t = clamp(x, 0, 1) * (curve.length - 1);
+  const i = Math.floor(t);
+  const f = t - i;
+  const a = curve[i] ?? 0;
+  const b = curve[Math.min(curve.length - 1, i + 1)] ?? a;
+  return a + (b - a) * f;
+}
+
+/**
+ * Stimm-Charakter. ECHT, wenn der Server Figur-Daten liefert:
+ *   - `spectrum` → die radiale Energie (Radius = Frequenz) ist die gemessene
+ *     Klangfarbe der Person, keine erfundene Formant-Hüllkurve mehr.
+ *   - `sketch`   → Phasen, Rhythmus, Zonen und Verformung kommen aus dem echten
+ *     Stimm-Embedding statt aus dem Account-Hash.
+ * Fallback (kein Login / noch keine Aufnahme / fremder Embedder): Account-Seed wie
+ * bisher — dann ist die Rosette Deko, und die UI sagt das auch.
+ */
+function makeVoice(seed: string, voice?: VoiceData | null) {
   const r = rng(seedOf("echo-vp:" + seed));
-  const formants: { mu: number; sig: number; amp: number }[] = [];
-  let pos = 0.1 + r() * 0.07;
-  for (let k = 0; k < 4; k++) {
-    formants.push({ mu: pos, sig: 0.05 + r() * 0.05, amp: (k === 0 ? 0.9 : 0.5) + r() * 0.5 });
-    pos += 0.17 + r() * 0.13;
+  const sk = voice?.sketch && voice.sketch.length >= 24 ? voice.sketch : null;
+  // Aus der Stimme, sonst aus dem Seed — dieselbe Wertemenge (0..1), damit die
+  // Geometrie darunter identisch bleibt.
+  const v = (i: number) => (sk ? clamp(sk[i], 0, 1) : r());
+
+  const spec = voice?.spectrum && voice.spectrum.length >= 8 ? voice.spectrum : null;
+  let senv: (x: number) => number;
+  if (spec) {
+    // ECHT: die Ring-Energie IST das gemessene Spektrum der Stimme. Die Spanne
+    // 0.3–1.6 (5,3×) lässt die Formanten wirklich dominieren — mit der zahmeren
+    // ersten Fassung glichen sich zwei völlig verschiedene Stimmen noch mit
+    // r = 0.84, der Abdruck war also kaum persönlich. Der Boden 0.3 hält die
+    // energiearmen Bänder als feine Textur (sonst reißen wieder Ring-Löcher auf).
+    senv = (x: number) => 0.3 + 1.3 * sampleCurve(spec, x);
+  } else {
+    // Fallback: synthetische Formanten aus dem Seed (wie bisher).
+    const formants: { mu: number; sig: number; amp: number }[] = [];
+    let pos = 0.1 + v(16) * 0.07;
+    for (let k = 0; k < 4; k++) {
+      formants.push({
+        mu: pos,
+        sig: 0.05 + v(17 + k) * 0.05,
+        amp: (k === 0 ? 0.9 : 0.5) + v(20 + k) * 0.5,
+      });
+      pos += 0.17 + v(12 + k) * 0.13;
+    }
+    // Exakt die Kurve aus v0.5.130 (0.55 + 0.65·Formanten) — der Fallback-Abdruck
+    // muss Pixel für Pixel derselbe bleiben wie der ausgelieferte.
+    senv = (x: number) => {
+      let e = 0;
+      for (const f of formants)
+        e += f.amp * Math.exp(-((x - f.mu) * (x - f.mu)) / (2 * f.sig * f.sig));
+      return 0.55 + 0.65 * e;
+    };
   }
+
+  // Neue Kennwerte NUR aus dem echten Sketch; ohne Stimme bleiben es die
+  // Konstanten aus v0.5.130 (sonst würde sich der Fallback-Abdruck jedes
+  // Nutzers ohne Stimmdaten mit diesem Release still verändern) — und sie
+  // ziehen bewusst KEINE Zufallszahl, damit die Reihenfolge oben identisch bleibt.
+  const fromSketch = (i: number, lo: number, hi: number, fallback: number) =>
+    sk ? lo + clamp(sk[i], 0, 1) * (hi - lo) : fallback;
+
   return {
-    formants,
-    ph1: r() * 6.283,
-    ph2: r() * 6.283,
-    ph3: r() * 6.283,
-    wob: 0.6 + r() * 0.9,
+    senv,
+    real: !!spec,
+    ph1: v(0) * 6.283,
+    ph2: v(1) * 6.283,
+    ph3: v(2) * 6.283,
+    wob: 0.6 + v(3) * 0.9,
     // Phasen des Zonen-Felds (welche Quelle wo liegt) + der Ridge-Verformung
-    zp1: r() * 6.283,
-    zp2: r() * 6.283,
-    wp1: r() * 6.283,
-    wp2: r() * 6.283,
+    zp1: v(4) * 6.283,
+    zp2: v(5) * 6.283,
+    wp1: v(6) * 6.283,
+    wp2: v(7) * 6.283,
+    // Grundton-Lage + Wanderung: bestimmt, wie eng die Obertonringe liegen
+    f0: fromSketch(8, 0.95, 1.45, 1.15),
+    f0amp: fromSketch(9, 0.3, 0.8, 0.55),
+    // Sprech-Rhythmus (Phrasen und Pausen im Kreis)
+    rate: fromSketch(10, 0.22, 0.4, 0.3),
+    depth: fromSketch(11, 0.18, 0.46, 0.26),
   };
 }
 
@@ -127,14 +204,8 @@ function sectorsAt(g: number): number {
   return S;
 }
 
-function buildRosette(size: number, seed: string): Piece[] {
-  const v = makeVoice(seed);
-  const fenv = (x: number) => {
-    let e = 0;
-    for (const f of v.formants)
-      e += f.amp * Math.exp(-((x - f.mu) * (x - f.mu)) / (2 * f.sig * f.sig));
-    return e;
-  };
+function buildRosette(size: number, seed: string, voice?: VoiceData | null): Piece[] {
+  const v = makeVoice(seed, voice);
   const cx = size / 2;
   const cy = size / 2;
   const r0 = size * 0.105;
@@ -158,12 +229,15 @@ function buildRosette(size: number, seed: string): Piece[] {
       // Zeit läuft über den WINKEL (nicht den Sektor-Index) → Obertonbänder
       // bleiben über alle Ring-Auflösungen hinweg radial ausgerichtet.
       const tt = (th / (Math.PI * 2)) * S;
-      // Phrasen + Pausen: die Stimme ist nicht immer an. Der Boden (0.32) hält
-      // auch die Pausen als feine Textur sichtbar — sonst klaffen Keile.
-      let act = 0.72 + 0.4 * Math.sin(tt * 0.3 + v.ph1) + 0.26 * Math.sin(tt * 0.11 * v.wob + v.ph2);
+      // Phrasen + Pausen: die Stimme ist nicht immer an (Rhythmus aus dem echten
+      // Embedding). Der Boden (0.32) hält auch die Pausen als feine Textur
+      // sichtbar — sonst klaffen Keile.
+      let act =
+        0.72 + 0.4 * Math.sin(tt * v.rate + v.ph1) + v.depth * Math.sin(tt * 0.11 * v.wob + v.ph2);
       act = clamp(act, 0.32, 1);
       // Grundton wandert langsam → Obertonreihen werden konzentrische Bänder
-      const f0 = 1.15 + 0.55 * Math.sin(tt * 0.15 + v.ph3) + 0.25 * Math.sin(tt * 0.06 * v.wob + v.ph1);
+      const f0 =
+        v.f0 + v.f0amp * Math.sin(tt * 0.15 + v.ph3) + 0.25 * Math.sin(tt * 0.06 * v.wob + v.ph1);
       let harm = 0;
       for (let k = 1; k <= 18; k++) {
         const d = g - k * f0;
@@ -172,8 +246,12 @@ function buildRosette(size: number, seed: string): Piece[] {
       // Textur-Boden zwischen den Reihen: leise, aber da (Abdruck statt Speichen).
       const floor = 0.22 + 0.1 * h1(g * 5.3 + tt * 1.7 + 11.1);
       const e = Math.max(harm, floor);
+      // v.senv(g/RINGS) = die GEMESSENE Klangfarbe: Radius ist Frequenz (80–7600 Hz),
+      // die Helligkeit eines Rings ist die Energie, die diese Stimme dort trägt.
+      // Sie multipliziert direkt (statt nur zu modulieren) — der Abdruck IST die
+      // Stimme, nicht eine Geometrie mit Stimm-Anstrich.
       const inten = clamp(
-        act * e * (0.55 + 0.65 * fenv(g / RINGS)) * (0.86 + 0.28 * h1(tt * 7.7 + g * 3.1)),
+        act * e * v.senv(g / RINGS) * (0.86 + 0.28 * h1(tt * 7.7 + g * 3.1)),
         0,
         1,
       );
@@ -296,17 +374,25 @@ export function VoiceprintFigure({
   live = 0,
   recording = false,
   seed = "local",
+  voice = null,
 }: {
   progress: Progress;
   size?: number;
   /** Mikrofon-Pegel 0..1 — lässt die gesetzten Bögen während der Aufnahme atmen. */
   live?: number;
   recording?: boolean;
-  /** Account-Key (ws:<id> | em:<mail> | local) — jede Person, eigene Rosette. */
+  /** Account-Key (ws:<id> | em:<mail> | local) — NUR noch Fallback, wenn der Server
+   *  (noch) keine Figur-Daten hat. */
   seed?: string;
+  /** Die echten Figur-Daten aus `/v1/voiceprints/me` → `voice`. */
+  voice?: VoiceData | null;
 }) {
-  // Der Aufbau hängt nur an Größe + Person → einmal pro (size, seed).
-  const geom = useMemo(() => buildRosette(size, seed), [size, seed]);
+  // Der Aufbau hängt an Größe + Stimme → neu nur, wenn sich die Stimme wirklich ändert.
+  const vkey = voice ? JSON.stringify([voice.spectrum, voice.sketch]) : "";
+  const geom = useMemo(
+    () => buildRosette(size, seed, voice),
+    [size, seed, vkey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const pieces = useMemo(
     () => place(geom, progress),
     [geom, progress.core, progress.far, progress.near], // eslint-disable-line react-hooks/exhaustive-deps
