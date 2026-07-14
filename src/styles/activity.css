@@ -2521,3 +2521,474 @@
   --up: #f0f0f2;
   --down: #8a8a8d;
 }
+
+/* ================================================================
+   Rhetorik-Dojo (Welle 4) — exercise-of-the-day card, the record +
+   result modals, and the weekly quests. Reuses the shared modal /
+   confirm chrome (app.css); only the dojo-specific surfaces live here.
+   ================================================================ */
+
+/* ---- Exercise of the day ---- */
+.dojo-card {
+  position: relative;
+  background: var(--glass);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dojo-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dojo-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+
+/* Kind badge — per-kind accent via --kind; all three tokens are already greyed
+   for the black theme, so no override is needed here. */
+.dojo-badge {
+  --kind: var(--cyan);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kind);
+  background: color-mix(in srgb, var(--kind) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--kind) 40%, transparent);
+  border-radius: var(--r-chip);
+  padding: 3px 10px;
+}
+.dojo-kind--gauntlet {
+  --kind: var(--cyan);
+}
+.dojo-kind--tabu {
+  --kind: var(--violet);
+}
+.dojo-kind--better {
+  --kind: var(--emerald);
+}
+
+/* Task — the big prompt, rendered by kind. */
+.dojo-task {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dojo-topic,
+.dojo-term {
+  font-size: 25px;
+  font-weight: 800;
+  color: var(--cyan-ink);
+  line-height: 1.2;
+}
+.dojo-taboo-caption {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+.dojo-taboo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+/* Taboo / violation chip — the red-bordered "forbidden word". --taboo is greyed
+   for the black theme below (tokens.css keeps --red coloured). */
+.dojo-taboo-chip {
+  --taboo: var(--red);
+  display: inline-flex;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--taboo);
+  background: color-mix(in srgb, var(--taboo) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--taboo) 46%, transparent);
+  border-radius: 999px;
+  padding: 3px 11px;
+}
+.dojo-weak-quote {
+  font-size: 16px;
+  font-style: italic;
+  color: var(--prose);
+  line-height: 1.5;
+  border-left: 3px solid var(--line2);
+  padding: 2px 0 2px 14px;
+  margin: 0;
+}
+.dojo-rule {
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: 1.5;
+}
+.dojo-card-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.dojo-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink2);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-chip);
+  padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.dojo-xp-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 34%, transparent);
+  border-radius: var(--r-chip);
+  padding: 3px 10px;
+}
+.dojo-done-badge {
+  --done: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--done);
+  background: color-mix(in srgb, var(--done) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--done) 34%, transparent);
+  border-radius: var(--r-chip);
+  padding: 2px 10px;
+}
+.dojo-start-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: filter 0.16s var(--ease-out), transform 0.1s var(--ease-out);
+}
+.dojo-start-btn:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+.dojo-start-btn:active {
+  transform: scale(0.97);
+}
+.dojo-done-hint {
+  font-size: 11.5px;
+  color: var(--ink3);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* ---- Record + result modals (dojo-specific shell over the app.css chrome) ---- */
+.modal-card.dojo-modal {
+  width: min(460px, calc(100vw - 48px));
+  text-align: center;
+}
+.dojo-modal .confirm-title {
+  text-align: center;
+}
+.dojo-rec-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 0 20px;
+}
+.dojo-rec-orb {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, var(--cyan-ink), var(--accent) 70%);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 16%, transparent),
+    0 10px 30px -6px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition: transform 0.08s linear;
+}
+.dojo-rec-count {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.dojo-rec-status {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+.dojo-rec-taboo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dojo-rec-taboo .dojo-taboo-chips {
+  justify-content: center;
+}
+
+/* ---- Result verdict ---- */
+.dojo-score-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 0 18px;
+}
+.dojo-score {
+  --score-color: var(--ink);
+  font-size: 76px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--score-color);
+}
+.dojo-score--good {
+  --score-color: var(--emerald);
+}
+.dojo-score--mid {
+  --score-color: var(--cyan-ink);
+}
+.dojo-score--low {
+  --score-color: var(--ink3);
+}
+.dojo-score-of {
+  font-size: 12px;
+  color: var(--ink3);
+}
+.dojo-score-tier {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--score-color);
+}
+.dojo-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  padding: 14px 2px;
+  border-top: 1px solid var(--line2);
+  border-bottom: 1px solid var(--line2);
+}
+.dojo-bd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dojo-bd-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+.dojo-bd-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.dojo-bd-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dojo-bd-stats {
+  display: flex;
+  gap: 10px;
+}
+.dojo-bd-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 10px 6px;
+}
+.dojo-bd-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.dojo-bd-cap {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+.dojo-clean-chip {
+  --clean: var(--ok);
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--clean);
+  background: color-mix(in srgb, var(--clean) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--clean) 34%, transparent);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.dojo-too-short {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amber);
+  line-height: 1.4;
+}
+.dojo-xp-line {
+  margin: 14px 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+.dojo-xp-line.earned {
+  color: var(--cyan-ink);
+}
+.dojo-xp-line.already {
+  color: var(--ink3);
+}
+.dojo-transcript-toggle {
+  display: inline-block;
+  margin: 6px auto 0;
+  padding: 4px;
+  background: none;
+  border: none;
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dojo-transcript-toggle:hover {
+  text-decoration: underline;
+}
+.dojo-transcript {
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--prose);
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  margin: 8px 0 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* ---- Weekly quests ---- */
+.dojo-quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dojo-quest {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.dojo-quest-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dojo-quest-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dojo-quest.is-done .dojo-quest-name {
+  color: var(--ink2);
+}
+.dojo-quest-prog {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dojo-quest-check {
+  --done: var(--ok);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--done);
+  white-space: nowrap;
+}
+.dojo-quest-desc {
+  font-size: 12px;
+  color: var(--ink2);
+  line-height: 1.4;
+}
+
+/* ---- Zero-hue black theme: tokens.css keeps --red / --amber / --ok coloured,
+   so grey every dojo element that rides them, and remap the score tiers to a
+   brightness ramp (good = brightest, draws the eye). ---- */
+:root[data-theme="black"] .dojo-taboo-chip {
+  --taboo: #d4d4d6;
+}
+:root[data-theme="black"] .dojo-done-badge,
+:root[data-theme="black"] .dojo-quest-check {
+  --done: #cfcfd2;
+}
+:root[data-theme="black"] .dojo-clean-chip {
+  --clean: #b6b6b9;
+}
+:root[data-theme="black"] .dojo-too-short {
+  color: #c9c9cc;
+}
+:root[data-theme="black"] .dojo-score--good {
+  --score-color: #f2f2f4;
+}
+:root[data-theme="black"] .dojo-score--mid {
+  --score-color: #bdbdc0;
+}
+:root[data-theme="black"] .dojo-score--low {
+  --score-color: #7c7c80;
+}
+:root[data-theme="black"] .dojo-xp-line.earned {
+  color: #ededf0;
+}

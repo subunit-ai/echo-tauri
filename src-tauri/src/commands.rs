@@ -944,7 +944,7 @@ pub fn activity_word_frequency(limit: Option<u32>, days: Option<u32>) -> Vec<ser
 /// Days since 1970-01-01 for a 'YYYY-MM-DD' string (Howard Hinnant's
 /// days_from_civil) — pure integer math on the SQLite-bucketed LOCAL dates, so
 /// consecutive-day streaks need no date crate. None on malformed input.
-fn day_number(day: &str) -> Option<i64> {
+pub(crate) fn day_number(day: &str) -> Option<i64> {
     let mut it = day.split('-');
     let y: i64 = it.next()?.parse().ok()?;
     let m: i64 = it.next()?.parse().ok()?;
@@ -1316,7 +1316,7 @@ pub const XP_COACH_WORD: i64 = 20;
 
 /// Level from total XP — cumulative quadratic thresholds (level n needs
 /// 100·n² XP: 100, 400, 900, …). Returns (level, floor_xp, next_level_xp).
-fn level_for_xp(xp: i64) -> (i64, i64, i64) {
+pub(crate) fn level_for_xp(xp: i64) -> (i64, i64, i64) {
     let mut level = 0i64;
     while 100 * (level + 1) * (level + 1) <= xp {
         level += 1;
@@ -1340,7 +1340,7 @@ fn day_string(days: i64) -> String {
 
 /// Monday of the week containing `day` — the leaderboard's week key (calendar
 /// weeks, not rolling windows, so everyone competes in the same frame).
-fn week_monday(day: &str) -> String {
+pub(crate) fn week_monday(day: &str) -> String {
     match day_number(day) {
         // 1970-01-01 was a Thursday → Monday-based weekday index = (dn+3) mod 7.
         Some(dn) => day_string(dn - (((dn + 3) % 7 + 7) % 7)),
@@ -1696,7 +1696,7 @@ fn notify_reward(app: &AppHandle, ui_language: &str, events: &[serde_json::Value
 
 /// Best-effort leaderboard sync over the subunit lane (detached — never
 /// delays a dictation). Mirrors word_upgrade_curate's endpoint/auth recipe.
-fn push_learning_score_detached(cfg: Config, account: String) {
+pub(crate) fn push_learning_score_detached(cfg: Config, account: String) {
     if cfg.mode != "subunit" {
         return;
     }

@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.138",
+    date: "2026-07-15",
+    title: {
+      de: "Das Rhetorik-Dojo: 45 Sekunden Training, gesprochen statt getippt",
+      en: "The rhetoric dojo: 45 seconds of training, spoken not typed",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Tägliche Sprech-Übung im neuen Dojo-Tab: Füllwort-Gauntlet (rede frei — jedes Äh kostet), Tabu (erkläre einen Begriff ohne die verbotenen Wörter) und Sag es besser (formuliere einen schwachen Satz präziser). Jeden Tag rotiert die Disziplin.",
+        en: "A daily speaking drill in the new Dojo tab: Filler Gauntlet (speak freely — every uhm costs), Taboo (explain a term without the forbidden words) and Say It Better (rephrase a weak sentence with precision). The discipline rotates daily.",
+      },
+      {
+        kind: "feature",
+        de: "Sofort-Bewertung nach jeder Übung: Score 0–100 mit ehrlicher Aufschlüsselung (Füllwörter, Tabu-Verstöße, schwache und gehobene Wörter) plus Transkript — komplett lokal, nichts verlässt dein Gerät.",
+        en: "Instant scoring after every drill: 0–100 with an honest breakdown (fillers, taboo violations, weak and elevated words) plus transcript — fully local, nothing leaves your device.",
+      },
+      {
+        kind: "feature",
+        de: "Wochen-Quests: drei Ziele pro Woche (Workouts, Coach-Wörter im Alltag, ein neuer Fund) mit Fortschrittsanzeige — und XP für jede bestandene Übung.",
+        en: "Weekly quests: three goals per week (workouts, coach words in daily dictation, one new find) with progress bars — and XP for every passed drill.",
+      },
+      {
+        kind: "improvement",
+        de: "Übungs-Aufnahmen sind strikt getrennt vom Diktat: Sie landen nie in deinem Verlauf, werden nirgendwo eingefügt, und der Diktat-Hotkey pausiert während einer Übung.",
+        en: "Drill recordings are strictly separated from dictation: they never enter your history, are never pasted anywhere, and the dictation hotkey pauses during a drill.",
+      },
+    ],
+  },
+  {
     version: "0.5.137",
     date: "2026-07-14",
     title: {

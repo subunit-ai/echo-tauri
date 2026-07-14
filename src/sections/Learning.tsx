@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   achievementsList,
+  dojoRecordCancel,
+  dojoRecordLevel,
+  dojoRecordStart,
+  dojoRecordStop,
+  dojoToday,
   fillerRemovedCounts,
   learningAnalysis,
   learningLeaderboard,
@@ -12,6 +17,7 @@ import {
   onLearningReward,
   onWordFind,
   onWeeklyReport,
+  questsGet,
   speechProfile,
   speechProfileTrend,
   weeklyReportGet,
@@ -22,10 +28,14 @@ import {
   wortdexList,
   type Achievement,
   type Band,
+  type DojoKind,
+  type DojoResult,
+  type DojoToday,
   type Leaderboard,
   type LearningAnalysis,
   type LearningSuggestions,
   type LearningXp,
+  type Quest,
   type SpeechDimension,
   type SpeechInsight,
   type SpeechProfile,
@@ -1561,9 +1571,493 @@ function SpeechProfileTab() {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  Rhetorik-Dojo (Welle 4) — one spoken micro-workout a day. Today's exercise
+//  → a countdown recording → an instant scored verdict with XP. The recorder
+//  mirrors the Notes RecordModal state-machine (starting/recording/transcribing)
+//  with the VoiceprintPanel auto-stop at the time budget, and the same unmount
+//  safety-net that cancels a stranded take.
+// ════════════════════════════════════════════════════════════════════════
+
+/** Kind → its badge accent class (all three route through tokens that tokens.css
+ *  already greys for the black theme, so no zero-hue override is needed). */
+const DOJO_KIND_CLASS: Record<DojoKind, string> = {
+  gauntlet: "dojo-kind--gauntlet",
+  tabu: "dojo-kind--tabu",
+  better: "dojo-kind--better",
+};
+
+/** Score → tier (colour class + qualitative label). ≥80 good (emerald), ≥50 mid
+ *  (cyan), else low (dimmed). The colour tokens are greyed for the black theme. */
+function dojoTier(score: number): { cls: "good" | "mid" | "low"; label: string } {
+  if (score >= 80) return { cls: "good", label: "scoreGreat" };
+  if (score >= 50) return { cls: "mid", label: "scoreMid" };
+  return { cls: "low", label: "scoreLow" };
+}
+
+/** The big task line, rendered by kind: gauntlet → the topic; tabu → the term
+ *  plus the red-bordered taboo chips; better → the weak sentence as a quote. */
+function DojoTask({ today }: { today: DojoToday }) {
+  const { t } = useTranslation();
+  if (today.kind === "tabu") {
+    return (
+      <div className="dojo-task">
+        <div className="dojo-term">{today.term}</div>
+        {today.taboo && today.taboo.length > 0 && (
+          <>
+            <div className="dojo-taboo-caption">{t("learning.dojo.tabooLabel")}</div>
+            <div className="dojo-taboo-chips">
+              {today.taboo.map((w) => (
+                <span key={w} className="dojo-taboo-chip">
+                  {w}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+  if (today.kind === "better") {
+    return (
+      <div className="dojo-task">
+        <div className="dojo-taboo-caption">{t("learning.dojo.weakLabel")}</div>
+        <p className="dojo-weak-quote">{today.weak_sentence}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="dojo-task">
+      <div className="dojo-topic">{today.topic}</div>
+    </div>
+  );
+}
+
+/** The exercise-of-the-day card: typ badge, the big task, the one-line rule, the
+ *  seconds + XP badges, and the start CTA. done_today adds a check + the "no
+ *  further XP" hint but still lets you practice again. */
+function DojoExerciseCard({ today, onStart }: { today: DojoToday; onStart: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="dojo-card">
+      <div className="dojo-card-head">
+        <span className="dojo-eyebrow">{t("learning.dojo.todayEyebrow")}</span>
+        <span className={`dojo-badge ${DOJO_KIND_CLASS[today.kind]}`}>
+          {t(`learning.dojo.kind.${today.kind}.name`)}
+        </span>
+      </div>
+
+      <DojoTask today={today} />
+
+      <div className="dojo-rule">{t(`learning.dojo.kind.${today.kind}.rule`)}</div>
+
+      <div className="dojo-card-foot">
+        <span className="dojo-meta-badge">
+          {t("learning.dojo.secondsBadge", { seconds: today.seconds })}
+        </span>
+        <span className="dojo-xp-badge">{t("learning.dojo.xpBadge", { xp: today.xp })}</span>
+        {today.done_today && (
+          <span className="dojo-done-badge">
+            <CheckIcon />
+            {t("learning.dojo.doneToday")}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        <button className="dojo-start-btn" onClick={onStart}>
+          {today.done_today ? t("learning.dojo.retryBtn") : t("learning.dojo.startBtn")}
+        </button>
+      </div>
+
+      {today.done_today && <p className="dojo-done-hint">{t("learning.dojo.doneTodayHint")}</p>}
+    </div>
+  );
+}
+
+/** The recording overlay: a big countdown (auto-stops at 0 → score), the pulsing
+ *  level orb (scales with the mic level), the taboo words kept in view for a tabu
+ *  drill, and a cancel button. The unmount safety-net cancels a still-running
+ *  take so the mic + session guard are released, never stranded. */
+function DojoRecordModal({
+  today,
+  onCancel,
+  onResult,
+  toastErr,
+}: {
+  today: DojoToday;
+  onCancel: () => void;
+  onResult: (r: DojoResult) => void;
+  toastErr: (m: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [phase, setPhase] = useState<"starting" | "recording" | "transcribing" | "error">("starting");
+  const [level, setLevel] = useState(0);
+  const [remaining, setRemaining] = useState(today.seconds);
+  const started = useRef(false);
+  const stopping = useRef(false);
+  const done = useRef(false); // recorder was cleanly stopped or cancelled
+  const deadline = useRef<number | null>(null); // fixed auto-stop instant (ms)
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    dojoRecordStart()
+      .then(() => setPhase("recording"))
+      .catch((e) => {
+        done.current = true;
+        setPhase("error");
+        const busy = String(e).includes("busy");
+        toastErr(
+          busy
+            ? t("learning.dojo.busyError")
+            : t("learning.dojo.recordFailed") + " (" + String(e) + ")",
+        );
+        onCancel();
+      });
+  }, [t, toastErr, onCancel]);
+
+  // Safety net: cancel if this modal is torn down while still recording (e.g. a
+  // sidebar switch mid-take). No-op once stop/cancel already ran.
+  useEffect(() => () => {
+    if (!done.current) dojoRecordCancel().catch(() => {});
+  }, []);
+
+  const stop = useCallback(async () => {
+    if (stopping.current) return;
+    stopping.current = true;
+    done.current = true; // we own the recorder teardown now
+    setPhase("transcribing");
+    try {
+      const r = await dojoRecordStop();
+      onResult(r);
+    } catch (e) {
+      toastErr(t("learning.dojo.transcribeFailed") + " (" + String(e) + ")");
+      onCancel();
+    }
+  }, [onResult, onCancel, toastErr, t]);
+
+  const cancel = useCallback(async () => {
+    done.current = true;
+    await dojoRecordCancel().catch(() => {});
+    onCancel();
+  }, [onCancel]);
+
+  // Level poll (~80 ms) + a countdown against a fixed deadline; at 0 the take
+  // auto-stops (VoiceprintPanel MAX_S pattern). The deadline lives in a ref set
+  // once, so a stray re-render can never reset the clock mid-take.
+  useEffect(() => {
+    if (phase !== "recording") {
+      deadline.current = null;
+      return;
+    }
+    if (deadline.current === null) deadline.current = Date.now() + today.seconds * 1000;
+    const lv = window.setInterval(() => {
+      dojoRecordLevel().then(setLevel).catch(() => {});
+    }, 80);
+    const tm = window.setInterval(() => {
+      const left = Math.ceil((deadline.current! - Date.now()) / 1000);
+      setRemaining(Math.max(0, left));
+      if (left <= 0) void stop();
+    }, 250);
+    return () => {
+      window.clearInterval(lv);
+      window.clearInterval(tm);
+    };
+  }, [phase, today.seconds, stop]);
+
+  const scale = 1 + Math.min(level, 1) * 0.5;
+  const showTaboo = today.kind === "tabu" && !!today.taboo && today.taboo.length > 0;
+
+  return (
+    <div className="modal-backdrop" onClick={phase === "recording" ? undefined : cancel}>
+      <div className="modal-card dojo-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="confirm-title">{t("learning.dojo.recording.title")}</h3>
+
+        <div className="dojo-rec-stage">
+          <div className="dojo-rec-orb" style={{ transform: `scale(${scale})` }} />
+          {phase === "transcribing" ? (
+            <div className="dojo-rec-status">{t("learning.dojo.recording.transcribing")}</div>
+          ) : phase === "starting" ? (
+            <div className="dojo-rec-status">{t("learning.dojo.recording.starting")}</div>
+          ) : (
+            <div className="dojo-rec-count">{remaining}</div>
+          )}
+        </div>
+
+        {showTaboo && phase !== "transcribing" && (
+          <div className="dojo-rec-taboo">
+            <span className="dojo-taboo-caption">{t("learning.dojo.recording.tabooReminder")}</span>
+            <div className="dojo-taboo-chips">
+              {today.taboo!.map((w) => (
+                <span key={w} className="dojo-taboo-chip">
+                  {w}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="confirm-actions">
+          <button className="confirm-btn" onClick={cancel} disabled={phase === "transcribing"}>
+            {t("common.cancel")}
+          </button>
+          <button
+            className="confirm-btn primary"
+            onClick={stop}
+            disabled={phase !== "recording"}
+          >
+            {t("learning.dojo.recording.stopBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The verdict: the big score (colour by tier), the kind-specific breakdown, the
+ *  XP line (+15 or "already rewarded"), the expandable transcript, and a
+ *  practice-again button. */
+function DojoResultModal({
+  today,
+  result,
+  onClose,
+  onAgain,
+}: {
+  today: DojoToday;
+  result: DojoResult;
+  onClose: () => void;
+  onAgain: () => void;
+}) {
+  const { t } = useTranslation();
+  const [showTranscript, setShowTranscript] = useState(false);
+  const tier = dojoTier(result.score);
+  const b = result.breakdown;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card dojo-modal" onClick={(e) => e.stopPropagation()}>
+        <h3 className="confirm-title">{t("learning.dojo.result.title")}</h3>
+
+        <div className="dojo-score-stage">
+          <div className={`dojo-score dojo-score--${tier.cls}`}>{Math.round(result.score)}</div>
+          <div className="dojo-score-of">{t("learning.dojo.result.scoreOf100")}</div>
+          <div className={`dojo-score-tier dojo-score--${tier.cls}`}>
+            {t(`learning.dojo.result.${tier.label}`)}
+          </div>
+        </div>
+
+        <div className="dojo-breakdown">
+          {today.kind === "gauntlet" && (
+            <div className="dojo-bd-row">
+              <span className="dojo-bd-label">{t("learning.dojo.result.fillers")}</span>
+              <span className="dojo-bd-val">{b.fillers}</span>
+            </div>
+          )}
+          {today.kind === "tabu" && (
+            <div className="dojo-bd-block">
+              <span className="dojo-bd-label">{t("learning.dojo.result.violations")}</span>
+              {b.violations.length > 0 ? (
+                <div className="dojo-taboo-chips">
+                  {b.violations.map((w, i) => (
+                    <span key={`${w}-${i}`} className="dojo-taboo-chip">
+                      {w}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="dojo-clean-chip">
+                  <CheckIcon />
+                  {t("learning.dojo.result.violationsNone")}
+                </span>
+              )}
+            </div>
+          )}
+          {today.kind === "better" && (
+            <div className="dojo-bd-stats">
+              <div className="dojo-bd-stat">
+                <span className="dojo-bd-num">{b.weak}</span>
+                <span className="dojo-bd-cap">{t("learning.dojo.result.weak")}</span>
+              </div>
+              <div className="dojo-bd-stat">
+                <span className="dojo-bd-num">{b.vague}</span>
+                <span className="dojo-bd-cap">{t("learning.dojo.result.vague")}</span>
+              </div>
+              <div className="dojo-bd-stat">
+                <span className="dojo-bd-num">{b.elevated}</span>
+                <span className="dojo-bd-cap">{t("learning.dojo.result.elevated")}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="dojo-bd-row">
+            <span className="dojo-bd-label">{t("learning.dojo.result.words")}</span>
+            <span className="dojo-bd-val">{b.words}</span>
+          </div>
+
+          {b.too_short && (
+            <div className="dojo-too-short">
+              <SeverityIcon severity={3} />
+              {t("learning.dojo.result.tooShort")}
+            </div>
+          )}
+        </div>
+
+        <div className={`dojo-xp-line ${result.xp_awarded > 0 ? "earned" : "already"}`}>
+          {result.xp_awarded > 0
+            ? t("learning.dojo.result.xpAwarded", { xp: result.xp_awarded })
+            : t("learning.dojo.result.xpAlready")}
+        </div>
+
+        <button
+          type="button"
+          className="dojo-transcript-toggle"
+          aria-expanded={showTranscript}
+          onClick={() => setShowTranscript((v) => !v)}
+        >
+          {showTranscript
+            ? t("learning.dojo.result.transcriptHide")
+            : t("learning.dojo.result.transcriptShow")}
+        </button>
+        {showTranscript && <p className="dojo-transcript">{result.transcript.trim() || "—"}</p>}
+
+        <div className="confirm-actions">
+          <button className="confirm-btn" onClick={onClose}>
+            {t("common.close")}
+          </button>
+          <button className="confirm-btn primary" onClick={onAgain}>
+            {t("learning.dojo.retryBtn")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Canonical quest order (server order is not relied upon). */
+const DOJO_QUEST_ORDER: Quest["id"][] = ["workouts_3", "coach_5", "find_1"];
+
+/** "Deine Wochen-Quests": three rows, each a name + description + progress bar,
+ *  a check once complete. */
+function DojoQuestsCard({ quests }: { quests: Quest[] }) {
+  const { t } = useTranslation();
+  if (quests.length === 0) return null;
+  const byId = new Map(quests.map((q) => [q.id, q]));
+  const ordered = DOJO_QUEST_ORDER.map((id) => byId.get(id)).filter((q): q is Quest => !!q);
+  return (
+    <div className="chart-card dojo-quests">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">{t("learning.dojo.quests.title")}</div>
+          <div className="chart-sub">{t("learning.dojo.quests.sub")}</div>
+        </div>
+      </div>
+      <div className="dojo-quest-list">
+        {ordered.map((q) => {
+          const pct = q.target > 0 ? Math.min(100, Math.round((q.progress / q.target) * 100)) : 0;
+          const complete = q.progress >= q.target;
+          return (
+            <div key={q.id} className={`dojo-quest${complete ? " is-done" : ""}`}>
+              <div className="dojo-quest-top">
+                <span className="dojo-quest-name">{t(`learning.dojo.quests.${q.id}.name`)}</span>
+                {complete ? (
+                  <span className="dojo-quest-check">
+                    <CheckIcon />
+                    {t("learning.dojo.quests.done")}
+                  </span>
+                ) : (
+                  <span className="dojo-quest-prog">
+                    {t("learning.dojo.quests.progress", { progress: q.progress, target: q.target })}
+                  </span>
+                )}
+              </div>
+              <div className="dojo-quest-desc">{t(`learning.dojo.quests.${q.id}.desc`)}</div>
+              <div className="xp-bar">
+                <div className="xp-bar-fill" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The Dojo tab: today's exercise + the weekly quests, plus the record → result
+ *  modal flow. Refreshes today (done_today) + quests on a reward and on history. */
+function DojoTab() {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [today, setToday] = useState<DojoToday | null>(null);
+  const [quests, setQuests] = useState<Quest[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [result, setResult] = useState<DojoResult | null>(null);
+
+  const loadToday = useCallback(() => {
+    dojoToday().then(setToday).catch(() => {});
+  }, []);
+  const loadQuests = useCallback(() => {
+    questsGet()
+      .then((q) => setQuests(q.quests))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadToday();
+    loadQuests();
+    const un = onLearningReward(() => {
+      loadToday();
+      loadQuests();
+    });
+    const unh = onHistoryChanged(loadQuests);
+    return () => {
+      un.then((f) => f());
+      unh.then((f) => f());
+    };
+  }, [loadToday, loadQuests]);
+
+  if (today === null) {
+    return (
+      <div className="empty" aria-busy="true">
+        {t("learning.dojo.loading")}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <DojoExerciseCard today={today} onStart={() => setRecording(true)} />
+      <DojoQuestsCard quests={quests} />
+
+      {recording && (
+        <DojoRecordModal
+          today={today}
+          onCancel={() => setRecording(false)}
+          onResult={(r) => {
+            setRecording(false);
+            setResult(r);
+            loadToday();
+            loadQuests();
+          }}
+          toastErr={(m) => toast(m, "error")}
+        />
+      )}
+      {result && (
+        <DojoResultModal
+          today={today}
+          result={result}
+          onClose={() => setResult(null)}
+          onAgain={() => {
+            setResult(null);
+            setRecording(true);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function Learning() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"coach" | "dex" | "speech" | "achievements">("coach");
+  const [tab, setTab] = useState<"coach" | "dex" | "speech" | "dojo" | "achievements">("coach");
   const [wortdex, setWortdex] = useState<WortdexData | null>(null);
 
   // The collection is loaded once at section level (so the Wortdex tab count
@@ -1614,6 +2108,12 @@ export function Learning() {
           {t("learning.speech.tab")}
         </button>
         <button
+          className={`sub-tab ${tab === "dojo" ? "active" : ""}`}
+          onClick={() => setTab("dojo")}
+        >
+          {t("learning.dojo.tab")}
+        </button>
+        <button
           className={`sub-tab ${tab === "achievements" ? "active" : ""}`}
           onClick={() => setTab("achievements")}
         >
@@ -1624,6 +2124,7 @@ export function Learning() {
       {tab === "coach" && <CoachTab />}
       {tab === "dex" && <WortdexTab data={wortdex} />}
       {tab === "speech" && <SpeechProfileTab />}
+      {tab === "dojo" && <DojoTab />}
       {tab === "achievements" && <AchievementsTab />}
     </div>
   );
