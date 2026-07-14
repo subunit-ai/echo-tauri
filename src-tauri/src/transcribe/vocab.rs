@@ -228,25 +228,50 @@ fn hm_tail(rest: &[char], require_m: bool) -> bool {
     !require_m || !m.is_empty()
 }
 
+/// The canonical bucket label ("äh" | "ähm" | "hmm") for a token already
+/// confirmed by `is_filler` — mirrors `analysis::hesitation`'s bucket rules
+/// exactly: a pure h/m cluster (both letters present, `is_filler`'s h/m arm)
+/// is always "hmm"; an ä/ö-lead or e-lead (the latter only reaches `is_filler`
+/// true with a trailing 'm', per `hm_tail`'s `require_m`) is "ähm" when an 'm'
+/// is present, else "äh". Kept as its own copy rather than importing
+/// `analysis::hesitation` (private, different module, and classifies a wider
+/// set incl. discourse fillers) — three lines of duplication beats a
+/// cross-module coupling for this.
+fn filler_bucket(core: &str) -> &'static str {
+    let cs: Vec<char> = core.to_lowercase().chars().collect();
+    if cs.iter().all(|c| *c == 'h' || *c == 'm') {
+        "hmm"
+    } else if cs.contains(&'m') {
+        "ähm"
+    } else {
+        "äh"
+    }
+}
+
 /// Deterministic, zero-latency removal of hesitation fillers ("äh", "ähm",
 /// "hmm", …) from raw dictation — the cheap "cleanup" that costs no round trip
 /// (unlike the AI `/v1/cleanup`). Whole-word only, tolerates a trailing comma
 /// (Whisper brackets fillers with commas: "…, ähm, …"), tidies the resulting
 /// spacing/commas, and re-capitalizes the sentence if a leading filler was cut.
 /// Precision-first: only `is_filler` tokens are ever touched, so real words are
-/// never removed. Idempotent.
-pub fn strip_fillers(text: &str) -> String {
+/// never removed. Idempotent. Also returns which fillers were removed,
+/// canonically bucketed and counted — the stats the Wortschatz tab shows are
+/// otherwise blind (the fillers never reach the stored history at all). Pure:
+/// no side effects, no DB — the caller persists the counts.
+pub fn strip_fillers_counted(text: &str) -> (String, Vec<(String, i64)>) {
     if text.trim().is_empty() {
-        return text.to_string();
+        return (text.to_string(), Vec::new());
     }
     let toks: Vec<&str> = text.split_whitespace().collect();
     let mut kept: Vec<String> = Vec::with_capacity(toks.len());
     let mut removed_leading = false;
+    let mut counts: std::collections::HashMap<&'static str, i64> = std::collections::HashMap::new();
     for tok in &toks {
         // Test the core with one optional trailing comma stripped ("ähm," → "ähm").
         let had_comma = tok.ends_with(',');
         let core = tok.strip_suffix(',').unwrap_or(tok);
         if is_filler(core) {
+            *counts.entry(filler_bucket(core)).or_insert(0) += 1;
             if kept.is_empty() {
                 removed_leading = true;
             } else if had_comma {
@@ -275,28 +300,45 @@ pub fn strip_fillers(text: &str) -> String {
             out = first.to_uppercase().collect::<String>() + chars.as_str();
         }
     }
-    out
+    // Descending by count, alphabetical on ties — same ordering contract as
+    // `store::filler_removed_since`.
+    let mut counted: Vec<(String, i64)> = counts.into_iter().map(|(k, c)| (k.to_string(), c)).collect();
+    counted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    (out, counted)
 }
 
 /// The full deterministic post-transcription pass shared by EVERY engine path
 /// (cloud / local / streaming final). All zero-latency, no LLM, no network:
 /// vocabulary replace → comma de-spam → optional filler strip. Keeping it in one
 /// place means the three paths can never drift (the streaming path historically
-/// missed some of these).
-pub fn post_process(text: &str, cfg: &Config) -> String {
+/// missed some of these). Also surfaces which fillers were stripped (empty when
+/// filler removal is off) so the caller can persist the counts.
+pub fn post_process_counted(text: &str, cfg: &Config) -> (String, Vec<(String, i64)>) {
     let t = apply_vocab_replace(text, cfg);
     let t = despam_commas(&t);
     if cfg.filler_removal_enabled {
-        strip_fillers(&t)
+        strip_fillers_counted(&t)
     } else {
-        t
+        (t, Vec::new())
     }
+}
+
+/// Thin wrapper over [`post_process_counted`] for callers that don't need the
+/// removed-filler counts.
+pub fn post_process(text: &str, cfg: &Config) -> String {
+    post_process_counted(text, cfg).0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{Config, VocabEntry};
+
+    /// Text-only view of [`strip_fillers_counted`] — production always wants the
+    /// counts too, so the plain variant lives here, where the assertions read.
+    fn strip_fillers(text: &str) -> String {
+        strip_fillers_counted(text).0
+    }
 
     #[test]
     fn test_apply_vocab_replace_empty_text() {
@@ -454,6 +496,29 @@ mod tests {
         assert_eq!(strip_fillers("etwas ähnliches"), "etwas ähnliches");
         assert!(!is_filler("eh") && !is_filler("um") && !is_filler("mm") && !is_filler("ohm"));
         assert!(is_filler("äh") && is_filler("ähm") && is_filler("hmm") && is_filler("mhm") && is_filler("ehm"));
+    }
+
+    #[test]
+    fn strip_fillers_counted_buckets_and_matches_uncounted_text() {
+        let text = "Das ist ähm gut, äh also hmm ja";
+        let (stripped, counts) = strip_fillers_counted(text);
+        // Regression: identical text to the plain wrapper — no behavior drift.
+        assert_eq!(stripped, strip_fillers(text));
+        assert_eq!(counts.len(), 3);
+        let get = |w: &str| counts.iter().find(|(k, _)| k == w).map(|(_, c)| *c);
+        assert_eq!(get("ähm"), Some(1));
+        assert_eq!(get("äh"), Some(1));
+        assert_eq!(get("hmm"), Some(1));
+    }
+
+    #[test]
+    fn strip_fillers_counted_ignores_real_words() {
+        // "eh"/"um"/"mm"/"ohm" are real words, never fillers — text untouched,
+        // nothing counted.
+        let text = "Das ist eh gut, um zehn, mm Abstand, ohm Widerstand.";
+        let (stripped, counts) = strip_fillers_counted(text);
+        assert_eq!(stripped, text);
+        assert!(counts.is_empty());
     }
 
     #[test]

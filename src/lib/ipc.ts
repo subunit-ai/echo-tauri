@@ -555,8 +555,24 @@ export interface LearningSuggestions {
   source: "local" | "llm";
   suggestions: WordSuggestion[];
 }
+/** Curated local suggestions — instant, and guaranteed never to touch the
+ *  network. Paint these first. */
 export const learningSuggestions = (days = 30) =>
   invoke<LearningSuggestions>("learning_suggestions", { days });
+
+/** The LLM-refined variant of the same list. Split out on purpose: it may cross
+ *  the network (the server curates with an LLM), which used to stall the whole
+ *  coach behind a 30 s round trip on every dictation. Callers render the local
+ *  set immediately and swap this in when — and only if — it lands. */
+export const learningSuggestionsLlm = (days = 30) =>
+  invoke<LearningSuggestions>("learning_suggestions_llm", { days });
+
+/** Fillers Echo actually STRIPPED from your dictations, counted at removal
+ *  time. They cannot be recovered from the history: what gets stored is the
+ *  already-cleaned transcript, so the removed ones are gone from it by
+ *  definition — hence their own counter. */
+export const fillerRemovedCounts = (days = 30) =>
+  invoke<WordFreq[]>("filler_removed_counts", { days });
 
 export interface Goals {
   daily_word_goal: number;

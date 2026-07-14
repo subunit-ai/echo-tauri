@@ -64,6 +64,10 @@ pub struct StreamFinal {
     pub finish_flush_ms: u64,
     pub final_wait_ms: u64,
     pub vocab_ms: u64,
+    /// Fillers stripped from the PRIMARY `text` (never from `cleaned_text` —
+    /// same speech, would double-count), canonically bucketed + counted. Only
+    /// the FINAL text counts — partials never reach this struct at all.
+    pub fillers_removed: Vec<(String, i64)>,
 }
 
 /// Error + whatever capture the session still owns, so the caller can fall
@@ -1544,7 +1548,10 @@ fn await_final(
                         // of the AI cleanup; the server only gets the bias prompt.
                         let cfg = app.state::<AppState>().config.lock().clone();
                         let t_vocab = Instant::now();
-                        let text = vocab::post_process(
+                        // Primary text path — the ONE place fillers are counted (the
+                        // `cleaned_text` pass right below is the SAME speech, AI-cleaned,
+                        // and must never also feed the counter — that would double it).
+                        let (text, fillers_removed) = vocab::post_process_counted(
                             v.get("text").and_then(|t| t.as_str()).unwrap_or_default().trim(),
                             &cfg,
                         );
@@ -1586,6 +1593,7 @@ fn await_final(
                             finish_flush_ms,
                             final_wait_ms,
                             vocab_ms,
+                            fillers_removed,
                         });
                     }
                     Some("partial") => {
