@@ -18,8 +18,8 @@
    (poster aurora, chip contrast) that read a hair too strong in daylight. */
 
 /* ================================================================
-   Chart cards — Daily trend (AreaChart), Hourly (HourlyChart),
-   Top words (BarChart). Shared frame + header + horizontal-scroll wrap.
+   Chart cards — Daily trend (AreaChart), Hourly (HourlyChart).
+   Shared frame + header + horizontal-scroll wrap.
    ================================================================ */
 
 .chart-card {
@@ -112,7 +112,7 @@
   overflow: visible;
 }
 
-/* Inline-SVG hooks (BarChart / AreaChart / HourlyChart / Sparkline apply
+/* Inline-SVG hooks (AreaChart / HourlyChart / Sparkline apply
    these as classes on their own <rect>/<path>/<line>/<text> nodes so every
    chart reads from the same token mapping — §8: axis = --ink3/--line,
    ticks/labels = --ink2, values/focus = --ink, series = --cyan). */
@@ -827,9 +827,8 @@
    the Wortschatz section (most-used words, stripped fillers, fillers left
    standing). Same rhythm everywhere, on purpose: rank, the full word, a
    proportional track, the count. Plain DOM, so the words are real text that
-   wraps and can always be read — unlike the SVG BarChart, whose
-   `preserveAspectRatio="none"` viewBox squeezed the glyphs sideways and cut
-   long labels to an ellipsis.
+   wraps and can always be read — SVG text can do neither, and a viewBox that
+   doesn't match its container squeezes every glyph sideways on top of that.
    ================================================================ */
 
 .rank-list {

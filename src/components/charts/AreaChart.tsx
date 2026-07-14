@@ -3,14 +3,8 @@
 // Farbe kommt aus CSS-Tokens (tokens.css) bzw. dem `color`-Prop, nichts hart-kodiert.
 // Selbst-vermessen per ResizeObserver → viewBox deckt sich 1:1 mit dem gerenderten
 // Container (keine Verzerrung von Kreisen/Text, kein horizontales Scrollen).
-import {
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useId, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMeasuredWidth } from "./useMeasuredWidth";
 
 export interface XYDatum {
   x: string;
@@ -67,22 +61,10 @@ export function AreaChart({
   goal?: number;
 }) {
   const gradId = useId();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+  // Shared with HourlyChart — one measuring implementation, so the two can't
+  // drift apart on the very thing that keeps their text undistorted.
+  const [wrapRef, width] = useMeasuredWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    setWidth(el.getBoundingClientRect().width || 0);
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w && w > 0) setWidth(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const n = data.length;
   const vbW = Math.max(Math.round(width), 1);

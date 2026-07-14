@@ -92,11 +92,11 @@ const MAX_LEVEL_TITLE = 9;
  *  (most-used words, stripped fillers, fillers left in the text): rank, the
  *  word spelled out IN FULL, a proportional track, and the count.
  *
- *  Deliberately plain DOM rather than the shared BarChart: that one draws into
- *  a 640-unit viewBox with `preserveAspectRatio="none"`, so inside a narrow
- *  card every glyph is squeezed horizontally and long labels are cut to an
- *  ellipsis — which is precisely why the filler words were unreadable. Text
- *  that has to be *read* does not belong in a non-uniformly scaled SVG. */
+ *  Deliberately plain DOM rather than an SVG chart: a viewBox that doesn't match
+ *  its container squeezes every glyph sideways, and SVG text can't wrap or
+ *  ellipsize on its own — which is precisely why the filler words were
+ *  unreadable here. Text that has to be *read* does not belong in a
+ *  non-uniformly scaled SVG. */
 function RankList({
   items,
   tone = "neutral",
