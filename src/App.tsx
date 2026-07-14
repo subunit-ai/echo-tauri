@@ -16,7 +16,7 @@ import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
 import { WhatsNew } from "./components/WhatsNew";
-import { onState, onNeedsAccessibility, onLearningReward } from "./lib/ipc";
+import { onState, onNeedsAccessibility, onLearningReward, onWordFind } from "./lib/ipc";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
@@ -114,10 +114,23 @@ function EngineErrorToasts() {
       const key = first.kind === "word_of_day" ? "learning.rewardWodToast" : "learning.rewardCoachToast";
       toast(t(key, { word: first.word, xp, count: r.events.length - 1 }), "success");
     });
+    // Wortdex: a new collectible word was just spoken → celebrate with a band-
+    // specific toast (the native notification covers selten/legendär in the
+    // background; this is the in-app counterpart, and the only cue for notable).
+    const find = onWordFind((f) => {
+      const key =
+        f.band === 3
+          ? "learning.findToastLegendary"
+          : f.band === 2
+            ? "learning.findToastRare"
+            : "learning.findToastNotable";
+      toast(t(key, { word: f.display, xp: f.xp, dex: f.dex }), "success");
+    });
     return () => {
       sub.then((un) => un());
       ax.then((un) => un());
       reward.then((un) => un());
+      find.then((un) => un());
     };
   }, [toast, t]);
   return null;

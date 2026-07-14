@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  achievementsList,
   fillerRemovedCounts,
   learningAnalysis,
   learningLeaderboard,
@@ -9,14 +10,24 @@ import {
   learningXp,
   onHistoryChanged,
   onLearningReward,
+  onWordFind,
   wordOfDay,
+  wortdexList,
+  type Achievement,
+  type Band,
   type Leaderboard,
   type LearningAnalysis,
   type LearningSuggestions,
   type LearningXp,
+  type WordFind,
   type WordFreq,
   type WordOfDay,
+  type WortdexData,
 } from "../lib/ipc";
+import { Avatar } from "../components/Avatar";
+import { TierRing } from "../components/TierRing";
+import { levelForXp } from "../lib/level";
+import { useConfig } from "../state/ConfigContext";
 
 /** Range presets steering the analysis window (days). Labels reuse the
  *  shared activity.range* keys so both sections speak the same language. */
@@ -84,6 +95,42 @@ const TrophyIcon = () => (
     <path d="M7 6H4a1 1 0 0 0-1 1c0 2.2 1.8 4 4 4M17 6h3a1 1 0 0 1 1 1c0 2.2-1.8 4-4 4" />
   </svg>
 );
+
+// ── Generic achievement glyphs (stroke-SVG, inherit currentColor so the black
+//    theme greys them for free). One per milestone family. ──
+const StarIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m12 3 2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 17.8 6.4 20.1l1.4-6.3L3 9.5l6.4-.6L12 3Z" />
+  </svg>
+);
+const FlameIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3c.6 3 2.4 4.3 3.6 5.9A6 6 0 0 1 17 12.5a5 5 0 0 1-10 .4c0-1.8.8-3.1 1.7-4 .2 1 .8 1.6 1.4 2C10.8 8.7 12 6.4 12 3Z" />
+  </svg>
+);
+const BookIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 6.4C10.4 5 8 4.4 4 4.4V18c4 0 6.4.6 8 2 1.6-1.4 4-2 8-2V4.4c-4 0-6.4.6-8 2Z" />
+    <path d="M12 6.4V20" />
+  </svg>
+);
+const MedalIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8.4 3 6 8M15.6 3 18 8" />
+    <circle cx="12" cy="15" r="5.2" />
+    <path d="m12 12.4.95 1.9 2.1.3-1.52 1.48.36 2.1L12 17.2l-1.85.98.36-2.1L9 14.6l2.1-.3.9-1.9Z" />
+  </svg>
+);
+
+/** Icon by achievement family — id prefixes map 1:1 to the ACHIEVEMENTS table. */
+function achIcon(id: string) {
+  if (id.startsWith("level_")) return <TrophyIcon />;
+  if (id.startsWith("streak_")) return <FlameIcon />;
+  if (id.startsWith("finds_")) return <BookIcon />;
+  if (id.startsWith("coach_")) return <BookIcon />;
+  if (id.startsWith("wod_")) return <MedalIcon />;
+  return <StarIcon />; // first_notable / first_rare / first_legendary
+}
 
 /** Highest defined level title — levels above it reuse the top title. */
 const MAX_LEVEL_TITLE = 9;
@@ -291,7 +338,11 @@ function UpgradeCoach({
   );
 }
 
-export function Learning() {
+/** The Coach tab: the whole existing learning surface, unchanged apart from the
+ *  leaderboard rows now carrying a level-ring avatar + worn title, the XP feed
+ *  learning the new "word_find" kind, and the gamification header refreshing on
+ *  a word-find too. */
+function CoachTab() {
   const { t, i18n } = useTranslation();
 
   const [wod, setWod] = useState<WordOfDay | null>(null);
@@ -307,8 +358,8 @@ export function Learning() {
   const [stripped, setStripped] = useState<WordFreq[]>([]);
 
   // Word of the day + XP state: range-independent, but BOTH change the moment
-  // a dictation uses a taught word — refresh on the reward event (and on
-  // history-changed, which fires for every dictation anyway).
+  // a dictation uses a taught word OR lands a new collectible word — refresh on
+  // both the reward event and the word-find event (and on history-changed).
   useEffect(() => {
     const refreshGamification = () => {
       wordOfDay().then(setWod).catch(() => {});
@@ -316,8 +367,10 @@ export function Learning() {
     };
     refreshGamification();
     const un = onLearningReward(refreshGamification);
+    const unf = onWordFind(refreshGamification);
     return () => {
       un.then((f) => f());
+      unf.then((f) => f());
     };
   }, []);
 
@@ -395,9 +448,6 @@ export function Learning() {
 
   return (
     <div>
-      <h1 className="section-title">{t("learning.title")}</h1>
-      <p className="section-sub">{t("learning.subtitle")}</p>
-
       {xp && <XpCard xp={xp} />}
       {wod && <WordOfDayCard wod={wod} />}
 
@@ -420,7 +470,13 @@ export function Learning() {
                 </span>
                 <span className="xp-feed-word">{e.word}</span>
                 <span className="xp-feed-kind">
-                  {t(e.kind === "word_of_day" ? "learning.kindWod" : "learning.kindCoach")}
+                  {t(
+                    e.kind === "word_of_day"
+                      ? "learning.kindWod"
+                      : e.kind === "coach_word"
+                        ? "learning.kindCoach"
+                        : "learning.kindFind",
+                  )}
                 </span>
                 <span className="xp-feed-xp">+{e.xp}</span>
                 <span className="xp-feed-date">
@@ -448,9 +504,17 @@ export function Learning() {
             {(lb.week ?? []).slice(0, 5).map((row) => (
               <div key={row.rank} className={`xp-feed-row${row.me ? " me" : ""}`}>
                 <span className="lb-rank">{row.rank}</span>
+                {/* Level ring only materialises when the server sends xp_total
+                    and it clears level 3 — old servers → bare avatar. */}
+                <TierRing level={levelForXp(row.xp_total ?? 0)} size={22}>
+                  <Avatar name={row.name} size={22} />
+                </TierRing>
                 <span className="xp-feed-word">
                   {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
                 </span>
+                {row.title && (
+                  <span className="lb-title">{t(`learning.titles.${row.title}`)}</span>
+                )}
                 <span className="xp-feed-kind">{t("learning.lbWords", { count: row.words })}</span>
                 <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
               </div>
@@ -635,6 +699,279 @@ export function Learning() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Band → CSS accent + i18n label. 1 = notable (cyan), 2 = rare (violet),
+ *  3 = legendary (amber); the black theme greys them via activity.css. */
+const BAND_LABEL: Record<Band, string> = {
+  1: "learning.bandNotable",
+  2: "learning.bandRare",
+  3: "learning.bandLegendary",
+};
+
+/** One collectible word, Pokédex-card style. */
+function DexCard({ find }: { find: WordFind }) {
+  const { t, i18n } = useTranslation();
+  const date = new Date(find.first_ts * 1000).toLocaleDateString(i18n.language, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return (
+    <div className={`dex-card dex-card--band${find.band}`}>
+      <div className="dex-card-top">
+        <span className="dex-word">{find.display}</span>
+        {find.count > 1 && (
+          <span className="dex-times">{t("learning.dexTimes", { count: find.count })}</span>
+        )}
+      </div>
+      <div className="dex-card-meta">
+        <span className="dex-band-chip">{t(BAND_LABEL[find.band])}</span>
+        <span className="dex-nr">{t("learning.dexNr", { dex: find.dex })}</span>
+      </div>
+      <div className="dex-date">{t("learning.dexFirstFound", { date })}</div>
+      {find.context.trim() && (
+        <p className="dex-quote">{t("learning.dexQuote", { context: find.context.trim() })}</p>
+      )}
+    </div>
+  );
+}
+
+/** The Wortdex tab — the collection of rare words spoken in real dictations. */
+function WortdexTab({ data }: { data: WortdexData | null }) {
+  const { t } = useTranslation();
+  const [filter, setFilter] = useState<"all" | Band>("all");
+
+  if (data === null) {
+    return (
+      <div className="empty" aria-busy="true">
+        {t("learning.dexLoading")}
+      </div>
+    );
+  }
+
+  const { finds, counts } = data;
+  const total = counts.notable + counts.rare + counts.legendary;
+
+  if (total === 0) {
+    return (
+      <div className="dex-empty">
+        <div className="dex-empty-title">{t("learning.dexEmpty")}</div>
+        <p className="dex-empty-hint">{t("learning.dexEmptyHint")}</p>
+      </div>
+    );
+  }
+
+  const shown = filter === "all" ? finds : finds.filter((f) => f.band === filter);
+  const filters: { key: "all" | Band; label: string }[] = [
+    { key: "all", label: t("learning.bandAll") },
+    { key: 1, label: t("learning.bandNotable") },
+    { key: 2, label: t("learning.bandRare") },
+    { key: 3, label: t("learning.bandLegendary") },
+  ];
+
+  return (
+    <div>
+      <div className="chart-head" style={{ marginBottom: 14 }}>
+        <div>
+          <div className="chart-title">{t("learning.dexTitle")}</div>
+          <div className="chart-sub">{t("learning.dexSub")}</div>
+        </div>
+      </div>
+
+      {/* Per-band totals — display stat chips. */}
+      <div className="dex-stats">
+        {([1, 2, 3] as Band[]).map((b) => (
+          <div key={b} className={`dex-stat dex-stat--band${b}`}>
+            <span className="dex-dot" aria-hidden="true" />
+            <span className="dex-stat-num">
+              {b === 1 ? counts.notable : b === 2 ? counts.rare : counts.legendary}
+            </span>
+            <span className="dex-stat-label">{t(BAND_LABEL[b])}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter chips. */}
+      <div className="dex-filters">
+        {filters.map((f) => (
+          <button
+            key={String(f.key)}
+            className={`dex-filter${filter === f.key ? " active" : ""}${
+              typeof f.key === "number" ? ` dex-filter--band${f.key}` : ""
+            }`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {shown.length === 0 ? (
+        <div className="empty">{t("learning.dexFilterEmpty")}</div>
+      ) : (
+        <div className="dex-grid">
+          {shown.map((f) => (
+            <DexCard key={`${f.word}-${f.dex}`} find={f} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The Achievements tab — milestone cards, each granting an equippable title. */
+function AchievementsTab() {
+  const { t, i18n } = useTranslation();
+  const { config, patch } = useConfig();
+  const [items, setItems] = useState<Achievement[] | null>(null);
+
+  useEffect(() => {
+    const load = () => achievementsList().then(setItems).catch(() => {});
+    load();
+    const un1 = onWordFind(load);
+    const un2 = onLearningReward(load);
+    const un3 = onHistoryChanged(load);
+    return () => {
+      un1.then((f) => f());
+      un2.then((f) => f());
+      un3.then((f) => f());
+    };
+  }, []);
+
+  const worn = config?.learning_title ?? "";
+
+  if (items === null) {
+    return (
+      <div className="empty" aria-busy="true">
+        {t("learning.achLoading")}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="chart-head" style={{ marginBottom: 14 }}>
+        <div>
+          <div className="chart-title">{t("learning.achTitle")}</div>
+          <div className="chart-sub">{t("learning.achSub")}</div>
+        </div>
+      </div>
+
+      <div className="ach-grid">
+        {items.map((a) => {
+          const pct = a.target > 0 ? Math.min(100, Math.round((a.progress / a.target) * 100)) : 0;
+          const isWorn = worn === a.id;
+          const earnedDate =
+            a.earned_ts != null
+              ? new Date(a.earned_ts * 1000).toLocaleDateString(i18n.language, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })
+              : null;
+          return (
+            <div key={a.id} className={`ach-card ${a.earned ? "is-earned" : "is-locked"}`}>
+              <div className="ach-icon">{achIcon(a.id)}</div>
+              <div className="ach-body">
+                <div className="ach-name">{t(`learning.ach.${a.id}.name`)}</div>
+                <div className="ach-desc">{t(`learning.ach.${a.id}.desc`)}</div>
+
+                {a.earned ? (
+                  <div className="ach-earned">
+                    <span className="ach-title-name">{t(`learning.titles.${a.id}`)}</span>
+                    {earnedDate && (
+                      <span className="ach-earned-date">
+                        {t("learning.achEarnedOn", { date: earnedDate })}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={`ach-title-btn${isWorn ? " worn" : ""}`}
+                      onClick={() => patch({ learning_title: isWorn ? "" : a.id })}
+                    >
+                      {isWorn ? t("learning.achRemoveTitle") : t("learning.achWearTitle")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="ach-progress">
+                    <div className="xp-bar">
+                      <div className="xp-bar-fill" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="ach-progress-text">
+                      {a.progress.toLocaleString(i18n.language)} /{" "}
+                      {a.target.toLocaleString(i18n.language)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function Learning() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"coach" | "dex" | "achievements">("coach");
+  const [wortdex, setWortdex] = useState<WortdexData | null>(null);
+
+  // The collection is loaded once at section level (so the Wortdex tab count
+  // badge is live before the tab is opened) and refreshed whenever a dictation
+  // lands a new word.
+  useEffect(() => {
+    const load = () => wortdexList().then(setWortdex).catch(() => {});
+    load();
+    const un1 = onWordFind(load);
+    const un2 = onHistoryChanged(load);
+    return () => {
+      un1.then((f) => f());
+      un2.then((f) => f());
+    };
+  }, []);
+
+  const dexTotal = wortdex
+    ? wortdex.counts.notable + wortdex.counts.rare + wortdex.counts.legendary
+    : 0;
+
+  return (
+    <div>
+      <h1 className="section-title">{t("learning.title")}</h1>
+      <p className="section-sub">{t("learning.subtitle")}</p>
+
+      <div className="sub-tabs sub-tabs--primary" style={{ marginBottom: 18 }}>
+        <button
+          className={`sub-tab ${tab === "coach" ? "active" : ""}`}
+          onClick={() => setTab("coach")}
+        >
+          {t("learning.tabCoach")}
+        </button>
+        <button
+          className={`sub-tab ${tab === "dex" ? "active" : ""}`}
+          onClick={() => setTab("dex")}
+        >
+          {t("learning.tabDex")}
+          {dexTotal > 0 && (
+            <span className="tier-badge" style={{ marginLeft: 8 }}>
+              {dexTotal}
+            </span>
+          )}
+        </button>
+        <button
+          className={`sub-tab ${tab === "achievements" ? "active" : ""}`}
+          onClick={() => setTab("achievements")}
+        >
+          {t("learning.tabAchievements")}
+        </button>
+      </div>
+
+      {tab === "coach" && <CoachTab />}
+      {tab === "dex" && <WortdexTab data={wortdex} />}
+      {tab === "achievements" && <AchievementsTab />}
     </div>
   );
 }

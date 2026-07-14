@@ -941,7 +941,103 @@
     "ttrMid": "solid variety",
     "ttrHigh": "very varied",
     "fillerNone": "No filler words found",
-    "overusedNone": "No noticeably overused words"
+    "overusedNone": "No noticeably overused words",
+    "tabCoach": "Coach",
+    "tabDex": "Wortdex",
+    "tabAchievements": "Achievements",
+    "dexTitle": "Wortdex",
+    "dexSub": "Rare words you have actually spoken in real dictations — collected like a Pokédex.",
+    "dexLoading": "Loading Wortdex …",
+    "dexEmpty": "No finds yet",
+    "dexEmptyHint": "Speak rare, unusual words in your dictations — every new one lands here in your Wortdex, with its rarity tier, number and first-sighting sentence.",
+    "dexFilterEmpty": "No finds in this category.",
+    "dexNr": "No. {{dex}}",
+    "dexTimes": "{{count}}×",
+    "dexFirstFound": "First found {{date}}",
+    "dexQuote": "“{{context}}”",
+    "bandAll": "All",
+    "bandNotable": "Notable",
+    "bandRare": "Rare",
+    "bandLegendary": "Legendary",
+    "kindFind": "Word find",
+    "findToastNotable": "Notable word found: “{{word}}” · +{{xp}} XP",
+    "findToastRare": "Rare word discovered: “{{word}}” · No. {{dex}} · +{{xp}} XP",
+    "findToastLegendary": "Legendary word! “{{word}}” · No. {{dex}} · +{{xp}} XP",
+    "achTitle": "Achievements",
+    "achSub": "Milestones you unlock as you collect and practise — each grants a wearable title.",
+    "achLoading": "Loading achievements …",
+    "achEarnedOn": "Unlocked {{date}}",
+    "achWearTitle": "Wear title",
+    "achRemoveTitle": "Remove title",
+    "ach": {
+      "first_notable": {
+        "name": "Ears Open",
+        "desc": "Speak your first notable word."
+      },
+      "first_rare": {
+        "name": "Rarity Found",
+        "desc": "Speak your first rare word."
+      },
+      "first_legendary": {
+        "name": "Legend Spoken",
+        "desc": "Speak your first legendary word."
+      },
+      "finds_10": {
+        "name": "Small Collection",
+        "desc": "Collect 10 rare words."
+      },
+      "finds_50": {
+        "name": "Growing Lexicon",
+        "desc": "Collect 50 rare words."
+      },
+      "finds_200": {
+        "name": "Full Dictionary",
+        "desc": "Collect 200 rare words."
+      },
+      "wod_7": {
+        "name": "Word-of-Day Week",
+        "desc": "Use the word of the day on 7 days."
+      },
+      "wod_30": {
+        "name": "Word-of-Day Month",
+        "desc": "Use the word of the day on 30 days."
+      },
+      "coach_25": {
+        "name": "Diligent Student",
+        "desc": "Adopt 25 coach suggestions."
+      },
+      "streak_7": {
+        "name": "Week Straight",
+        "desc": "Dictate 7 days in a row."
+      },
+      "streak_30": {
+        "name": "Month Straight",
+        "desc": "Dictate 30 days in a row."
+      },
+      "level_5": {
+        "name": "Reached Level 5",
+        "desc": "Climb to level 5."
+      },
+      "level_10": {
+        "name": "Reached Level 10",
+        "desc": "Climb to level 10."
+      }
+    },
+    "titles": {
+      "first_notable": "The Attuned",
+      "first_rare": "Rarity Hunter",
+      "first_legendary": "Legend Whisperer",
+      "finds_10": "Syllable Collector",
+      "finds_50": "Lexicon Apprentice",
+      "finds_200": "Walking Dictionary",
+      "wod_7": "Daily-Word Ritualist",
+      "wod_30": "Lexicon Lover",
+      "coach_25": "Star Pupil",
+      "streak_7": "Serial Speaker",
+      "streak_30": "Iron Tongue",
+      "level_5": "The Ascendant",
+      "level_10": "Eloquence Adept"
+    }
   },
   "vp": {
     "stateStored": "Voiceprint stored",

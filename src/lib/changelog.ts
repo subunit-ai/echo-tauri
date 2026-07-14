@@ -31,6 +31,41 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.134",
+    date: "2026-07-14",
+    title: {
+      de: "Der Wortdex ist da: Wörter sammeln, Erfolge, Titel und Level-Ringe",
+      en: "Meet the Wortdex: collect words, achievements, titles and level rings",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Wortdex: Sprich seltene Wörter in echten Diktaten und sammle sie wie in einem Pokédex — mit drei Raritätsstufen (Bemerkenswert, Selten, Legendär), Fund-Nummer und dem Satz deines Erstfunds. Neuer Tab im Wortschatz-Bereich.",
+        en: "Wortdex: speak rare words in real dictations and collect them like a Pokédex — three rarity tiers (Notable, Rare, Legendary), a dex number and the sentence of your first find. New tab in the Vocabulary section.",
+      },
+      {
+        kind: "feature",
+        de: "Fund-Momente: Ein neu entdecktes Wort feiert dich sofort — In-App-Hinweis, bei seltenen und legendären Funden zusätzlich eine Systembenachrichtigung, plus XP (die ersten drei Funde pro Tag).",
+        en: "Find moments: a newly discovered word celebrates you instantly — in-app toast, plus a system notification for rare and legendary finds, plus XP (first three finds per day).",
+      },
+      {
+        kind: "feature",
+        de: "Erfolge & Titel: 13 freischaltbare Abzeichen mit tragbaren Titeln wie Serientäter, Raritätenjäger oder Legendenflüsterer — der getragene Titel erscheint an deinem Profil und in der Bestenliste.",
+        en: "Achievements & titles: 13 unlockable badges with equippable titles like Serial Speaker, Rarity Hunter or Legend Whisperer — your equipped title shows on your profile and on the leaderboard.",
+      },
+      {
+        kind: "feature",
+        de: "Level-Ringe: Dein Profilbild bekommt ab Level 3 einen Rahmen — Bronze, Silber, Gold, Platin und ab Level 16 der animierte Eloquenz-Ring. Auch in der Bestenliste sichtbar.",
+        en: "Level rings: your avatar earns a frame from level 3 — bronze, silver, gold, platinum and, from level 16, the animated Eloquence ring. Visible on the leaderboard too.",
+      },
+      {
+        kind: "improvement",
+        de: "Die Erkennung bleibt fair: Vorgelesene Wortlisten, zu kurze Schnipsel und dein eigenes Fachvokabular zählen bewusst nicht als Funde.",
+        en: "Detection stays fair: read-out word lists, very short snippets and your own custom vocabulary deliberately do not count as finds.",
+      },
+    ],
+  },
+  {
     version: "0.5.133",
     date: "2026-07-14",
     title: {

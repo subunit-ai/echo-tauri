@@ -943,7 +943,103 @@
     "ttrMid": "solide Abwechslung",
     "ttrHigh": "sehr abwechslungsreich",
     "fillerNone": "Keine Füllwörter gefunden",
-    "overusedNone": "Keine auffällig überstrapazierten Wörter"
+    "overusedNone": "Keine auffällig überstrapazierten Wörter",
+    "tabCoach": "Coach",
+    "tabDex": "Wortdex",
+    "tabAchievements": "Erfolge",
+    "dexTitle": "Wortdex",
+    "dexSub": "Seltene Wörter, die du in echten Diktaten gesprochen hast — gesammelt wie in einem Pokédex.",
+    "dexLoading": "Wortdex wird geladen …",
+    "dexEmpty": "Noch keine Funde",
+    "dexEmptyHint": "Sprich seltene, ausgefallene Wörter in deinen Diktaten — jedes neue landet hier in deinem Wortdex, mit Seltenheitsstufe, Nummer und Erstfund-Satz.",
+    "dexFilterEmpty": "Keine Funde in dieser Kategorie.",
+    "dexNr": "Nr. {{dex}}",
+    "dexTimes": "{{count}}×",
+    "dexFirstFound": "Erstfund {{date}}",
+    "dexQuote": "„{{context}}“",
+    "bandAll": "Alle",
+    "bandNotable": "Bemerkenswert",
+    "bandRare": "Selten",
+    "bandLegendary": "Legendär",
+    "kindFind": "Wortfund",
+    "findToastNotable": "Bemerkenswertes Wort gefunden: „{{word}}“ · +{{xp}} XP",
+    "findToastRare": "Seltenes Wort entdeckt: „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
+    "findToastLegendary": "Legendäres Wort! „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
+    "achTitle": "Erfolge",
+    "achSub": "Meilensteine, die du beim Sammeln und Üben freischaltest — jeder verleiht einen tragbaren Titel.",
+    "achLoading": "Erfolge werden geladen …",
+    "achEarnedOn": "Freigeschaltet {{date}}",
+    "achWearTitle": "Titel tragen",
+    "achRemoveTitle": "Titel ablegen",
+    "ach": {
+      "first_notable": {
+        "name": "Aufgehorcht",
+        "desc": "Sprich dein erstes bemerkenswertes Wort."
+      },
+      "first_rare": {
+        "name": "Rarität entdeckt",
+        "desc": "Sprich dein erstes seltenes Wort."
+      },
+      "first_legendary": {
+        "name": "Legende gesprochen",
+        "desc": "Sprich dein erstes legendäres Wort."
+      },
+      "finds_10": {
+        "name": "Kleine Sammlung",
+        "desc": "Sammle 10 seltene Wörter."
+      },
+      "finds_50": {
+        "name": "Wachsendes Lexikon",
+        "desc": "Sammle 50 seltene Wörter."
+      },
+      "finds_200": {
+        "name": "Volles Wörterbuch",
+        "desc": "Sammle 200 seltene Wörter."
+      },
+      "wod_7": {
+        "name": "Tagwort-Woche",
+        "desc": "Nutze das Wort des Tages an 7 Tagen."
+      },
+      "wod_30": {
+        "name": "Tagwort-Monat",
+        "desc": "Nutze das Wort des Tages an 30 Tagen."
+      },
+      "coach_25": {
+        "name": "Fleißig geübt",
+        "desc": "Übernimm 25 Coach-Vorschläge."
+      },
+      "streak_7": {
+        "name": "Woche am Stück",
+        "desc": "Diktiere an 7 Tagen in Folge."
+      },
+      "streak_30": {
+        "name": "Monat am Stück",
+        "desc": "Diktiere an 30 Tagen in Folge."
+      },
+      "level_5": {
+        "name": "Level 5 erreicht",
+        "desc": "Steige auf Level 5."
+      },
+      "level_10": {
+        "name": "Level 10 erreicht",
+        "desc": "Steige auf Level 10."
+      }
+    },
+    "titles": {
+      "first_notable": "Aufhorcher",
+      "first_rare": "Raritätenjäger",
+      "first_legendary": "Legendenflüsterer",
+      "finds_10": "Silbensammler",
+      "finds_50": "Lexikon-Lehrling",
+      "finds_200": "Wandelndes Wörterbuch",
+      "wod_7": "Tagwort-Ritualist",
+      "wod_30": "Lexik-Liebhaber",
+      "coach_25": "Musterschüler",
+      "streak_7": "Serientäter",
+      "streak_30": "Eiserne Zunge",
+      "level_5": "Aufsteiger",
+      "level_10": "Eloquenz-Adept"
+    }
   },
   "vp": {
     "stateStored": "Stimmabdruck hinterlegt",

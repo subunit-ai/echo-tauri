@@ -1338,3 +1338,462 @@
 :root[data-theme="light"] .chart-tooltip {
   box-shadow: var(--shadow-sm);
 }
+
+/* ================================================================
+   Wortdex — the "Pokédex for words". Tier rings, collectible cards,
+   achievement grid. Band accents: 1 = notable (cyan), 2 = rare
+   (violet), 3 = legendary (amber); each element carries the accent in
+   its own --band custom property so one rule set styles all three, and
+   the black (zero-hue) theme only has to remap the property.
+   ================================================================ */
+
+/* ---- Tier ring (level-gated halo around an avatar) ----
+   Classic masked-gradient ring: a background over a padding-box that a
+   composite mask cuts down to just the padding band, so the child shows
+   through the centre. --ring holds the band's colour / gradient. */
+.tier-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+/* A 3px ring sitting ~2px outside the avatar (the transparent gap between the
+   two makes it read as a frame, not a border stuck to the picture). */
+.tier-ring::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  padding: 3px;
+  background: var(--ring, transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.tier-ring--bronze {
+  --ring: linear-gradient(135deg, #c08b60, #7d5a3c);
+}
+.tier-ring--silber {
+  --ring: linear-gradient(135deg, #dfe4ea, #99a1ab);
+}
+.tier-ring--gold {
+  --ring: linear-gradient(135deg, #f4d67f, #c8983a);
+}
+.tier-ring--platin {
+  --ring: linear-gradient(135deg, #e2effb, #9ec4e8);
+}
+/* Eloquenz: the animated showpiece — a cyan→violet→amber conic sweep that
+   slowly rotates. prefers-reduced-motion freezes it (still a full gradient). */
+.tier-ring--eloquenz {
+  --ring: conic-gradient(
+    from 0deg,
+    var(--cyan),
+    var(--violet),
+    var(--amber),
+    var(--cyan)
+  );
+}
+.tier-ring--eloquenz::before {
+  animation: tier-spin 5s linear infinite;
+}
+@keyframes tier-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tier-ring--eloquenz::before {
+    animation: none;
+  }
+}
+/* Zero-hue black theme: every ring collapses to a greyscale metal ramp so no
+   colour leaks into the chrome (tokens.css :230ff). The rarity order stays
+   readable through brightness — platin/eloquenz sit brightest. */
+:root[data-theme="black"] .tier-ring--bronze {
+  --ring: linear-gradient(135deg, #6d6d70, #46464a);
+}
+:root[data-theme="black"] .tier-ring--silber {
+  --ring: linear-gradient(135deg, #c6c6c9, #86868a);
+}
+:root[data-theme="black"] .tier-ring--gold {
+  --ring: linear-gradient(135deg, #dededf, #9a9a9e);
+}
+:root[data-theme="black"] .tier-ring--platin {
+  --ring: linear-gradient(135deg, #ededef, #b0b0b4);
+}
+:root[data-theme="black"] .tier-ring--eloquenz {
+  --ring: conic-gradient(from 0deg, #f2f2f4, #9a9a9d, #cfcfd2, #f2f2f4);
+}
+
+/* ---- Primary sub-tabs (Coach / Wortdex / Erfolge) ----
+   Heavier than the inner range switcher so two tab rows never read alike. */
+.sub-tabs--primary .sub-tab {
+  padding: 9px 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+/* ---- Wortdex band accents (drive every band-coloured element) ---- */
+.dex-card--band1,
+.dex-stat--band1,
+.dex-filter--band1 {
+  --band: var(--cyan);
+}
+.dex-card--band2,
+.dex-stat--band2,
+.dex-filter--band2 {
+  --band: var(--violet);
+}
+.dex-card--band3,
+.dex-stat--band3,
+.dex-filter--band3 {
+  --band: var(--amber);
+}
+/* Zero-hue override: amber is NOT greyed by tokens.css, so all three bands are
+   remapped to a brightness ramp (legendary = brightest). */
+:root[data-theme="black"] .dex-card--band1,
+:root[data-theme="black"] .dex-stat--band1,
+:root[data-theme="black"] .dex-filter--band1 {
+  --band: #7f7f82;
+}
+:root[data-theme="black"] .dex-card--band2,
+:root[data-theme="black"] .dex-stat--band2,
+:root[data-theme="black"] .dex-filter--band2 {
+  --band: #b2b2b5;
+}
+:root[data-theme="black"] .dex-card--band3,
+:root[data-theme="black"] .dex-stat--band3,
+:root[data-theme="black"] .dex-filter--band3 {
+  --band: #f0f0f2;
+}
+
+/* ---- Wortdex band stat chips ---- */
+.dex-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.dex-stat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  padding: 9px 14px;
+}
+.dex-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--band);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--band) 60%, transparent);
+}
+.dex-stat-num {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.dex-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+
+/* ---- Wortdex filter chips ---- */
+.dex-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.dex-filter {
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  color: var(--muted);
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    background 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.dex-filter:active {
+  transform: scale(0.97);
+}
+.dex-filter.active {
+  color: var(--ink);
+  border-color: var(--line2);
+  background: var(--fill-ghost-hover);
+}
+/* Band filters take on their band colour when active. */
+.dex-filter--band1.active,
+.dex-filter--band2.active,
+.dex-filter--band3.active {
+  color: var(--band);
+  border-color: color-mix(in srgb, var(--band) 48%, transparent);
+  background: color-mix(in srgb, var(--band) 13%, transparent);
+}
+
+/* ---- Wortdex collectible card grid ---- */
+.dex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.dex-card {
+  --band: var(--cyan);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid color-mix(in srgb, var(--band) 30%, var(--glass-edge));
+  border-radius: var(--r-card);
+  padding: 15px 16px 16px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim),
+    0 0 24px -15px var(--band);
+  overflow: hidden;
+}
+/* Coloured top edge — the "trading card" tell. */
+.dex-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--band),
+    color-mix(in srgb, var(--band) 25%, transparent)
+  );
+}
+.dex-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.dex-word {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.dex-times {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--band);
+  background: color-mix(in srgb, var(--band) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--band) 34%, transparent);
+  border-radius: var(--r-chip);
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.dex-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dex-band-chip {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--band);
+  background: color-mix(in srgb, var(--band) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--band) 45%, transparent);
+  border-radius: var(--r-chip);
+  padding: 2px 8px;
+}
+.dex-nr {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+.dex-date {
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+.dex-quote {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--prose2);
+  border-left: 2px solid color-mix(in srgb, var(--band) 42%, transparent);
+  padding-left: 10px;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Wortdex empty state (feature explainer) ---- */
+.dex-empty {
+  text-align: center;
+  padding: 52px 24px;
+}
+.dex-empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.dex-empty-hint {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+/* ---- Achievements grid ---- */
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.ach-card {
+  display: flex;
+  gap: 13px;
+  background: var(--glass);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-card);
+  padding: 15px 16px;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+}
+/* Locked = desaturated + dimmed; earned keeps full colour + accent. */
+.ach-card.is-locked {
+  opacity: 0.66;
+  filter: grayscale(0.6);
+}
+.ach-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--ink2);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+}
+.ach-card.is-earned .ach-icon {
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 13%, transparent);
+  border-color: color-mix(in srgb, var(--cyan) 38%, transparent);
+}
+.ach-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ach-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.ach-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink2);
+}
+.ach-progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 4px;
+}
+.ach-progress .xp-bar {
+  flex: 1;
+}
+.ach-progress-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ach-earned {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.ach-title-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 30%, transparent);
+  border-radius: var(--r-chip);
+  padding: 2px 8px;
+}
+.ach-earned-date {
+  font-size: 11px;
+  color: var(--ink3);
+}
+.ach-title-btn {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-bright);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 4px 12px;
+  transition: transform 0.12s var(--ease-out), background 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
+}
+.ach-title-btn:active {
+  transform: scale(0.96);
+}
+.ach-title-btn.worn {
+  color: var(--ink2);
+  background: var(--glass2);
+  border-color: var(--line2);
+}
+
+/* ---- Leaderboard row title (equipped epithet behind the name) ---- */
+.lb-title {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
+/* ---- Sidebar account: worn title beside the plan pill ---- */
+.side-account .sa-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+.sa-title {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
