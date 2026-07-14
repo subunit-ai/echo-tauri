@@ -314,6 +314,10 @@ pub struct Config {
     /// local-first; container #[serde(default)] seeds old configs to "".
     pub display_name: String,
     pub nickname: String,
+    /// Equipped Wortdex title (achievement id, e.g. "streak_7") — shown under
+    /// the name in the sidebar account card and pushed to the leaderboard.
+    /// Empty = no title equipped. The catalog lives in commands::ACHIEVEMENTS.
+    pub learning_title: String,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
     /// Auto-detect a running Teams/Zoom/Meet meeting and prompt to record it.
@@ -568,6 +572,7 @@ impl Default for Config {
             account_email: String::new(),
             display_name: String::new(),
             nickname: String::new(),
+            learning_title: String::new(),
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
             meeting_autodetect: true,

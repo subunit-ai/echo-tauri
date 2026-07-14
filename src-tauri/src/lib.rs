@@ -29,6 +29,7 @@ mod meeting_detect;
 mod models;
 mod prompt_console;
 mod presets; // per-account orb profiles (local-first)
+mod rarity; // Wortdex rarity tables (embedded wordfreq bands, offline)
 mod presets_sync; // /v1/presets cloud sync
 mod notes; // voice notes + folders (local-first, cross-device with Echo iOS)
 mod notes_sync; // /v1/notes cloud sync (byte-compatible with the iPhone)
@@ -148,6 +149,8 @@ pub fn run() {
             commands::word_of_day,
             commands::learning_xp,
             commands::learning_leaderboard,
+            commands::wortdex_list,
+            commands::achievements_list,
             commands::account_stats,
             commands::delete_history_entry,
             commands::clear_history,

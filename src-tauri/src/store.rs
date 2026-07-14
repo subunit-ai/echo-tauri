@@ -119,6 +119,19 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             source   TEXT    NOT NULL DEFAULT '',
             first_ts INTEGER NOT NULL
          );
+         CREATE TABLE IF NOT EXISTS word_finds (
+            account  TEXT    NOT NULL,
+            word     TEXT    NOT NULL,
+            display  TEXT    NOT NULL DEFAULT '',
+            band     INTEGER NOT NULL,
+            dex      INTEGER NOT NULL DEFAULT 0,
+            count    INTEGER NOT NULL DEFAULT 1,
+            first_ts INTEGER NOT NULL,
+            last_ts  INTEGER NOT NULL,
+            context  TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (account, word)
+         );
+         CREATE INDEX IF NOT EXISTS idx_wfinds_account_band ON word_finds(account, band, first_ts DESC);
          CREATE TABLE IF NOT EXISTS notes (
             id         TEXT    NOT NULL,
             account    TEXT    NOT NULL,
@@ -805,6 +818,155 @@ pub fn learning_distinct_words(account: &str) -> i64 {
         |r| r.get(0),
     )
     .unwrap_or(0)
+}
+
+// ---- Wortdex (word finds) ----
+// Every collectible word the user ever actually spoke, one row per
+// (account, word). First sighting inserts (the "Fund"), repeats bump
+// count/last_ts — Wave-2 mastery will read exactly that.
+
+/// Record a sighting of a collectible word. Returns true only when this is a
+/// NEW find (row inserted); repeats update count/last_ts and return false.
+pub fn word_find_record(
+    account: &str,
+    word: &str,
+    display: &str,
+    band: i64,
+    dex: i64,
+    context: &str,
+    now: i64,
+) -> bool {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return false };
+    let inserted = conn.execute(
+        "INSERT OR IGNORE INTO word_finds
+            (account, word, display, band, dex, count, first_ts, last_ts, context)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?7)",
+        params![account, word, display, band, dex, now, context],
+    );
+    match inserted {
+        Ok(n) if n > 0 => true,
+        Ok(_) => {
+            let _ = conn.execute(
+                "UPDATE word_finds SET count = count + 1, last_ts = ?3
+                 WHERE account = ?1 AND word = ?2",
+                params![account, word, now],
+            );
+            false
+        }
+        Err(e) => {
+            log::warn!("store: word find record failed: {e}");
+            false
+        }
+    }
+}
+
+/// The whole collection, newest find first — the Wortdex grid. Band filtering
+/// happens client-side (the full list doubles as the export/search source).
+pub fn word_finds_list(account: &str, limit: u32) -> Vec<Value> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT word, display, band, dex, count, first_ts, last_ts, context
+         FROM word_finds WHERE account = ?1
+         ORDER BY first_ts DESC, word ASC LIMIT ?2",
+    ) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account, limit], |r| {
+        Ok(json!({
+            "word": r.get::<_, String>(0)?,
+            "display": r.get::<_, String>(1)?,
+            "band": r.get::<_, i64>(2)?,
+            "dex": r.get::<_, i64>(3)?,
+            "count": r.get::<_, i64>(4)?,
+            "first_ts": r.get::<_, i64>(5)?,
+            "last_ts": r.get::<_, i64>(6)?,
+            "context": r.get::<_, String>(7)?,
+        }))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Per-band find counts: (bemerkenswert, selten, legendaer).
+pub fn word_find_band_counts(account: &str) -> (i64, i64, i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return (0, 0, 0) };
+    let mut out = (0i64, 0i64, 0i64);
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT band, COUNT(*) FROM word_finds WHERE account = ?1 GROUP BY band",
+    ) else {
+        return out;
+    };
+    if let Ok(rows) = stmt.query_map(params![account], |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+    }) {
+        for row in rows.flatten() {
+            match row.0 {
+                1 => out.0 = row.1,
+                2 => out.1 = row.1,
+                3 => out.2 = row.1,
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// First-ever find timestamp for a band (achievement "erster … Fund").
+pub fn word_find_first_ts(account: &str, band: i64) -> Option<i64> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT MIN(first_ts) FROM word_finds WHERE account = ?1 AND band = ?2",
+        params![account, band],
+        |r| r.get::<_, Option<i64>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
+/// Timestamp at which the collection reached `n` finds (achievement "N Funde"),
+/// i.e. the first_ts of the n-th find in chronological order.
+pub fn word_finds_nth_ts(account: &str, n: u32) -> Option<i64> {
+    if n == 0 {
+        return None;
+    }
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT first_ts FROM word_finds WHERE account = ?1
+         ORDER BY first_ts ASC LIMIT 1 OFFSET ?2",
+        params![account, n - 1],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+/// Count of XP-ledger events of `kind` for the account — today only when `day`
+/// is given (the daily find-XP cap), lifetime otherwise (achievements).
+pub fn learning_kind_count(account: &str, kind: &str, day: Option<&str>) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    match day {
+        Some(d) => conn
+            .query_row(
+                "SELECT COUNT(*) FROM learning_events WHERE account = ?1 AND kind = ?2 AND day = ?3",
+                params![account, kind, d],
+                |r| r.get(0),
+            )
+            .unwrap_or(0),
+        None => conn
+            .query_row(
+                "SELECT COUNT(*) FROM learning_events WHERE account = ?1 AND kind = ?2",
+                params![account, kind],
+                |r| r.get(0),
+            )
+            .unwrap_or(0),
+    }
 }
 
 /// Earliest day with a daily_stats bucket for `account` — everything before it
@@ -1744,6 +1906,36 @@ mod tests {
         assert_eq!(get("hmm"), Some(1));
         // Descending by count, alphabetical on ties.
         assert_eq!(totals[0].0, "ähm");
+
+        // Wortdex finds: first sighting inserts (true), repeat bumps count
+        // (false), per-band counts + chronology helpers, account isolation.
+        assert!(word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "Die Diskrepanz war groß.", 1000));
+        assert!(!word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "ignored", 1500));
+        assert!(word_find_record("em:w", "eloquenz", "Eloquenz", 2, 7671, "", 2000));
+        assert!(word_find_record("em:w", "apodiktisch", "apodiktisch", 3, 26766, "", 3000));
+        assert!(word_find_record("em:x", "eloquenz", "Eloquenz", 2, 7671, "", 4000)); // other account
+        let finds = word_finds_list("em:w", 100);
+        assert_eq!(finds.len(), 3);
+        assert_eq!(finds[0]["word"], "apodiktisch"); // newest first
+        let disk = finds.iter().find(|f| f["word"] == "diskrepanz").unwrap();
+        assert_eq!(disk["count"], 2); // repeat bumped
+        assert_eq!(disk["last_ts"], 1500);
+        assert_eq!(disk["first_ts"], 1000); // first sighting wins
+        assert_eq!(disk["context"], "Die Diskrepanz war groß."); // original context kept
+        assert_eq!(word_find_band_counts("em:w"), (1, 1, 1));
+        assert_eq!(word_find_band_counts("em:x"), (0, 1, 0)); // isolation
+        assert_eq!(word_find_first_ts("em:w", 3), Some(3000));
+        assert_eq!(word_find_first_ts("em:x", 3), None);
+        assert_eq!(word_finds_nth_ts("em:w", 2), Some(2000)); // 2nd find chronologically
+        assert_eq!(word_finds_nth_ts("em:w", 9), None); // not reached yet
+        // Ledger kind counting: lifetime + per-day (the daily XP cap reader).
+        assert!(learning_award("em:w", "2026-07-14", "word_find", "diskrepanz", 10, 1000));
+        assert!(learning_award("em:w", "2026-07-14", "word_find", "eloquenz", 25, 2000));
+        assert!(!learning_award("em:w", "2026-07-14", "word_find", "eloquenz", 25, 2001)); // idempotent
+        assert!(learning_award("em:w", "2026-07-15", "word_find", "ephemer", 100, 9000));
+        assert_eq!(learning_kind_count("em:w", "word_find", Some("2026-07-14")), 2);
+        assert_eq!(learning_kind_count("em:w", "word_find", None), 3);
+        assert_eq!(learning_kind_count("em:x", "word_find", None), 0);
 
         let _ = std::fs::remove_file(&path);
     }
