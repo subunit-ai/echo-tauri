@@ -24,10 +24,24 @@ interface Props {
   size?: number;
   /** Bump this number to replay the materialize (appear) animation. */
   replayToken?: number;
+  /** Demo sentence for the ★ "Worte" pill visual — revealed word by word
+   *  while the demo "speaks", mimicking the live stable partial. */
+  demoText?: string;
   className?: string;
 }
 
-export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size = 220, replayToken = 0, className }: Props) {
+const DEMO_TEXT_FALLBACK = "Echo tippt was du sprichst — schnell präzise überall";
+
+export function OrbCanvas({
+  visual,
+  state = "idle",
+  demo = false,
+  onPhase,
+  size = 220,
+  replayToken = 0,
+  demoText,
+  className,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // One anim scratch per canvas instance — also the handle for appear-replays.
   const animRef = useRef(newOrbAnim());
@@ -38,8 +52,10 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
   const demoRef = useRef(demo);
   const levelRef = useRef(0);
   const onPhaseRef = useRef(onPhase);
+  const demoTextRef = useRef(demoText);
   visualRef.current = visual;
   onPhaseRef.current = onPhase;
+  demoTextRef.current = demoText;
   // While demoing we own the state; otherwise it follows the prop.
   if (!demo) stateRef.current = state;
   demoRef.current = demo;
@@ -64,6 +80,7 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
     let tick = 0;
     let phase: EngineState = "idle";
     let lastPhase: EngineState | null = null;
+    let speakTicks = 0; // frames inside the current synthetic speech run
 
     // Synthetic syllable-like voice envelope: bursts of energy with brief
     // gaps; jump up fast, ease down — mirrors the overlay's VU smoothing.
@@ -94,16 +111,40 @@ export function OrbCanvas({ visual, state = "idle", demo = false, onPhase, size 
           lastPhase = phase;
           onPhaseRef.current?.(phase);
         }
-        if (phase === "recording") speak();
-        else levelRef.current *= 0.85;
+        if (phase === "recording") {
+          speak();
+          speakTicks += 1;
+        } else {
+          levelRef.current *= 0.85;
+          speakTicks = 0;
+        }
       } else if (stateRef.current === "recording") {
         // Pinned "Aktiv" (demo stopped via the legend): keep the synthetic
         // voice talking — the preview must never sit dead (TJ).
         speak();
+        speakTicks += 1;
       } else {
         levelRef.current *= 0.85;
+        speakTicks = 0;
       }
-      drawOrb(ctx, canvas.width, canvas.height, visualRef.current, stateRef.current, levelRef.current, anim);
+      // Synthetic live partial for the ★ "Worte" visual: reveal the demo
+      // sentence word by word (~0.45 s cadence), like the real stream.
+      let liveText: string | undefined;
+      if (stateRef.current === "recording") {
+        const words = (demoTextRef.current || DEMO_TEXT_FALLBACK).split(/\s+/);
+        liveText = words.slice(0, Math.floor(speakTicks / 26)).join(" ");
+      }
+      drawOrb(
+        ctx,
+        canvas.width,
+        canvas.height,
+        visualRef.current,
+        stateRef.current,
+        levelRef.current,
+        anim,
+        undefined,
+        liveText,
+      );
       raf = requestAnimationFrame(loop);
     };
     loop();

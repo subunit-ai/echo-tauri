@@ -96,6 +96,15 @@ export interface OrbAnim {
   /** Smoothed spectral centroid (0 bass … 1 sibilance) for the pill glow —
    *  the light's position/hue rides the voice's timbre. */
   pillCent: number;
+  /** Word train for the ★ "Worte" pill visual — recognised words flowing
+   *  right → left through the glass (fed by echo://stream-partial). `wpx` is
+   *  the cached measured width, `x` the animated left edge. */
+  words: { w: string; x: number; wpx: number }[];
+  /** How many words of the current live partial have been consumed. */
+  wordCount: number;
+  /** Particle pool for the ★ "Funken" pill visual (deterministic spawn —
+   *  no Math.random, previews and overlay stay reproducible). */
+  sparks: { x: number; y: number; vx: number; vy: number; life: number; sz: number }[];
 }
 
 export function newOrbAnim(): OrbAnim {
@@ -117,6 +126,9 @@ export function newOrbAnim(): OrbAnim {
     bandAgc: null,
     pillHist: [],
     pillCent: 0.5,
+    words: [],
+    wordCount: 0,
+    sparks: [],
   };
 }
 
@@ -159,8 +171,10 @@ function hexA(hex: string, a: number): string {
  * animation forward between calls. `bands` is the optional REAL 16-band voice
  * spectrum (0..1 each, bass→sibilance) from `mic_features`; when omitted (e.g.
  * the configurator preview without a mic) a synthetic voice-shaped spectrum is
- * derived from `level` so every style still comes alive. Returns nothing;
- * mutates `ctx` and `an`.
+ * derived from `level` so every style still comes alive. `text` is the live
+ * stable partial transcript (echo://stream-partial) — only the ★ "Worte" pill
+ * visual consumes it; everything else ignores it. Returns nothing; mutates
+ * `ctx` and `an`.
  */
 export function drawOrb(
   ctx: CanvasRenderingContext2D,
@@ -171,6 +185,7 @@ export function drawOrb(
   level: number,
   an: OrbAnim,
   bands?: number[],
+  text?: string,
 ): void {
   // Animation speed (TJ: the default cadence felt too fast — now adjustable).
   // `t` (scaled) drives every continuous frequency below; `frame` (real frames)
@@ -1648,39 +1663,78 @@ export function drawOrb(
           ctx.fillStyle = g;
           ctx.fillRect(x0, y0, W, H);
         } else {
-          // Siri aurora — three lights, each tied to a spectral region so the
-          // dominant hue literally answers the voice: speak deep and the blue
-          // lead swells, sibilants push the pink. At rest they drift gently.
-          const AURORA: [string, number][] = [
-            ["#4a8cff", 0.1], // blue ← bass
-            ["#a86bff", 0.45], // violet ← mids
-            ["#ff5fa2", 0.82], // pink ← treble
+          // ★ Siri (Redesign nach TJ-Feedback zu v0.5.129): the RIM itself
+          // lights up in traveling multicolor and radiates INWARD — the
+          // Apple-Intelligence edge-glow — plus two ROUND, morphing Siri
+          // orbs inside the glass. The palette cycles along the rim, the
+          // voice drives brightness and inward bleed, the spectral centroid
+          // leans the hot zone toward where the voice lives, and syllable
+          // onsets flash the edge. (First cut was flat wash + smeared blobs
+          // — TJ: "soll rund sein wie Siri, der Rand soll aufleuchten".)
+          const SIRI = ["#3a8bff", "#8b5cf6", "#ff5fa2", "#ff9a3d"];
+          const mix3 = (a: number[], b: number[], f: number) => [
+            a[0] + (b[0] - a[0]) * f,
+            a[1] + (b[1] - a[1]) * f,
+            a[2] + (b[2] - a[2]) * f,
           ];
-          // full-width wash first — the whole glass reads lit, the blobs on
-          // top give the light its motion
-          const wash = ctx.createLinearGradient(x0, cy, x0 + W, cy);
-          wash.addColorStop(0, hexA(AURORA[0][0], 0.16 * gEn));
-          wash.addColorStop(0.5, hexA(AURORA[1][0], 0.14 * gEn));
-          wash.addColorStop(1, hexA(AURORA[2][0], 0.16 * gEn));
-          ctx.fillStyle = wash;
-          ctx.fillRect(x0, y0, W, H);
-          for (let k = 0; k < AURORA.length; k++) {
-            const [colK, region] = AURORA[k];
-            const wob = Math.sin(ph * 0.011 + k * 2.09);
-            const gx =
-              cx +
-              wob * W * 0.24 +
-              (speaking ? (an.pillCent - 0.5) * W * 0.3 : 0) +
-              (region - 0.5) * W * 0.22;
-            const gy = cy + Math.sin(ph * 0.017 + k * 1.7) * H * 0.16;
-            const wgt = speaking ? 0.35 + 0.65 * bandNormAt(region) : 0.55 + 0.2 * wob;
-            const rr = W * (0.3 + 0.06 * Math.sin(ph * 0.021 + k * 1.3));
-            const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, rr);
-            g.addColorStop(0, hexA(colK, 0.6 * gEn * wgt));
-            g.addColorStop(0.6, hexA(colK, 0.26 * gEn * wgt));
+          /** Cyclic palette sample at u (wraps) — the traveling Siri color. */
+          const siriCol = (u: number): string => {
+            const uu = ((u % 1) + 1) % 1;
+            const p = uu * SIRI.length;
+            const i = Math.floor(p);
+            return rgbHex(
+              mix3(hexRgb(SIRI[i % SIRI.length]), hexRgb(SIRI[(i + 1) % SIRI.length]), p - i),
+            );
+          };
+          // colors travel along the rim; the centroid shifts the phase so
+          // deep vs. bright voices literally re-color the edge
+          const drift = ph * 0.0035 + (an.pillCent - 0.5) * 0.5;
+          const flash = 1 + 0.5 * an.pulse; // syllable onset → the edge flares
+          const mkRim = (alpha: number) => {
+            const g = ctx.createLinearGradient(x0, y0, x0 + W, y0 + H);
+            for (let s = 0; s <= 5; s++)
+              g.addColorStop(s / 5, hexA(siriCol(drift + s / 5), alpha));
+            return g;
+          };
+          // three clipped rim strokes = the inward radiation (half of every
+          // stroke falls outside the clip → pure edge-lit bleed): wide soft
+          // wash, mid band, hot line at the glass edge.
+          const bleed = 0.36 + 0.3 * gEn; // how deep the light reaches inward
+          ctx.lineWidth = H * bleed * 2;
+          ctx.strokeStyle = mkRim(0.17 * gEn * flash);
+          capsule();
+          ctx.stroke();
+          ctx.lineWidth = H * 0.2;
+          ctx.strokeStyle = mkRim(0.42 * gEn * flash);
+          capsule();
+          ctx.stroke();
+          ctx.save();
+          ctx.shadowColor = hexA(siriCol(drift + 0.5), 0.8 * gEn);
+          ctx.shadowBlur = H * 0.2 * flash;
+          ctx.lineWidth = Math.max(1.4, H * 0.055);
+          ctx.strokeStyle = mkRim(0.95 * gEn * flash);
+          capsule();
+          ctx.stroke();
+          ctx.restore();
+          // two ROUND morphing orbs — white-hot core, colored fringe (the
+          // Siri sphere feel); size breathes with "their" spectral region,
+          // positions orbit slowly, luminous where they overlap.
+          ctx.globalCompositeOperation = "lighter";
+          for (let k = 0; k < 2; k++) {
+            const gx = cx + Math.cos(ph * 0.011 + k * Math.PI) * W * 0.17;
+            const gy = cy + Math.sin(ph * 0.017 + k * 2.1) * H * 0.2;
+            const region = k === 0 ? 0.15 : 0.7; // bass orb + treble orb
+            const morph = speaking ? 0.55 + 0.65 * bandNormAt(region) : 0.7 + 0.2 * Math.sin(ph * 0.023 + k);
+            const rr = H * (0.36 + 0.1 * Math.sin(ph * 0.029 + k * 1.7)) * morph;
+            const colK = siriCol(drift + 0.25 + k * 0.5);
+            const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, Math.max(1, rr));
+            g.addColorStop(0, `rgba(255,255,255,${0.34 * gEn})`);
+            g.addColorStop(0.32, hexA(colK, 0.4 * gEn));
             g.addColorStop(1, hexA(colK, 0));
             ctx.fillStyle = g;
-            ctx.fillRect(x0, y0, W, H);
+            ctx.beginPath();
+            ctx.arc(gx, gy, Math.max(1, rr), 0, Math.PI * 2);
+            ctx.fill();
           }
         }
         ctx.restore();
@@ -1866,6 +1920,292 @@ export function drawOrb(
           const p = sampleAt(Math.round((i / (N - 1)) * (M - 1)));
           if (!Number.isFinite(an.barH[i])) an.barH[i] = 0;
           an.barH[i] += (p.env * 2 - an.barH[i]) * 0.5;
+        }
+        ctx.restore();
+        ctx.lineCap = "butt";
+        break;
+      }
+
+      // Session hygiene for the stateful visuals: a fresh idle clears the
+      // word train and the spark pool (cheap no-ops in the default path —
+      // both arrays stay empty unless their visual ran).
+      if (stP === "idle") {
+        if (an.words.length || an.wordCount) {
+          an.words = [];
+          an.wordCount = 0;
+        }
+        if (an.sparks.length) an.sparks = [];
+      }
+      // Materialize gate shared by the new visuals (bars use their per-bar
+      // centre-out ignite instead).
+      const mzGate = () =>
+        ap < 1 && apStyle !== "none" && apStyle !== "fade"
+          ? Math.max(0, Math.min(1, (ap - 0.3) / 0.4))
+          : 1;
+      // Soft resting-dot row + bar-smoother settle — the baseline under the
+      // Funken/Puls visuals so the pill never looks empty mid-word.
+      const dotRow = (alpha: number) => {
+        const bH = an.barH as number[]; // initialised above on every pill frame
+        for (let i = 0; i < N; i++) {
+          const u = (i - (N - 1) / 2) / ((N - 1) / 2);
+          const uL = u * (1.1 - 0.22 * u * u);
+          const edgeA = 1 - 0.4 * Math.pow(Math.abs(uL), 3);
+          ctx.fillStyle = hexA(base, alpha * edgeA);
+          ctx.beginPath();
+          ctx.arc(cx + (uL * span) / 2, cy, barW / 2, 0, Math.PI * 2);
+          ctx.fill();
+          if (!Number.isFinite(bH[i])) bH[i] = 0;
+          bH[i] += (barW - bH[i]) * 0.2;
+        }
+      };
+
+      // ★ Worte (Settings → Pille): what you SAY flows through the glass —
+      // the live stable partial (echo://stream-partial) feeds a word train
+      // that slides in from the right and streams out to the left, over a
+      // subtle voice wave so the pill lives before the first word lands (and
+      // in batch mode, where no partials exist, the wave carries it alone).
+      // On release the train streams out; a fresh session resets it.
+      if (viz === "worte" && (speaking || an.words.length > 0)) {
+        const mzA = mzGate();
+        if (speaking) {
+          const raw = (text ?? "").trim();
+          const ws = raw ? raw.split(/\s+/) : [];
+          // the stable partial only ever grows within a session — a shrink
+          // means a new session started while we still held old words
+          if (ws.length < an.wordCount) {
+            an.words = [];
+            an.wordCount = 0;
+          }
+          while (an.wordCount < ws.length) {
+            an.words.push({ w: ws[an.wordCount], x: Number.NaN, wpx: 0 });
+            an.wordCount++;
+          }
+          if (an.words.length > 12) an.words.splice(0, an.words.length - 12);
+        }
+        // subtle voice wave underneath (a quiet mini-"welle")
+        if (speaking && mzA > 0) {
+          const slot = Math.max(2, Math.min(20, 4 / sp));
+          const Mw = 40;
+          ctx.strokeStyle = hexA(base, 0.3 * mzA);
+          ctx.lineWidth = Math.max(1, H * 0.035);
+          ctx.beginPath();
+          for (let k = 0; k < Mw; k++) {
+            const u = (k / (Mw - 1)) * 2 - 1;
+            const uL = u * (1.1 - 0.22 * u * u);
+            const age = ((Mw - 1 - k) / (Mw - 1)) * (N - 1) * slot;
+            const a0 = Math.floor(age);
+            const h0 = an.pillHist[a0] ?? 0;
+            const h1 = an.pillHist[a0 + 1] ?? 0;
+            const sm = h0 + (h1 - h0) * (age - a0);
+            const xx = cx + (uL * span) / 2;
+            const yy = cy + H * (0.05 + 0.32 * sm) * Math.sin(age * 0.55) * 0.5;
+            if (k === 0) ctx.moveTo(xx, yy);
+            else ctx.lineTo(xx, yy);
+          }
+          ctx.stroke();
+        }
+        // the word train — right-aligned targets, spring-in, stream-out
+        const fs = Math.max(9, Math.round(H * 0.34));
+        ctx.font = `600 ${fs}px -apple-system, system-ui, sans-serif`;
+        ctx.textBaseline = "middle";
+        for (const wd of an.words) if (!wd.wpx) wd.wpx = ctx.measureText(wd.w).width;
+        const gapW = fs * 0.42;
+        const targets = new Array<number>(an.words.length);
+        let rightEdge = x0 + W - H * 0.55;
+        for (let i = an.words.length - 1; i >= 0; i--) {
+          targets[i] = rightEdge - an.words[i].wpx;
+          rightEdge = targets[i] - gapW;
+        }
+        ctx.save();
+        capsule();
+        ctx.clip(); // words must never leave the glass
+        ctx.shadowColor = hexA(base, 0.55);
+        ctx.shadowBlur = H * 0.12;
+        for (let i = an.words.length - 1; i >= 0; i--) {
+          const wd = an.words[i];
+          if (!Number.isFinite(wd.x)) wd.x = x0 + W + fs;
+          if (speaking) wd.x += (targets[i] - wd.x) * 0.16;
+          else wd.x -= H * 0.14; // released → the train streams out left
+          // Asymmetric fade: born OUTSIDE the right rim a word fades IN as
+          // it slides through the glass edge, and fades OUT approaching the
+          // left rim. Removal ONLY on full left exit — a fresh word must
+          // never be culled by its own spawn position (first cut did, the
+          // train stayed forever empty).
+          if (wd.x + wd.wpx < x0 + H * 0.3) {
+            an.words.splice(i, 1);
+            continue;
+          }
+          const xc = wd.x + wd.wpx / 2;
+          const fadeL = Math.max(0, Math.min(1, (xc - (x0 + H * 0.45)) / (W * 0.16)));
+          const fadeR = Math.max(0, Math.min(1, (x0 + W - H * 0.25 - xc) / (W * 0.07)));
+          const aW = fadeL * fadeR;
+          if (aW <= 0.01) continue; // outside the glass — slide on, invisible
+          ctx.fillStyle = hexA(base, 0.95 * aW * mzA);
+          ctx.fillText(wd.w, wd.x, cy);
+        }
+        ctx.restore();
+        // keep the bar smoother settled → calm morph when the bars return
+        for (let i = 0; i < N; i++) {
+          if (!Number.isFinite(an.barH[i])) an.barH[i] = 0;
+          an.barH[i] += (barW - an.barH[i]) * 0.2;
+        }
+        ctx.restore();
+        ctx.lineCap = "butt";
+        break;
+      }
+
+      // ★ Funken (eigener Stil): syllables strike sparks — glowing embers fly
+      // off the voice, ride a leftward wind with a little flicker and burn
+      // out. Spawn is deterministic (sin-hash of frame+index, no
+      // Math.random) so preview and overlay render reproducibly.
+      if (viz === "funken" && (speaking || an.sparks.length > 0)) {
+        const mzA = mzGate();
+        const rnd = (n: number) => {
+          const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+          return s - Math.floor(s);
+        };
+        if (speaking && !idleStill) {
+          const want = lvl > 0.06 ? Math.min(6, Math.floor(1 + lvl * 3 + an.pulse * 4)) : 0;
+          for (let k = 0; k < want; k++) {
+            const r1 = rnd(frame * 7.13 + k * 13.7);
+            const r2 = rnd(frame * 3.71 + k * 29.3);
+            const r3 = rnd(frame * 11.9 + k * 5.1);
+            an.sparks.push({
+              x: cx + (r1 - 0.35) * span * 0.55, // right bias — embers drift left
+              y: cy + (r2 - 0.5) * H * 0.3,
+              vx: -(0.4 + r3 * 1.4) * H * 0.028 * sp,
+              vy: (r2 - 0.5) * H * 0.014,
+              life: 1,
+              sz: barW * (0.3 + 0.5 * r1),
+            });
+          }
+          if (an.sparks.length > 90) an.sparks.splice(0, an.sparks.length - 90);
+        }
+        dotRow(0.35 * mzA); // ember baseline: the dots stay softly lit
+        ctx.save();
+        capsule();
+        ctx.clip();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = an.sparks.length - 1; i >= 0; i--) {
+          const s = an.sparks[i];
+          s.x += s.vx;
+          s.y += s.vy + Math.sin((s.x - x0) * 0.08 + ph * 0.1) * H * 0.004;
+          s.life *= speaking ? 0.965 : 0.9;
+          if (s.life < 0.04 || s.x < x0 - 4) {
+            an.sparks.splice(i, 1);
+            continue;
+          }
+          ctx.fillStyle = hexA(base, 0.9 * s.life * mzA);
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, Math.max(0.6, s.sz * s.life), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        ctx.restore();
+        ctx.lineCap = "butt";
+        break;
+      }
+
+      // ★ Puls (eigener Stil): sonar under the lens — every syllable births
+      // an elliptic ring in the centre that expands toward the pill's ends
+      // and dissolves; loud voices fire bright dense rings, silence leaves
+      // the calm dot row. Rides the shared `an.rings` pool (progress 0..1).
+      if (viz === "puls" && (speaking || rings.length > 0)) {
+        const mzA = mzGate();
+        // Sparse by design: onsets fire, plus a slow heartbeat while loud —
+        // the first cut (every 22 frames at slow expansion) stacked ~30
+        // concentric rings into a muddy tunnel. Cap keeps worst-case clean.
+        if (speaking && !idleStill && (onset || (lvl > 0.15 && frame % 36 === 0))) {
+          rings.push({ r: 0, a0: 0.4 + 0.6 * Math.min(1, lvl + an.pulse * 0.4) });
+          if (rings.length > 10) rings.shift();
+        }
+        dotRow(0.35 * mzA);
+        ctx.save();
+        capsule();
+        ctx.clip();
+        for (let i = rings.length - 1; i >= 0; i--) {
+          const ring = rings[i];
+          ring.r += 0.021 * sp * (1 + ring.a0 * 0.3); // r doubles as progress 0..1
+          const p = ring.r;
+          if (p >= 1) {
+            rings.splice(i, 1);
+            continue;
+          }
+          ctx.strokeStyle = hexA(base, ring.a0 * Math.pow(1 - p, 1.6) * mzA);
+          ctx.lineWidth = Math.max(1, H * 0.05 * (1 - p * 0.5));
+          ctx.beginPath();
+          ctx.ellipse(
+            cx,
+            cy,
+            H * 0.2 + p * (span / 2 - H * 0.1),
+            H * (0.1 + 0.3 * p),
+            0,
+            0,
+            Math.PI * 2,
+          );
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.restore();
+        ctx.lineCap = "butt";
+        break;
+      }
+
+      // ★ Helix (eigener Stil): two counter-phased strands wind around the
+      // centre line like DNA — the amplitude is the voice envelope (the
+      // helix opens where you speak), the phase drifts so it visibly
+      // rotates, and faint rungs tie the strands together.
+      if (speaking && viz === "helix") {
+        const mzA = mzGate();
+        const Mh = 64;
+        const slot = Math.max(2, Math.min(20, 4 / sp));
+        const envAt = (k: number): number => {
+          const age = ((Mh - 1 - k) / (Mh - 1)) * (N - 1) * slot;
+          const a0 = Math.floor(age);
+          const h0 = an.pillHist[a0] ?? 0;
+          const h1 = an.pillHist[a0 + 1] ?? 0;
+          const h2 = an.pillHist[a0 + 2] ?? 0;
+          const sm = (h0 + (h1 - h0) * (age - a0)) * 0.6 + (h1 + h2) * 0.2;
+          return H * Math.min(0.36, 0.06 + 0.32 * Math.pow(sm, 0.9));
+        };
+        const xAt = (k: number): number => {
+          const u = (k / (Mh - 1)) * 2 - 1;
+          return cx + (u * (1.1 - 0.22 * u * u) * span) / 2;
+        };
+        const yAt = (k: number, strand: number): number =>
+          cy +
+          envAt(k) * Math.sin((k / (Mh - 1)) * Math.PI * 3.6 + ph * 0.07 + strand * Math.PI);
+        if (mzA > 0) {
+          // rungs first (behind the strands)
+          ctx.strokeStyle = hexA(base, 0.2 * mzA);
+          ctx.lineWidth = Math.max(0.8, H * 0.022);
+          for (let k = 4; k < Mh - 3; k += 8) {
+            ctx.beginPath();
+            ctx.moveTo(xAt(k), yAt(k, 0));
+            ctx.lineTo(xAt(k), yAt(k, 1));
+            ctx.stroke();
+          }
+          // strands as midpoint quadratics — straight segments read angular
+          // at the crossings (screenshot pass)
+          for (let strand = 0; strand < 2; strand++) {
+            ctx.strokeStyle = hexA(base, (strand === 0 ? 0.95 : 0.55) * mzA);
+            ctx.lineWidth = Math.max(1.2, H * 0.05);
+            ctx.beginPath();
+            ctx.moveTo(xAt(0), yAt(0, strand));
+            for (let k = 1; k < Mh; k++) {
+              const mx = (xAt(k - 1) + xAt(k)) / 2;
+              const my = (yAt(k - 1, strand) + yAt(k, strand)) / 2;
+              ctx.quadraticCurveTo(xAt(k - 1), yAt(k - 1, strand), mx, my);
+            }
+            ctx.lineTo(xAt(Mh - 1), yAt(Mh - 1, strand));
+            ctx.stroke();
+          }
+        }
+        // hand the envelope to the bar smoother (seamless state morphs)
+        for (let i = 0; i < N; i++) {
+          const e2 = envAt(Math.round((i / (N - 1)) * (Mh - 1))) * 2;
+          if (!Number.isFinite(an.barH[i])) an.barH[i] = 0;
+          an.barH[i] += (e2 - an.barH[i]) * 0.5;
         }
         ctx.restore();
         ctx.lineCap = "butt";
