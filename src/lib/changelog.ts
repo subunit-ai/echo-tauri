@@ -31,6 +31,41 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.133",
+    date: "2026-07-14",
+    title: {
+      de: "Wortschatz: alles lesbar, Füllwörter endlich gezählt",
+      en: "Vocabulary: everything readable, fillers finally counted",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neu: Echo zählt jetzt mit, welche Füllwörter es für dich herausfiltert. Die Verzögerungslaute (ähm, äh, hmm) wurden immer schon still entfernt — jetzt siehst du im Wortschatz endlich, wie viele es waren, als Rangliste mit Zähler.",
+        en: "New: Echo now counts the fillers it strips out for you. The hesitation sounds (um, uh, hmm) were always removed silently — now the Vocabulary tab finally shows how many there were, as a ranked list with tallies.",
+      },
+      {
+        kind: "improvement",
+        de: "Erfolge, Bestenliste und Füllwörter haben jetzt jeweils eine eigene, große Box — Wörter und Namen werden nicht mehr abgeschnitten.",
+        en: "Achievements, leaderboard and filler words each get their own big box — words and names are no longer cut off.",
+      },
+      {
+        kind: "improvement",
+        de: "Alle Zählungen folgen jetzt einem einheitlichen Ranglisten-Raster statt Wortwolke, Balkendiagramm und drei Chip-Stilen durcheinander. Häufigste Wörter sind eine schlichte Top-10 mit Zähler.",
+        en: "Every tally now follows one consistent ranked-list grid instead of a word cloud, a bar chart and three chip styles all at once. Most-used words are a plain top ten with counts.",
+      },
+      {
+        kind: "improvement",
+        de: "Verbesserungsvorschläge sind deutlich kompakter: eine Zeile pro Wort. Die Erklärung erscheint jetzt auf Zuruf — Wort antippen oder darauf zeigen — statt dauerhaft Platz zu belegen.",
+        en: "Upgrade suggestions are far more compact: one line per word. The explanation now appears on demand — tap or hover a word — instead of permanently taking up space.",
+      },
+      {
+        kind: "fix",
+        de: "Verbesserungsvorschläge laden sofort statt manchmal gar nicht oder erst nach langer Wartezeit: Die Vorschläge erscheinen jetzt umgehend und werden im Hintergrund verfeinert, statt hinter einer Netzabfrage zu warten, die bei jedem einzelnen Diktat neu lief.",
+        en: "Upgrade suggestions load instantly instead of sometimes never or only after a long wait: they now appear immediately and are refined in the background, rather than blocking on a network round trip that re-ran after every single dictation.",
+      },
+    ],
+  },
+  {
     version: "0.5.132",
     date: "2026-07-14",
     title: {

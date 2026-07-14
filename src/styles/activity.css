@@ -768,13 +768,14 @@
   color: var(--cyan-ink);
   flex-shrink: 0;
 }
+/* Never truncate the word itself. These rows sit in full-width cards now, so
+   there is room to spell it out — the ellipsis only ever hid the one thing the
+   row exists to show. */
 .xp-feed-word {
   font-weight: 700;
   color: var(--ink);
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .xp-feed-kind {
   font-size: 10.5px;
@@ -822,6 +823,127 @@
 }
 
 /* ================================================================
+   Rank lists — the ONE counter-list pattern behind every ranked tally in
+   the Wortschatz section (most-used words, stripped fillers, fillers left
+   standing). Same rhythm everywhere, on purpose: rank, the full word, a
+   proportional track, the count. Plain DOM, so the words are real text that
+   wraps and can always be read — unlike the SVG BarChart, whose
+   `preserveAspectRatio="none"` viewBox squeezed the glyphs sideways and cut
+   long labels to an ellipsis.
+   ================================================================ */
+
+.rank-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.rank-list.cols-2 {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 820px) {
+  .rank-list.cols-2 {
+    grid-template-columns: 1fr 1fr;
+    column-gap: 26px;
+  }
+}
+.rank-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, auto) minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line2);
+  font-size: 13px;
+}
+.rank-row:last-child {
+  border-bottom: none;
+}
+.rank-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.rank-word {
+  font-weight: 650;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.rank-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  overflow: hidden;
+}
+.rank-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink3);
+  transition: width 0.35s var(--ease-out);
+}
+.tone-accent .rank-fill {
+  background: var(--cyan);
+}
+.tone-warn .rank-fill {
+  background: var(--amber);
+}
+.rank-count {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Filler card: two halves that must not be conflated — what Echo DELETED for
+   you, and what it deliberately left standing. */
+.filler-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 22px;
+  margin-top: 12px;
+}
+@media (min-width: 820px) {
+  .filler-split {
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+  }
+}
+.filler-half-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.filler-half-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.filler-total {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink2);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-chip);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.filler-half-sub {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink3);
+}
+
+/* ================================================================
    Upgrade coach — Learning's word→alternatives suggestion list.
    ================================================================ */
 
@@ -832,21 +954,78 @@
 }
 .upgrade-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
   background: var(--glass);
   backdrop-filter: var(--blur-chip);
   -webkit-backdrop-filter: var(--blur-chip);
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-sm);
   box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
-  transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+  transition: border-color 0.2s var(--ease-out);
 }
 .upgrade-row:hover {
-  transform: translateY(-1px);
   border-color: var(--line2);
+}
+/* The row proper: one line, uniform height at rest. The explanation is not in
+   here — it lives below, and only when the user asks for it. */
+.upgrade-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.upgrade-note {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+}
+.upgrade-note strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.upgrade-status {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+/* Loading skeleton — a pending fetch must never masquerade as "no data". */
+.upgrade-row.is-skeleton {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+}
+.skeleton-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--glass2) 25%,
+    color-mix(in srgb, var(--ink3) 14%, transparent) 50%,
+    var(--glass2) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s var(--ease-out) infinite;
+}
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar {
+    animation: none;
+  }
 }
 .upgrade-word {
   font-weight: 700;
@@ -868,25 +1047,11 @@
 .upgrade-alts {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 6px;
   flex: 1 1 auto;
 }
-/* Wraps one alternative's chip + its optional §12c explanation note so the
-   two stack together instead of the note drifting to its own flex line. */
-.alt-item {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  max-width: 240px;
-}
-.alt-note {
-  font-size: 10.5px;
-  line-height: 1.35;
-  color: var(--ink3);
-  padding-left: 2px;
-}
 .alt-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   background: color-mix(in srgb, var(--cyan) 10%, transparent);
@@ -900,15 +1065,71 @@
   transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
     transform 0.12s var(--ease-out);
 }
-.alt-chip[data-clickable="true"] {
+/* Only an alternative that HAS an explanation is interactive — hover reveals
+   it, click pins it open below the row. A chip without a note stays inert
+   rather than lying about being clickable. */
+.alt-chip.has-note {
   cursor: pointer;
 }
-.alt-chip[data-clickable="true"]:hover {
+.alt-chip.has-note:hover,
+.alt-chip.open {
   background: color-mix(in srgb, var(--cyan) 18%, transparent);
   border-color: color-mix(in srgb, var(--cyan) 45%, transparent);
 }
-.alt-chip[data-clickable="true"]:active {
+.alt-chip.has-note:active {
   transform: scale(0.96);
+}
+/* Subtle affordance: a dotted underline says "there is more behind this word",
+   the same grammar as a glossary term. */
+.alt-chip.has-note::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
+  border-bottom: 1px dotted currentColor;
+  opacity: 0.45;
+}
+/* Hover tooltip — pure CSS, so it costs no render and no layout. The pinned
+   (click) variant below the row is what carries keyboard and touch users. */
+.alt-chip.has-note::after {
+  content: attr(data-note);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+  z-index: 30;
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  color: var(--ink);
+  /* --menu-bg, not a glass token: this floats OVER the neighbouring row, so it
+     has to be opaque enough to read on its own. A translucent surface leaning on
+     backdrop-filter let the row underneath show straight through the text. It is
+     the same surface dropdowns and sheets use, and it is defined per theme. */
+  background: var(--menu-bg);
+  backdrop-filter: var(--blur-chip);
+  -webkit-backdrop-filter: var(--blur-chip);
+  border: 1px solid var(--border-strong, var(--line2));
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-md, var(--shadow-sm));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s var(--ease-out), transform 0.16s var(--ease-out);
+}
+.alt-chip.has-note:hover::after,
+.alt-chip.has-note:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Pinned open: the note is rendered below the row instead, so don't double it. */
+.alt-chip.open::after {
+  content: none;
 }
 
 .upgrade-source {

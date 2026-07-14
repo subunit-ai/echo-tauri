@@ -143,6 +143,9 @@ pub fn transcribe_subunit(
     // and the server cleanup lane does not de-filler — so this is the only place
     // the deterministic passes reach the text that actually gets pasted. Parity
     // with the streaming path, which post_processes `cleaned_text` too.
+    // NOT counted: `cleaned_text` is the AI-cleaned variant of the SAME speech
+    // as `text` below — counting fillers here too would double-count one
+    // dictation. Only the primary `text` path (below) ever feeds the counter.
     let cleaned_text = json
         .get("cleaned_text")
         .and_then(|v| v.as_str())
@@ -164,13 +167,17 @@ pub fn transcribe_subunit(
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    // The primary text path — the ONE place fillers are counted (see the
+    // `cleaned_text` comment above).
+    let (text, fillers_removed) = vocab::post_process_counted(&text, cfg);
     Ok(TranscriptResult {
-        text: vocab::post_process(&text, cfg),
+        text,
         quality_mode,
         segments,
         cleaned_text,
         cleanup_status,
         // server_ms only; encode_ms/stt_ms are filled by the dispatcher that times this call.
         timings: Timings { server_ms, ..Default::default() },
+        fillers_removed,
     })
 }

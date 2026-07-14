@@ -99,13 +99,15 @@ pub fn run(
         }
     }
 
+    let (text, fillers_removed) = vocab::post_process_counted(text.trim(), cfg);
     Ok(TranscriptResult {
-        text: vocab::post_process(text.trim(), cfg),
+        text,
         quality_mode: "local".to_string(),
         segments,
         cleaned_text: None, // local engine has no combined cleanup round trip
         cleanup_status: None, // ditto — no server-side cleanup
         timings: Default::default(), // filled by the dispatcher, which times this call
+        fillers_removed,
     })
 }
 

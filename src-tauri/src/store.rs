@@ -92,6 +92,13 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             PRIMARY KEY (account, day)
          );
          CREATE INDEX IF NOT EXISTS idx_daily_account_day ON daily_stats(account, day DESC);
+         CREATE TABLE IF NOT EXISTS filler_removed (
+            day   TEXT    NOT NULL,
+            word  TEXT    NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (day, word)
+         );
+         CREATE INDEX IF NOT EXISTS idx_filler_day ON filler_removed(day DESC);
          CREATE TABLE IF NOT EXISTS learning_events (
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             account TEXT    NOT NULL,
@@ -397,6 +404,57 @@ pub fn bump_daily_stats(account: &str, words: i64, audio_seconds: f64, time_save
     );
     if let Err(e) = r {
         log::warn!("store: daily_stats bump failed: {e}");
+    }
+}
+
+// ---- Filler-word counter ("äh"/"ähm"/"hmm" — Wortschatz tab) ----
+//
+// `strip_fillers` (transcribe::vocab) removes these BEFORE a dictation ever
+// reaches `history`, so the History-driven stats are otherwise blind to them
+// (TJ measured only 2 hits across 450 real dictations against his live DB).
+// `filler_removed` buckets every removal into its LOCAL calendar day — same
+// `strftime(…, 'unixepoch', 'localtime')` derivation as `bump_daily_stats`
+// above, kept inline in SQL (not re-derived in Rust) so the two can never
+// drift apart.
+
+/// Book one finished dictation's filler removals into today's day bucket.
+/// UPSERT-adds so repeated calls on the same day accumulate the count instead
+/// of overwriting it (a day can hold many dictations).
+pub fn filler_removed_add(counts: &[(String, i64)], now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "INSERT INTO filler_removed (day, word, count)
+         VALUES (strftime('%Y-%m-%d', ?1, 'unixepoch', 'localtime'), ?2, ?3)
+         ON CONFLICT(day, word) DO UPDATE SET count = count + excluded.count",
+    ) else {
+        return;
+    };
+    for (word, count) in counts {
+        if word.is_empty() || *count <= 0 {
+            continue;
+        }
+        if let Err(e) = stmt.execute(params![now, word, count]) {
+            log::warn!("store: filler_removed_add failed: {e}");
+        }
+    }
+}
+
+/// Per-word filler totals over the last `days` local days, descending by
+/// count, alphabetical on ties — same ordering contract as
+/// `vocab::strip_fillers_counted`.
+pub fn filler_removed_since(days: u32) -> Vec<(String, i64)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT word, SUM(count) AS total FROM filler_removed
+               WHERE day >= date('now', ?1, 'localtime')
+               GROUP BY word ORDER BY total DESC, word ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
     }
 }
 
@@ -1674,6 +1732,18 @@ mod tests {
         let hours = hourly_counts(7);
         assert_eq!(hours.iter().map(|(_, c)| c).sum::<i64>(), 2);
         assert!(hours.iter().all(|(h, _)| (0..24).contains(h)));
+
+        // Filler-removed counter: UPSERT-adds on repeated same-day calls (not an
+        // overwrite), sums across the window, sorted desc/alpha.
+        filler_removed_add(&[("ähm".to_string(), 2), ("äh".to_string(), 1)], now_epoch);
+        filler_removed_add(&[("ähm".to_string(), 3), ("hmm".to_string(), 1)], now_epoch); // same day → accumulates
+        let totals = filler_removed_since(30);
+        let get = |w: &str| totals.iter().find(|(k, _)| k == w).map(|(_, c)| *c);
+        assert_eq!(get("ähm"), Some(5)); // 2 + 3, never overwritten to 3
+        assert_eq!(get("äh"), Some(1));
+        assert_eq!(get("hmm"), Some(1));
+        // Descending by count, alphabetical on ties.
+        assert_eq!(totals[0].0, "ähm");
 
         let _ = std::fs::remove_file(&path);
     }

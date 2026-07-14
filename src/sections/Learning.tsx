@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  fillerRemovedCounts,
   learningAnalysis,
   learningLeaderboard,
   learningSuggestions,
+  learningSuggestionsLlm,
   learningXp,
   onHistoryChanged,
   onLearningReward,
@@ -15,10 +17,6 @@ import {
   type WordFreq,
   type WordOfDay,
 } from "../lib/ipc";
-import { BarChart } from "../components/charts/BarChart";
-import { WordCloud } from "../components/charts/WordCloud";
-import { useConfig } from "../state/ConfigContext";
-import { useToast } from "../state/ToastContext";
 
 /** Range presets steering the analysis window (days). Labels reuse the
  *  shared activity.range* keys so both sections speak the same language. */
@@ -27,6 +25,11 @@ const RANGES = [7, 30, 90] as const;
 /** Below this many analysed words the per-card insights are statistically
  *  meaningless — cards fall back to the needMoreData hint instead. */
 const MIN_WORDS = 30;
+
+/** Every counter list in this section shows its top ten. One number, one rule —
+ *  the uniformity is the point: the section used to mix a word cloud, a bar
+ *  chart and three chip styles, which read as clutter. */
+const RANK_LIMIT = 10;
 
 // Small stroke-SVG glyphs (enterprise UI: no emojis), same 24er-viewBox
 // convention as the Sidebar icons.
@@ -64,22 +67,6 @@ const ArrowIcon = () => (
   </svg>
 );
 
-const PlusIcon = () => (
-  <svg
-    width="11"
-    height="11"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
 /** Trophy glyph for the achievements feed (stroke-SVG, no emojis). */
 const TrophyIcon = () => (
   <svg
@@ -100,6 +87,49 @@ const TrophyIcon = () => (
 
 /** Highest defined level title — levels above it reuse the top title. */
 const MAX_LEVEL_TITLE = 9;
+
+/** The one counter-list primitive behind every ranked tally in this section
+ *  (most-used words, stripped fillers, fillers left in the text): rank, the
+ *  word spelled out IN FULL, a proportional track, and the count.
+ *
+ *  Deliberately plain DOM rather than the shared BarChart: that one draws into
+ *  a 640-unit viewBox with `preserveAspectRatio="none"`, so inside a narrow
+ *  card every glyph is squeezed horizontally and long labels are cut to an
+ *  ellipsis — which is precisely why the filler words were unreadable. Text
+ *  that has to be *read* does not belong in a non-uniformly scaled SVG. */
+function RankList({
+  items,
+  tone = "neutral",
+  limit = RANK_LIMIT,
+  columns = 1,
+}: {
+  items: WordFreq[];
+  tone?: "neutral" | "warn" | "accent";
+  limit?: number;
+  columns?: 1 | 2;
+}) {
+  const shown = items.slice(0, limit);
+  // Track scales against the leader, so rank 1 is always a full bar and every
+  // other row reads as a share of it.
+  const max = shown.reduce((m, i) => Math.max(m, i.count), 0);
+  return (
+    <ol className={`rank-list tone-${tone}${columns === 2 ? " cols-2" : ""}`}>
+      {shown.map((w, i) => (
+        <li key={w.word} className="rank-row">
+          <span className="rank-num">{i + 1}</span>
+          <span className="rank-word">{w.word}</span>
+          <span className="rank-track" aria-hidden="true">
+            <span
+              className="rank-fill"
+              style={{ width: `${max > 0 ? Math.max(2, (w.count / max) * 100) : 0}%` }}
+            />
+          </span>
+          <span className="rank-count">{w.count}&times;</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 /** XP header strip: level badge + title, progress to the next level, weekly
  *  XP and the distinct-words tally. Pure display — all math is backend truth. */
@@ -174,9 +204,94 @@ function WordOfDayCard({ wod }: { wod: WordOfDay }) {
   );
 }
 
+/** The upgrade coach. One suggestion is one line: word, tally, arrow, its
+ *  alternatives as chips — every row the same height at rest.
+ *
+ *  The explanation is no longer printed under each chip permanently: it used to
+ *  trail every alternative, which blew the rows up to wildly uneven heights and
+ *  buried the suggestions themselves. It now comes on demand — hover shows it as
+ *  a tooltip, a click pins it open (the path that keyboard and touch users get,
+ *  where there is no hover). */
+function UpgradeCoach({
+  suggestions,
+  loading,
+  refining,
+}: {
+  suggestions: LearningSuggestions | null;
+  loading: boolean;
+  refining: boolean;
+}) {
+  const { t } = useTranslation();
+  // Which alternative's note is pinned open — exactly one at a time, keyed
+  // `word::alternative`, so opening a second one closes the first.
+  const [openNote, setOpenNote] = useState<string | null>(null);
+
+  // A pending fetch must never render as "no data" — that is what made the
+  // coach look broken while the LLM round trip was in flight.
+  if (loading) {
+    return (
+      <div className="upgrade-list" aria-busy="true">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="upgrade-row is-skeleton" aria-hidden="true">
+            <span className="skeleton-bar" style={{ width: "18%" }} />
+            <span className="skeleton-bar" style={{ width: "52%" }} />
+          </div>
+        ))}
+        <p className="upgrade-status">{t("learning.suggestLoading")}</p>
+      </div>
+    );
+  }
+
+  if (!suggestions || suggestions.suggestions.length === 0) {
+    return <div className="empty">{t("learning.needMoreData")}</div>;
+  }
+
+  return (
+    <div className="upgrade-list">
+      {suggestions.suggestions.map((s) => {
+        const pinned = s.alternatives.find((a) => openNote === `${s.word}::${a.word}` && a.note);
+        return (
+          <div key={s.word} className="upgrade-row">
+            <div className="upgrade-main">
+              <span className="upgrade-word">{s.word}</span>
+              <span className="upgrade-count">{s.count}&times;</span>
+              <ArrowIcon />
+              <div className="upgrade-alts">
+                {s.alternatives.map((a) => {
+                  const key = `${s.word}::${a.word}`;
+                  const open = openNote === key;
+                  return (
+                    <button
+                      key={a.word}
+                      type="button"
+                      className={`alt-chip${a.note ? " has-note" : ""}${open ? " open" : ""}`}
+                      // Feeds the CSS hover tooltip — no JS, no layout cost.
+                      data-note={a.note || undefined}
+                      aria-expanded={a.note ? open : undefined}
+                      onClick={() => a.note && setOpenNote(open ? null : key)}
+                    >
+                      {a.word}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Pinned explanation — at most one, and only when asked for, so
+                every suggestion keeps the same resting height. */}
+            {pinned?.note && (
+              <p className="upgrade-note">
+                <strong>{pinned.word}</strong> — {pinned.note}
+              </p>
+            )}
+          </div>
+        );
+      })}
+      {refining && <p className="upgrade-status">{t("learning.suggestRefining")}</p>}
+    </div>
+  );
+}
+
 export function Learning() {
-  const { config, patch } = useConfig();
-  const toast = useToast();
   const { t, i18n } = useTranslation();
 
   const [wod, setWod] = useState<WordOfDay | null>(null);
@@ -185,9 +300,11 @@ export function Learning() {
   const [days, setDays] = useState<number>(30);
   const [analysis, setAnalysis] = useState<LearningAnalysis | null>(null);
   const [suggestions, setSuggestions] = useState<LearningSuggestions | null>(null);
-  // Words added to the vocabulary in this session — marks the chip "added"
-  // immediately, even before the config round-trip lands.
-  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [refining, setRefining] = useState(false);
+  // Fillers Echo actually stripped. Their own counter, because by the time a
+  // transcript reaches the history they are *gone* from it — counting the
+  // history could never surface them.
+  const [stripped, setStripped] = useState<WordFreq[]>([]);
 
   // Word of the day + XP state: range-independent, but BOTH change the moment
   // a dictation uses a taught word — refresh on the reward event (and on
@@ -210,12 +327,13 @@ export function Learning() {
     learningLeaderboard().then(setLb).catch(() => setLb(null));
   }, []);
 
-  // Analysis + suggestions follow the range switcher; both are 100% local
-  // IPC (never network), so firing them together is cheap. Live-refresh when
-  // a dictation lands, same pattern as History.
+  // The fast path: analysis, the curated local suggestions and the strip
+  // counters are ALL pure local IPC (never network), so they can safely follow
+  // every dictation and every range switch.
   const refresh = useCallback((d: number) => {
     learningAnalysis(d).then(setAnalysis).catch(() => {});
     learningSuggestions(d).then(setSuggestions).catch(() => {});
+    fillerRemovedCounts(d).then(setStripped).catch(() => {});
   }, []);
   useEffect(() => refresh(days), [days, refresh]);
   useEffect(() => {
@@ -225,54 +343,26 @@ export function Learning() {
     };
   }, [days, refresh]);
 
-  const inVocab = useCallback(
-    (word: string) => {
-      const canon = word.trim().toLowerCase();
-      return (
-        added.has(canon) ||
-        (config?.vocabulary ?? []).some((e) => e.write_as.trim().toLowerCase() === canon)
-      );
-    },
-    [added, config],
-  );
-
-  // §5 mechanism, verbatim: reuse the Dictionary persist path via patch().
-  // ONLY distinctive/rare words land here — synonym upgrades stay advisory
-  // (a VocabEntry would let apply_vocab_replace rewrite every occurrence).
-  const addToVocabulary = (word: string) => {
-    if (!config) return;
-    const canon = word.trim().toLowerCase();
-    if (!canon || config.vocabulary.some((e) => e.write_as.trim().toLowerCase() === canon)) return; // dedupe
-    patch({
-      vocabulary: [
-        ...config.vocabulary,
-        { sounds_like: word, write_as: word, aliases: [], category: "Other" },
-      ],
-    })
-      .then(() => {
-        setAdded((prev) => new Set(prev).add(canon));
-        toast(t("learning.addedToVocab"), "success");
+  // The slow path, fenced off from the paint: the server curates the same words
+  // with an LLM. This used to run INSIDE the suggestions command, so the coach
+  // sat empty behind a network round trip (30 s budget) — and re-ran it on every
+  // single dictation. It now follows the range only, never the history, and it
+  // upgrades a list that is already on screen.
+  useEffect(() => {
+    let alive = true;
+    setRefining(true);
+    learningSuggestionsLlm(days)
+      .then((s) => {
+        if (alive && s.source === "llm" && s.suggestions.length > 0) setSuggestions(s);
       })
-      .catch(() => {});
-  };
-
-  // Distinctive/rare words: recurring content words that are NOT weak, filler,
-  // overused or upgrade candidates — the user's own names/jargon Echo should
-  // learn to spell (§5's non-destructive integration). Rarest first.
-  const distinctive = useMemo<WordFreq[]>(() => {
-    if (!analysis) return [];
-    const excluded = new Set<string>();
-    for (const f of analysis.filler_counts) excluded.add(f.word.toLowerCase());
-    for (const w of analysis.weak_words) excluded.add(w.word.toLowerCase());
-    for (const o of analysis.overused_words) excluded.add(o.word.toLowerCase());
-    for (const s of suggestions?.suggestions ?? []) excluded.add(s.word.toLowerCase());
-    return analysis.top_words
-      .filter((w) => w.word.length >= 5 && w.count >= 2 && !excluded.has(w.word.toLowerCase()))
-      .sort((a, b) => a.count - b.count || b.word.length - a.word.length)
-      .slice(0, 12);
-  }, [analysis, suggestions]);
-
-  if (!config) return null;
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setRefining(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [days]);
 
   const hasData = analysis !== null && analysis.total_words > 0;
   const enoughData = analysis !== null && analysis.total_words >= MIN_WORDS;
@@ -287,11 +377,15 @@ export function Learning() {
           ? t("learning.ttrMid")
           : t("learning.ttrLow");
 
-  const fillerTotal = analysis
-    ? analysis.filler_counts.reduce((sum, f) => sum + f.count, 0)
-    : 0;
+  // Two different truths, deliberately kept apart:
+  //   • stripped — hesitations ("ähm", "äh", "hmm") Echo DELETED for you.
+  //   • kept     — discourse crutches ("also", "quasi") it leaves standing,
+  //                because cutting those would change what you actually said.
+  const strippedTotal = useMemo(() => stripped.reduce((n, f) => n + f.count, 0), [stripped]);
+  const kept = useMemo(() => analysis?.filler_counts ?? [], [analysis]);
+  const keptTotal = useMemo(() => kept.reduce((n, f) => n + f.count, 0), [kept]);
   const fillerRate =
-    analysis && analysis.total_words > 0 ? (fillerTotal / analysis.total_words) * 100 : 0;
+    analysis && analysis.total_words > 0 ? (keptTotal / analysis.total_words) * 100 : 0;
 
   const sourceBadge = suggestions && (
     <span className={`upgrade-source source-${suggestions.source}`}>
@@ -307,74 +401,70 @@ export function Learning() {
       {xp && <XpCard xp={xp} />}
       {wod && <WordOfDayCard wod={wod} />}
 
-      {((xp?.events.length ?? 0) > 0 || (lb?.available && (lb.week?.length ?? 0) > 0)) && (
-        <div className="chart-grid-2" style={{ marginBottom: 16 }}>
-          {/* Achievements feed — the last rewarded words */}
-          {xp && xp.events.length > 0 && (
-            <div className="card" style={{ marginBottom: 0 }}>
-              <div className="chart-head">
-                <div>
-                  <div className="chart-title">{t("learning.feedTitle")}</div>
-                  <div className="chart-sub">{t("learning.feedSub")}</div>
-                </div>
-              </div>
-              <div className="xp-feed">
-                {xp.events.slice(0, 6).map((e) => (
-                  <div key={`${e.day}-${e.kind}-${e.word}`} className="xp-feed-row">
-                    <span className="xp-feed-icon">
-                      <TrophyIcon />
-                    </span>
-                    <span className="xp-feed-word">{e.word}</span>
-                    <span className="xp-feed-kind">
-                      {t(e.kind === "word_of_day" ? "learning.kindWod" : "learning.kindCoach")}
-                    </span>
-                    <span className="xp-feed-xp">+{e.xp}</span>
-                    <span className="xp-feed-date">
-                      {new Date(e.ts * 1000).toLocaleDateString(i18n.language, {
-                        day: "numeric",
-                        month: "numeric",
-                      })}
-                    </span>
-                  </div>
-                ))}
-              </div>
+      {/* Achievements — its own full-width box now. It used to share a
+          two-column grid with the leaderboard, which squeezed the rows until the
+          words were cut off mid-ellipsis. */}
+      {xp && xp.events.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-head">
+            <div>
+              <div className="chart-title">{t("learning.feedTitle")}</div>
+              <div className="chart-sub">{t("learning.feedSub")}</div>
             </div>
-          )}
+          </div>
+          <div className="xp-feed">
+            {xp.events.slice(0, 6).map((e) => (
+              <div key={`${e.day}-${e.kind}-${e.word}`} className="xp-feed-row">
+                <span className="xp-feed-icon">
+                  <TrophyIcon />
+                </span>
+                <span className="xp-feed-word">{e.word}</span>
+                <span className="xp-feed-kind">
+                  {t(e.kind === "word_of_day" ? "learning.kindWod" : "learning.kindCoach")}
+                </span>
+                <span className="xp-feed-xp">+{e.xp}</span>
+                <span className="xp-feed-date">
+                  {new Date(e.ts * 1000).toLocaleDateString(i18n.language, {
+                    day: "numeric",
+                    month: "numeric",
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-          {/* Community leaderboard — most vocabulary XP this week */}
-          {lb?.available && (lb.week?.length ?? 0) > 0 && (
-            <div className="card" style={{ marginBottom: 0 }}>
-              <div className="chart-head">
-                <div>
-                  <div className="chart-title">{t("learning.lbTitle")}</div>
-                  <div className="chart-sub">{t("learning.lbSub")}</div>
-                </div>
-              </div>
-              <div className="xp-feed">
-                {(lb.week ?? []).slice(0, 5).map((row) => (
-                  <div key={row.rank} className={`xp-feed-row${row.me ? " me" : ""}`}>
-                    <span className="lb-rank">{row.rank}</span>
-                    <span className="xp-feed-word">
-                      {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
-                    </span>
-                    <span className="xp-feed-kind">
-                      {t("learning.lbWords", { count: row.words })}
-                    </span>
-                    <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
-                  </div>
-                ))}
-                {lb.me?.rank_week != null && !(lb.week ?? []).slice(0, 5).some((r) => r.me) && (
-                  <div className="xp-feed-row me">
-                    <span className="lb-rank">{lb.me.rank_week}</span>
-                    <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
-                    <span className="xp-feed-xp">
-                      {(xp?.xp_week ?? 0).toLocaleString(i18n.language)} XP
-                    </span>
-                  </div>
-                )}
-              </div>
+      {/* Leaderboard — likewise its own box, so names and scores fit. */}
+      {lb?.available && (lb.week?.length ?? 0) > 0 && (
+        <div className="chart-card">
+          <div className="chart-head">
+            <div>
+              <div className="chart-title">{t("learning.lbTitle")}</div>
+              <div className="chart-sub">{t("learning.lbSub")}</div>
             </div>
-          )}
+          </div>
+          <div className="xp-feed">
+            {(lb.week ?? []).slice(0, 5).map((row) => (
+              <div key={row.rank} className={`xp-feed-row${row.me ? " me" : ""}`}>
+                <span className="lb-rank">{row.rank}</span>
+                <span className="xp-feed-word">
+                  {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
+                </span>
+                <span className="xp-feed-kind">{t("learning.lbWords", { count: row.words })}</span>
+                <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
+              </div>
+            ))}
+            {lb.me?.rank_week != null && !(lb.week ?? []).slice(0, 5).some((r) => r.me) && (
+              <div className="xp-feed-row me">
+                <span className="lb-rank">{lb.me.rank_week}</span>
+                <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
+                <span className="xp-feed-xp">
+                  {(xp?.xp_week ?? 0).toLocaleString(i18n.language)} XP
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -394,70 +484,36 @@ export function Learning() {
         <div className="empty">{t("learning.empty")}</div>
       ) : analysis === null ? null : (
         <>
-          <div className="chart-grid-2">
-            {/* Vocabulary richness */}
-            <div className="card" style={{ marginBottom: 0 }}>
-              <div className="chart-head">
-                <div>
-                  <div className="chart-title">{t("learning.vocabRichness")}</div>
-                  <div className="chart-sub">
-                    {t("learning.subtitle")}
-                  </div>
-                </div>
-              </div>
-              <div className="metric-row">
-                <div className="label">{t("learning.uniqueWords")}</div>
-                <div className="value">{analysis.unique_words.toLocaleString()}</div>
-              </div>
-              <div className="metric-row">
-                <div>
-                  <div className="label">{t("learning.typeTokenRatio")}</div>
-                  <div className="hint">{t("learning.ttrHint")}</div>
-                </div>
-                <div className="value">
-                  {ttrPct.toFixed(0)}%{enoughData ? ` — ${ttrQuality}` : ""}
-                </div>
-              </div>
-              <div className="metric-row">
-                <div className="label">{t("learning.avgSentence")}</div>
-                <div className="value">{analysis.avg_sentence_length.toFixed(1)}</div>
+          {/* Vocabulary richness */}
+          <div className="card">
+            <div className="chart-head">
+              <div>
+                <div className="chart-title">{t("learning.vocabRichness")}</div>
+                <div className="chart-sub">{t("learning.subtitle")}</div>
               </div>
             </div>
-
-            {/* Filler words */}
-            <div className="chart-card" style={{ marginBottom: 0 }}>
-              <div className="chart-head">
-                <div>
-                  <div className="chart-title">{t("learning.fillerTitle")}</div>
-                  <div className="chart-sub">{t("learning.fillerSub")}</div>
-                </div>
-                {analysis.filler_counts.length > 0 && (
-                  <span className="filler-rate">
-                    {t("learning.fillerRate")} {fillerRate.toFixed(1)}%
-                  </span>
-                )}
+            <div className="metric-row">
+              <div className="label">{t("learning.uniqueWords")}</div>
+              <div className="value">{analysis.unique_words.toLocaleString()}</div>
+            </div>
+            <div className="metric-row">
+              <div>
+                <div className="label">{t("learning.typeTokenRatio")}</div>
+                <div className="hint">{t("learning.ttrHint")}</div>
               </div>
-              {analysis.filler_counts.length > 0 ? (
-                <div className="chart-wrap">
-                  <BarChart
-                    data={analysis.filler_counts.map((f) => ({ label: f.word, value: f.count }))}
-                    horizontal
-                    maxBars={8}
-                  />
-                </div>
-              ) : (
-                <div className="chip-row">
-                  <span className="ok-chip">
-                    <CheckIcon />
-                    {t("learning.fillerNone")}
-                  </span>
-                </div>
-              )}
+              <div className="value">
+                {ttrPct.toFixed(0)}%{enoughData ? ` — ${ttrQuality}` : ""}
+              </div>
+            </div>
+            <div className="metric-row">
+              <div className="label">{t("learning.avgSentence")}</div>
+              <div className="value">{analysis.avg_sentence_length.toFixed(1)}</div>
             </div>
           </div>
 
-          {/* Most used words — prominent, with the distinctive-word →
-              vocabulary hand-off (§5). */}
+          {/* Most-used words — a plain top-ten ranking with tallies, and nothing
+              else. No word cloud, and no "add to vocabulary" hand-off: these are
+              your everyday words, not terms Echo needs taught. */}
           <div className="chart-card">
             <div className="chart-head">
               <div>
@@ -466,40 +522,73 @@ export function Learning() {
               </div>
             </div>
             {analysis.top_words.length > 0 ? (
-              <WordCloud words={analysis.top_words} max={40} />
+              <RankList items={analysis.top_words} tone="accent" columns={2} />
             ) : (
               <div className="empty">{t("learning.needMoreData")}</div>
             )}
-            {distinctive.length > 0 && (
-              <>
-                <div className="wod-synonyms-label" style={{ marginTop: 16 }}>
-                  {t("learning.distinctiveTitle")}
+          </div>
+
+          {/* Filler words — its own big box, and two honest halves. */}
+          <div className="chart-card">
+            <div className="chart-head">
+              <div>
+                <div className="chart-title">{t("learning.fillerTitle")}</div>
+                <div className="chart-sub">{t("learning.fillerSub")}</div>
+              </div>
+              {keptTotal > 0 && (
+                <span className="filler-rate">
+                  {t("learning.fillerRate")} {fillerRate.toFixed(1)}%
+                </span>
+              )}
+            </div>
+
+            <div className="filler-split">
+              {/* What Echo threw out for you. */}
+              <div className="filler-half">
+                <div className="filler-half-head">
+                  <span className="filler-half-title">{t("learning.fillerRemovedTitle")}</span>
+                  {strippedTotal > 0 && (
+                    <span className="filler-total">
+                      {t("learning.fillerRemovedTotal", { count: strippedTotal })}
+                    </span>
+                  )}
                 </div>
-                <p className="chart-sub" style={{ margin: "4px 0 10px" }}>
-                  {t("learning.distinctiveSub")}
-                </p>
-                <div className="chip-row">
-                  {distinctive.map((w) => {
-                    const isIn = inVocab(w.word);
-                    return (
-                      <span key={w.word} className="filler-chip">
-                        {w.word}
-                        <span className="count">{w.count}×</span>
-                        <button
-                          className={`upgrade-add${isIn ? " added" : ""}`}
-                          disabled={isIn}
-                          onClick={() => addToVocabulary(w.word)}
-                          title={t(isIn ? "learning.addedToVocab" : "learning.addToVocab")}
-                        >
-                          {isIn ? <CheckIcon /> : <PlusIcon />}
-                          {t(isIn ? "learning.addedToVocab" : "learning.addToVocab")}
-                        </button>
-                      </span>
-                    );
-                  })}
+                <p className="filler-half-sub">{t("learning.fillerRemovedSub")}</p>
+                {stripped.length > 0 ? (
+                  <RankList items={stripped} tone="accent" />
+                ) : (
+                  <div className="chip-row">
+                    <span className="ok-chip">
+                      <CheckIcon />
+                      {t("learning.fillerRemovedNone")}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* What it deliberately left standing. */}
+              <div className="filler-half">
+                <div className="filler-half-head">
+                  <span className="filler-half-title">{t("learning.fillerKeptTitle")}</span>
+                  {keptTotal > 0 && (
+                    <span className="filler-total">
+                      {t("learning.fillerKeptTotal", { count: keptTotal })}
+                    </span>
+                  )}
                 </div>
-              </>
-            )}
+                <p className="filler-half-sub">{t("learning.fillerKeptSub")}</p>
+                {kept.length > 0 ? (
+                  <RankList items={kept} tone="warn" />
+                ) : (
+                  <div className="chip-row">
+                    <span className="ok-chip">
+                      <CheckIcon />
+                      {t("learning.fillerNone")}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Upgrade coach — advisory only, never writes to the vocabulary
@@ -508,31 +597,15 @@ export function Learning() {
             <div className="chart-head">
               <div>
                 <div className="chart-title">{t("learning.upgradeTitle")}</div>
-                <div className="chart-sub">{t("learning.upgradeSub")}</div>
+                <div className="chart-sub">{t("learning.upgradeHint")}</div>
               </div>
               {sourceBadge}
             </div>
-            {suggestions && suggestions.suggestions.length > 0 ? (
-              <div className="upgrade-list">
-                {suggestions.suggestions.map((s) => (
-                  <div key={s.word} className="upgrade-row">
-                    <span className="upgrade-word">{s.word}</span>
-                    <span className="upgrade-count">{s.count}×</span>
-                    <ArrowIcon />
-                    <div className="upgrade-alts">
-                      {s.alternatives.map((a) => (
-                        <span key={a.word} className="alt-item">
-                          <span className="alt-chip">{a.word}</span>
-                          {a.note && <span className="alt-note">{a.note}</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty">{t("learning.needMoreData")}</div>
-            )}
+            <UpgradeCoach
+              suggestions={suggestions}
+              loading={suggestions === null}
+              refining={refining}
+            />
           </div>
 
           {/* Overused words */}
@@ -545,13 +618,9 @@ export function Learning() {
             {analysis.overused_words.length > 0 ? (
               <div className="chip-row">
                 {analysis.overused_words.map((o) => (
-                  <span
-                    key={o.word}
-                    className="warn-chip"
-                    title={`×${o.ratio.toFixed(1)}`}
-                  >
+                  <span key={o.word} className="warn-chip" title={`×${o.ratio.toFixed(1)}`}>
                     {o.word}
-                    <span className="count">{o.count}×</span>
+                    <span className="count">{o.count}&times;</span>
                   </span>
                 ))}
               </div>

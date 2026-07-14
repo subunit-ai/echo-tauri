@@ -371,6 +371,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
                 stt_ms: t_total.elapsed().as_millis() as u64,
                 server_ms: 0,
             },
+            fillers_removed: fin.fillers_removed,
         };
     } else {
         // ── Classic batch path ──────────────────────────────────────────────
@@ -518,6 +519,7 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         cleaned_text: None,
         cleanup_status: None,
         timings: result.timings,
+        fillers_removed: result.fillers_removed,
     };
 
     // The recording had audio but transcribed to nothing.
@@ -662,6 +664,13 @@ pub fn do_transcribe(app: &AppHandle) -> Result<TranscriptResult, EngineError> {
         crate::store::add_history(&entry, history_size);
         use tauri::Emitter;
         let _ = app.emit("echo://history-changed", ());
+        // Filler-word counter (TJ: the "äh/ähm/hmm" stats are otherwise blind —
+        // strip_fillers runs BEFORE storage, so this is the only place the
+        // removed words are ever captured). Genuinely once per dictation, right
+        // where the finished dictation itself gets persisted.
+        if !result.fillers_removed.is_empty() {
+            crate::store::filler_removed_add(&result.fillers_removed, now as i64);
+        }
     }
     // Gamification: recognize taught vocabulary (word of the day, coach words)
     // in the delivered text and celebrate it — XP, event, native notification.
@@ -1024,6 +1033,19 @@ pub fn activity_overview(state: State<'_, AppState>) -> serde_json::Value {
     })
 }
 
+/// Which fillers ("äh"/"ähm"/"hmm") got stripped before storage, over the last
+/// `days` (default 30) — the counter `strip_fillers` itself can't surface,
+/// since it runs BEFORE a dictation ever reaches history (the History-driven
+/// stats are otherwise blind to fillers: TJ measured only 2 hits across 450
+/// real dictations). 100% local, reads `store::filler_removed_add`'s bookings.
+#[tauri::command]
+pub fn filler_removed_counts(days: Option<u32>) -> Vec<serde_json::Value> {
+    crate::store::filler_removed_since(days.unwrap_or(30))
+        .into_iter()
+        .map(|(word, count)| serde_json::json!({ "word": word, "count": count }))
+        .collect()
+}
+
 /// Lexical-quality analysis over the last `days` (default 30) of history.
 /// 100% local — this command NEVER touches the network (the coach can't hang).
 #[tauri::command]
@@ -1119,29 +1141,81 @@ fn word_upgrade_curate(
     )
 }
 
-/// Word-upgrade suggestions for the Learning coach. Default (and guaranteed
-/// fallback) is the curated local UPGRADE_MAP; the `/v1/word-upgrade` LLM lane
-/// only ever *augments* it when the subscription mode is active and the server
-/// answers with a usable shape — any failure silently falls back to local.
+/// Word-upgrade suggestions for the Learning coach — the LOCAL, curated
+/// UPGRADE_MAP only. Guaranteed instant, guaranteed zero network (mirrors
+/// `learning_analysis`'s "can't hang" contract). This used to also run the
+/// `/v1/word-upgrade` LLM augmentation inline — a blocking 30 s-budget network
+/// call — and the Wortschatz tab fired it on EVERY history change and every
+/// days-window switch, which is exactly why "Verbesserungsvorschläge" felt
+/// slow/missing (TJ 2026-07-14). The LLM lane now lives in
+/// [`learning_suggestions_llm`], called separately and cached.
+#[tauri::command]
+pub fn learning_suggestions(days: Option<u32>) -> serde_json::Value {
+    let texts = crate::store::history_texts_since(days.unwrap_or(30));
+    let local = crate::analysis::local_suggestions(&texts);
+    // Remember what the coach actually showed — only taught words can earn XP.
+    let shown: Vec<String> = local
+        .iter()
+        .flat_map(|s| s.alternatives.iter().map(|a| a.word.clone()))
+        .collect();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    crate::store::suggested_words_add(&shown, "local", now);
+    serde_json::json!({ "source": "local", "suggestions": local })
+}
+
+/// In-memory cache for the LLM word-upgrade augmentation below, keyed on
+/// `"{language}|{comma-joined local words}"`. The local word set barely moves
+/// between two consecutive dictations, so caching on it is what actually fixes
+/// the slowness: the LLM only reruns when the underlying vocabulary genuinely
+/// changes, not on every `onHistoryChanged`/days-switch the tab used to fire.
+static LLM_SUGGESTIONS_CACHE: once_cell::sync::Lazy<
+    Mutex<std::collections::HashMap<String, Vec<crate::analysis::Suggestion>>>,
+> = once_cell::sync::Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
+
+/// LLM augmentation of the coach's word-upgrade suggestions — the ONLY command
+/// that ever calls `/v1/word-upgrade` (a blocking network call, 30 s budget) and
+/// therefore the ONLY one that can be slow. Cache-first (see
+/// `LLM_SUGGESTIONS_CACHE`): a hit returns immediately with zero network. On a
+/// miss, subscription mode off, or ANY failure/timeout, falls back to the same
+/// local suggestions `learning_suggestions` returns — never an error outward.
 ///
-/// `(async)`: the LLM augmentation is a blocking network call (30 s budget) —
-/// a plain sync command would run it on the MAIN thread and freeze the whole
-/// Wortschatz UI while it waits (Tauri v2: sync commands run on the main
-/// thread). `(async)` spawns it on the runtime's pool so the tab stays fluid.
+/// `(async)`: the (possible) LLM call is blocking — a plain sync command would
+/// run it on the MAIN thread and freeze the whole Wortschatz UI while it waits
+/// (Tauri v2: sync commands run on the main thread). `(async)` spawns it on the
+/// runtime's pool so the tab stays fluid even on a cache miss.
 #[tauri::command(async)]
-pub fn learning_suggestions(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+pub fn learning_suggestions_llm(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
     let texts = crate::store::history_texts_since(days.unwrap_or(30));
     let local = crate::analysis::local_suggestions(&texts);
     let cfg = state.config.lock().clone();
-    let (source, suggestions) = if cfg.mode == "subunit" {
-        match word_upgrade_curate(&cfg, &local) {
-            Some(s) => ("llm", s),
-            None => ("local", local),
+    let (source, suggestions) = if cfg.mode == "subunit" && !local.is_empty() {
+        let key = format!(
+            "{}|{}",
+            cfg.language,
+            local.iter().map(|s| s.word.as_str()).collect::<Vec<_>>().join(",")
+        );
+        let cached = LLM_SUGGESTIONS_CACHE.lock().get(&key).cloned();
+        if let Some(hit) = cached {
+            ("llm", hit)
+        } else {
+            match word_upgrade_curate(&cfg, &local) {
+                Some(s) => {
+                    LLM_SUGGESTIONS_CACHE.lock().insert(key, s.clone());
+                    ("llm", s)
+                }
+                None => ("local", local),
+            }
         }
     } else {
         ("local", local)
     };
     // Remember what the coach actually showed — only taught words can earn XP.
+    // Runs for BOTH branches (local fallback incl.) — INSERT OR IGNORE, so a
+    // word already remembered from the fast `learning_suggestions` path is a
+    // harmless no-op here.
     let shown: Vec<String> = suggestions
         .iter()
         .flat_map(|s| s.alternatives.iter().map(|a| a.word.clone()))
@@ -1875,6 +1949,11 @@ pub fn stop_meeting_recording(app: AppHandle) -> Result<String, String> {
             cfg.history_size.max(0) as usize,
         );
         let _ = app.emit("echo://history-changed", ());
+        // A separate finished recording from `do_transcribe`'s (a meeting, not a
+        // dictation) — its own fillers, so this is not a double-count of anything.
+        if !result.fillers_removed.is_empty() {
+            crate::store::filler_removed_add(&result.fillers_removed, now as i64);
+        }
     }
     log::info!("meeting recording stopped + transcribed ({duration_s:.0}s)");
     Ok(result.text)

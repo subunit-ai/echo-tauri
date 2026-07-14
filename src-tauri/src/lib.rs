@@ -140,6 +140,8 @@ pub fn run() {
             commands::activity_overview,
             commands::learning_analysis,
             commands::learning_suggestions,
+            commands::learning_suggestions_llm,
+            commands::filler_removed_counts,
             commands::goals_get,
             commands::goals_set,
             commands::activity_export,

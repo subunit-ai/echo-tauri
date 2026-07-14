@@ -48,6 +48,15 @@ pub struct TranscriptResult {
     /// assembled in `do_transcribe` and logged + stored with the history entry —
     /// the measurement system we iterate latency work against.
     pub timings: Timings,
+    /// Fillers ("äh"/"ähm"/"hmm") the deterministic pass stripped from the
+    /// PRIMARY `text` before it ever reaches history — canonically bucketed,
+    /// counted. Filler removal happens before storage, so this is the only
+    /// place the removed words are ever visible; the caller persists it
+    /// (`store::filler_removed_add`). NEVER also counted from `cleaned_text`
+    /// (same underlying speech — that would double the count). `#[serde(default)]`
+    /// so an old/other caller building this struct from JSON never breaks.
+    #[serde(default)]
+    pub fillers_removed: Vec<(String, i64)>,
 }
 
 /// Per-phase latency of one transcription, in milliseconds.
