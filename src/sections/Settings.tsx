@@ -505,7 +505,7 @@ function OrbConfigurator({
             ‹
           </button>
         )}
-        <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} replayToken={replayToken} />
+        <OrbCanvas visual={visual} state={previewState} demo={demo} onPhase={setDemoPhase} size={px} replayToken={replayToken} demoText={t("settings.pillWordsDemo")} />
         {!pinStyle && (
           <button className="oc-arrow" onClick={() => cycleStyle(1)} aria-label={t("settings.orbStyleNext")} title={styleLabel}>
             ›
@@ -1246,7 +1246,9 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
               <Row name={t("settings.pillVisual")} hint={t("settings.pillVisualHint")}>
                 <Sel
                   value={
-                    ["laufband", "zentrum", "welle", "matrix"].includes(c.orb_pill_visual)
+                    ["laufband", "zentrum", "welle", "matrix", "worte", "funken", "puls", "helix"].includes(
+                      c.orb_pill_visual,
+                    )
                       ? c.orb_pill_visual
                       : "standard"
                   }
@@ -1257,6 +1259,10 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                     ["zentrum", t("settings.pillVisualZentrum")],
                     ["welle", t("settings.pillVisualWelle")],
                     ["matrix", t("settings.pillVisualMatrix")],
+                    ["worte", t("settings.pillVisualWorte")],
+                    ["funken", t("settings.pillVisualFunken")],
+                    ["puls", t("settings.pillVisualPuls")],
+                    ["helix", t("settings.pillVisualHelix")],
                   ]}
                 />
               </Row>

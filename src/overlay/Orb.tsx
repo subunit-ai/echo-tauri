@@ -216,6 +216,7 @@ export function Orb() {
   const pillReaction = useRef("dynamik");
   const pillVisual = useRef("standard");
   const pillGlow = useRef("aus");
+  const partial = useRef(""); // live stable transcript for the "Worte" visual
   const [quick, setQuick] = useState<OrbQuick | null>(null);
   const [hover, setHover] = useState(false);
   // Which single satellite is expanded (null = just the icon chips). Hovering a
@@ -249,7 +250,16 @@ export function Orb() {
       .catch(() => {});
     orbQuick().then(setQuick).catch(() => {});
     const un = onState((p) => {
+      // A fresh recording session starts with a clean live transcript — the
+      // "Worte" pill visual must never replay the previous dictation's words.
+      if (p.state === "recording" && state.current !== "recording") partial.current = "";
       state.current = p.state;
+    });
+    // Live stable partial from the streaming dictation (WS /v1/dictate) —
+    // feeds the ★ "Worte" pill visual. Batch mode never emits this; the
+    // visual then falls back to its voice wave alone.
+    const unPartial = listen<string>("echo://stream-partial", (e) => {
+      partial.current = typeof e.payload === "string" ? e.payload : "";
     });
     // Live config updates from Settings (set_config emits this) — restyle without
     // reload, and refresh the satellite quick-state so a mode/language/cleanup
@@ -325,6 +335,7 @@ export function Orb() {
     });
     return () => {
       un.then((f) => f());
+      unPartial.then((f) => f());
       unCfg.then((f) => f());
       unHover.then((f) => f());
       unGenie.then((f) => f());
@@ -402,6 +413,7 @@ export function Orb() {
         level.current,
         anim,
         bandsData.current,
+        partial.current,
       );
       raf = requestAnimationFrame(loop);
     };

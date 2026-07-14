@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.132",
+    date: "2026-07-14",
+    title: {
+      de: "Die Pille zeigt deine Wörter — und leuchtet wie Siri",
+      en: "The pill shows your words — and glows like Siri",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neuer Visualizer „Wörter“: Was du sprichst, fließt live als Text durch die Pille — wie ein Fließband.",
+        en: "New “Words” visualizer: what you speak flows live through the pill as text — like a conveyor.",
+      },
+      {
+        kind: "feature",
+        de: "Drei neue Stile: Funken (Silben sprühen glühende Funken), Puls (Sonar-Ringe aus der Mitte) und Helix (Doppelwelle, die sich mit deiner Stimme öffnet).",
+        en: "Three new styles: Sparks (syllables throw glowing embers), Pulse (sonar rings from the centre) and Helix (a double wave that opens with your voice).",
+      },
+      {
+        kind: "improvement",
+        de: "Siri-Beleuchtung neu: Der Rand der Pille leuchtet jetzt in wandernden Farben auf und strahlt nach innen — mit runden, morphenden Lichtern, die auf deine Stimme reagieren.",
+        en: "Siri illumination redone: the pill’s rim now lights up in traveling colors and radiates inward — with round, morphing lights reacting to your voice.",
+      },
+    ],
+  },
+  {
     version: "0.5.131",
     date: "2026-07-14",
     title: {
