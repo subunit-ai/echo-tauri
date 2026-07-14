@@ -1198,6 +1198,28 @@
           "tip": "Connect ideas explicitly: “because”, “yet”, “therefore” guide your audience."
         }
       }
+    },
+    "loop": {
+      "reportTitle": "Your Echo week",
+      "reportSub": "Week of {{date}}",
+      "reportXpLabel": "XP",
+      "reportFinds": "new finds",
+      "reportDismiss": "Dismiss",
+      "packTitle": "Your weekly pack",
+      "packWeek": "Week of {{date}}",
+      "packEmptyIntro": "Seven words, curated for how you speak — each with its meaning, an example and a personal reason it's for you. Have this week's pack put together.",
+      "packCurate": "Curate my pack",
+      "packCurating": "~40 seconds — your pack is being curated",
+      "packError": "Curation failed — your existing pack stays.",
+      "dueTitle": "Due for reinforcement",
+      "dueSub": "Use them in a real dictation — it earns XP and levels them up.",
+      "dueLastUsed": "last used {{when}}",
+      "ownTitle": "Your word ownership",
+      "ownSub": "How firmly the taught words are already yours.",
+      "ownLegend": "Used: spoken at least once in a real dictation. Fortified: repeated across several days. Mastered: firmly anchored over many days.",
+      "stageUsed": "Used",
+      "stageFortified": "Fortified",
+      "stageMastered": "Mastered"
     }
   },
   "vp": {

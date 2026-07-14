@@ -2183,3 +2183,341 @@
   --sev-amber-bg: rgba(255, 255, 255, 0.07);
   --sev-amber-line: rgba(255, 255, 255, 0.16);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Lern-Loop (Welle 3) — the coach that teaches: week-in-review, the weekly
+   pack, the reinforcement queue and the ownership overview. Every card reuses
+   the glass frame; the single accent is --cyan (auto-greyed in the black
+   theme). The three ownership stages ride --emerald / --violet / --cyan, all of
+   which tokens.css already desaturates for [data-theme="black"], so the stage
+   brightness ramp (mastered brightest) stays zero-hue for free.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.loop-report,
+.loop-pack,
+.loop-due,
+.loop-own {
+  margin-bottom: 16px;
+}
+
+/* ---- Week-in-review ---- */
+.loop-report-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background: var(--glass2);
+  color: var(--ink3);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+.loop-report-close:hover {
+  color: var(--ink);
+  border-color: var(--line2);
+}
+.loop-report-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink2);
+  margin-bottom: 14px;
+}
+.loop-report-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+}
+.loop-report-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.loop-report-numline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.loop-report-num {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--cyan-ink);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.loop-report-lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+/* Delta vs the prior week. Local up/down vars so the black theme greys the two
+   hues in one place (tokens.css leaves --ok / --red coloured), like .speech-delta. */
+.loop-report-delta {
+  --up: var(--ok);
+  --down: var(--red);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  align-self: center;
+}
+.loop-report-delta.up {
+  color: var(--up);
+}
+.loop-report-delta.down {
+  color: var(--down);
+}
+.loop-report-sub {
+  font-size: 11.5px;
+  color: var(--ink3);
+  margin-top: 14px;
+}
+
+/* ---- Weekly pack ---- */
+.loop-pack-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+.loop-pack-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink2);
+  max-width: 62ch;
+}
+.loop-pack-btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent);
+  border-radius: var(--r-sm);
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+.loop-pack-btn:hover {
+  background: color-mix(in srgb, var(--cyan) 20%, transparent);
+  border-color: color-mix(in srgb, var(--cyan) 55%, transparent);
+}
+.loop-pack-btn:active {
+  transform: scale(0.98);
+}
+.loop-pack-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.loop-pack-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line2);
+}
+.loop-pack-hint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+.loop-pack-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.loop-pack-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line2);
+}
+.loop-pack-row:first-child {
+  padding-top: 0;
+}
+.loop-pack-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.loop-pack-wordline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.loop-pack-word {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.loop-pack-meaning {
+  font-size: 13.5px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.loop-pack-example {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink2);
+  line-height: 1.5;
+}
+/* The personal "why" — an accent-bordered note so the reason it was picked for
+   THIS speaker reads as a highlighted aside, not just another metadata line. */
+.loop-pack-why {
+  font-size: 12.5px;
+  color: var(--ink2);
+  line-height: 1.5;
+  border-left: 2px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+  background: color-mix(in srgb, var(--cyan) 7%, transparent);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  padding: 8px 12px;
+  margin-top: 3px;
+}
+
+/* ---- Progress dots (how many distinct days a word has been used) ---- */
+.loop-dots {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.loop-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink3) 40%, transparent);
+}
+.loop-dot.on {
+  background: var(--cyan);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--cyan) 60%, transparent);
+}
+
+/* ---- Reinforcement queue ---- */
+.loop-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 40%, transparent);
+  border-radius: 999px;
+}
+.loop-due-list {
+  display: flex;
+  flex-direction: column;
+}
+.loop-due-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line2);
+  font-size: 13px;
+}
+.loop-due-row:last-child {
+  border-bottom: none;
+}
+.loop-due-word {
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.loop-due-ago {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--ink3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ---- Ownership stages (drives both the due-row chips and the stat counters).
+   Per-stage accent via a local --stage prop; all three source tokens are
+   already greyed for the black theme, so no override is needed here. ---- */
+.loop-stat--used,
+.loop-stage-chip.stage-used {
+  --stage: var(--emerald);
+}
+.loop-stat--fortified,
+.loop-stage-chip.stage-fortified {
+  --stage: var(--violet);
+}
+.loop-stat--mastered,
+.loop-stage-chip.stage-mastered {
+  --stage: var(--cyan);
+}
+.loop-stage-chip {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--stage);
+  background: color-mix(in srgb, var(--stage) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--stage) 42%, transparent);
+  border-radius: var(--r-chip);
+  padding: 2px 8px;
+}
+.loop-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.loop-stat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--rim);
+  padding: 9px 14px;
+}
+.loop-stat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--stage);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--stage) 60%, transparent);
+}
+.loop-stat-num {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.loop-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink2);
+}
+
+/* ---- Zero-hue black theme: grey the week-review delta hues (tokens.css leaves
+   --ok / --red coloured). Up = brightest (draws the eye), down = dimmer grey. ---- */
+:root[data-theme="black"] .loop-report-delta {
+  --up: #f0f0f2;
+  --down: #8a8a8d;
+}

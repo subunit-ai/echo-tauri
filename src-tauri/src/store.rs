@@ -163,7 +163,21 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             updated_at INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (account, day)
          );
-         CREATE INDEX IF NOT EXISTS idx_speech_daily_account ON speech_daily(account, day DESC);",
+         CREATE INDEX IF NOT EXISTS idx_speech_daily_account ON speech_daily(account, day DESC);
+         CREATE TABLE IF NOT EXISTS word_packs (
+            account    TEXT    NOT NULL,
+            week       TEXT    NOT NULL,
+            payload    TEXT    NOT NULL DEFAULT '{}',
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (account, week)
+         );
+         CREATE TABLE IF NOT EXISTS weekly_reports (
+            account    TEXT    NOT NULL,
+            week       TEXT    NOT NULL,
+            payload    TEXT    NOT NULL DEFAULT '{}',
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (account, week)
+         );",
     )?;
     // Migration (v0.5.80): note_folders became cloud-synced, gaining deleted +
     // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
@@ -1125,6 +1139,139 @@ pub fn learning_kind_count(account: &str, kind: &str, day: Option<&str>) -> i64 
             )
             .unwrap_or(0),
     }
+}
+
+// ---- Lern-Loop (Welle 3): ownership stages, word packs, weekly report ----
+// The XP ledger already holds ONE row per (account, day, kind, word) — so
+// distinct usage DAYS per taught word are readable straight from it, no new
+// write path. Stages/due-state are derived in the command layer.
+
+/// Per taught word (word_of_day + coach_word kinds) the account's usage
+/// footprint: (word, distinct usage DAYS, first day, last day). The ownership
+/// stage (used / fortified / mastered) and due-state are derived from this in
+/// the command layer.
+pub fn learning_word_usage(account: &str) -> Vec<(String, i64, String, String)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT word, COUNT(DISTINCT day), MIN(day), MAX(day)
+         FROM learning_events
+         WHERE account = ?1 AND kind IN ('word_of_day', 'coach_word')
+         GROUP BY word",
+    ) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+        ))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// XP earned in the half-open local-day window [from_day, to_day) — the weekly
+/// report's "this week vs. the week before" comparison (all kinds count).
+pub fn learning_xp_between(account: &str, from_day: &str, to_day: &str) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COALESCE(SUM(xp), 0) FROM learning_events
+         WHERE account = ?1 AND day >= ?2 AND day < ?3",
+        params![account, from_day, to_day],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// Count of NEW Wortdex finds whose first sighting (`first_ts`) falls in the
+/// half-open epoch range [from_ts, to_ts) — the weekly report's "new finds".
+pub fn word_finds_between(account: &str, from_ts: i64, to_ts: i64) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COUNT(*) FROM word_finds
+         WHERE account = ?1 AND first_ts >= ?2 AND first_ts < ?3",
+        params![account, from_ts, to_ts],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// Cached weekly word-pack payload for (account, week), if fetched already.
+pub fn word_pack_get(account: &str, week: &str) -> Option<String> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT payload FROM word_packs WHERE account = ?1 AND week = ?2",
+        params![account, week],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+/// Insert or overwrite the word-pack payload for (account, week).
+pub fn word_pack_upsert(account: &str, week: &str, payload: &str, created_at: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO word_packs (account, week, payload, created_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(account, week) DO UPDATE SET
+            payload = excluded.payload,
+            created_at = excluded.created_at",
+        params![account, week, payload, created_at],
+    );
+}
+
+/// All stored word-pack payloads for `account` (any week) — the fetch path
+/// mines their words into `known_words` so the server never re-teaches a word
+/// the user was already given.
+pub fn word_packs_payloads(account: &str) -> Vec<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) =
+        conn.prepare_cached("SELECT payload FROM word_packs WHERE account = ?1")
+    else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Newest weekly-report payload for `account` (highest week key), if any.
+pub fn weekly_report_latest(account: &str) -> Option<String> {
+    let guard = DB.lock();
+    let conn = guard.as_ref()?;
+    conn.query_row(
+        "SELECT payload FROM weekly_reports WHERE account = ?1
+         ORDER BY week DESC LIMIT 1",
+        params![account],
+        |r| r.get(0),
+    )
+    .ok()
+}
+
+/// Insert or overwrite the weekly-report payload for (account, week).
+pub fn weekly_report_upsert(account: &str, week: &str, payload: &str, created_at: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    let _ = conn.execute(
+        "INSERT INTO weekly_reports (account, week, payload, created_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(account, week) DO UPDATE SET
+            payload = excluded.payload,
+            created_at = excluded.created_at",
+        params![account, week, payload, created_at],
+    );
 }
 
 /// Earliest day with a daily_stats bucket for `account` — everything before it
@@ -2171,6 +2318,60 @@ mod tests {
         let (payv, verv, _) = speech_daily_get("em:sp", &today).unwrap();
         assert_eq!(verv, ver, "old-version row recomputed");
         assert_ne!(payv, "{}", "payload recomputed, not the stub");
+
+        // ── Lern-Loop (Welle 3) ─────────────────────────────────────────────
+        // Usage footprint per taught word: distinct DAYS + first/last, only the
+        // taught kinds (word_of_day/coach_word) — word_find must NOT count.
+        assert!(learning_award("em:ll", "2026-06-01", "word_of_day", "eloquenz", 50, 10));
+        assert!(learning_award("em:ll", "2026-06-03", "coach_word", "eloquenz", 20, 20));
+        assert!(learning_award("em:ll", "2026-06-10", "coach_word", "eloquenz", 20, 30));
+        assert!(!learning_award("em:ll", "2026-06-10", "coach_word", "eloquenz", 20, 31)); // same day → no new usage day
+        assert!(learning_award("em:ll", "2026-06-05", "coach_word", "prägnant", 20, 40));
+        assert!(learning_award("em:ll", "2026-06-06", "word_find", "diskrepanz", 10, 50)); // find kind → excluded
+        let usage = learning_word_usage("em:ll");
+        let elo = usage.iter().find(|(w, ..)| w == "eloquenz").expect("eloquenz");
+        assert_eq!(elo.1, 3); // distinct usage days: 06-01, 06-03, 06-10
+        assert_eq!(elo.2, "2026-06-01"); // MIN(day)
+        assert_eq!(elo.3, "2026-06-10"); // MAX(day)
+        assert!(usage.iter().any(|(w, ..)| w == "prägnant"));
+        assert!(!usage.iter().any(|(w, ..)| w == "diskrepanz")); // word_find excluded
+        assert!(learning_word_usage("em:llx").is_empty()); // account isolation
+
+        // XP window [from, to): half-open on the local day.
+        assert_eq!(learning_xp_between("em:ll", "2026-06-01", "2026-06-06"), 90); // 50+20+20
+        assert_eq!(learning_xp_between("em:ll", "2026-06-06", "2026-06-11"), 30); // 10(find)+20
+        assert_eq!(learning_xp_between("em:ll", "2026-06-01", "2026-06-01"), 0); // empty range
+        assert_eq!(learning_xp_between("em:ll", "2026-07-01", "2026-07-08"), 0);
+
+        // New finds by first_ts range (half-open). em:w has first_ts 1000/2000/3000.
+        assert_eq!(word_finds_between("em:w", 0, 2000), 1); // only 1000 (2000 excluded)
+        assert_eq!(word_finds_between("em:w", 1000, 3001), 3);
+        assert_eq!(word_finds_between("em:w", 3001, 9999), 0);
+        assert_eq!(word_finds_between("em:none", 0, i64::MAX), 0);
+
+        // Word packs: get/upsert, overwrite, week + account isolation, payload mining.
+        assert!(word_pack_get("em:ll", "2026-07-13").is_none());
+        word_pack_upsert("em:ll", "2026-07-13", r#"{"words":[{"word":"eloquenz"}]}"#, 100);
+        assert_eq!(
+            word_pack_get("em:ll", "2026-07-13").as_deref(),
+            Some(r#"{"words":[{"word":"eloquenz"}]}"#)
+        );
+        word_pack_upsert("em:ll", "2026-07-13", r#"{"words":[]}"#, 200); // overwrite
+        assert_eq!(word_pack_get("em:ll", "2026-07-13").as_deref(), Some(r#"{"words":[]}"#));
+        assert!(word_pack_get("em:ll", "2026-07-06").is_none()); // other week
+        assert!(word_pack_get("em:other", "2026-07-13").is_none()); // other account
+        word_pack_upsert("em:ll", "2026-07-06", r#"{"words":[{"word":"prägnant"}]}"#, 210);
+        assert_eq!(word_packs_payloads("em:ll").len(), 2); // both weeks, this account only
+        assert!(word_packs_payloads("em:other").is_empty());
+
+        // Weekly reports: latest = highest week key, overwrite, account isolation.
+        assert!(weekly_report_latest("em:ll").is_none());
+        weekly_report_upsert("em:ll", "2026-06-29", r#"{"xp":100}"#, 10);
+        weekly_report_upsert("em:ll", "2026-07-06", r#"{"xp":200}"#, 20);
+        assert_eq!(weekly_report_latest("em:ll").as_deref(), Some(r#"{"xp":200}"#)); // newest week
+        weekly_report_upsert("em:ll", "2026-07-06", r#"{"xp":250}"#, 30); // overwrite latest
+        assert_eq!(weekly_report_latest("em:ll").as_deref(), Some(r#"{"xp":250}"#));
+        assert!(weekly_report_latest("em:other").is_none()); // isolation
 
         let _ = std::fs::remove_file(&path);
     }

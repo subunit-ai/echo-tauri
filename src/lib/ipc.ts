@@ -771,3 +771,78 @@ export const speechProfile = (days = 30) =>
 /** The day-by-day score trend that feeds the per-dimension sparklines. */
 export const speechProfileTrend = (days = 30) =>
   invoke<SpeechTrend>("speech_profile_trend", { days });
+
+// ---- Lern-Loop (Welle 3): ownership levels, weekly pack, weekly report ------
+// The coach stops being a static readout and starts to *teach*: every word Echo
+// puts in front of you climbs through ownership levels as you actually use it in
+// real dictations (spaced repetition), a personalised 7-word pack is curated for
+// you each week, and a Monday week-in-review recaps the momentum. All server
+// truth — the UI only renders it.
+
+/** Ownership level of a taught word, earned by using it in real dictations:
+ *  used → fortified → mastered (higher = more firmly yours). */
+export type WordStage = "used" | "fortified" | "mastered";
+
+/** One taught word's ownership state. `use_days` is the number of DISTINCT days
+ *  it was spoken; `due` marks that its next spaced-repetition slot is open — the
+ *  word is waiting to be used again to level up. Dates are `YYYY-MM-DD`. */
+export interface WordProgress {
+  word: string;
+  stage: WordStage;
+  use_days: number;
+  first_day: string;
+  last_day: string;
+  due: boolean;
+}
+export interface WordsProgress {
+  /** Due words first, then the rest. */
+  words: WordProgress[];
+  due_count: number;
+}
+/** Ownership levels for every taught word (spaced repetition over real
+ *  dictations). Local truth; refreshes as dictations land. */
+export const wordsProgress = () =>
+  invoke<WordsProgress>("learning_words_progress");
+
+/** Where a weekly pack came from: `llm` = freshly curated, `none` = not curated
+ *  for this week yet, `error` = a fetch attempt failed (keep the cached pack). */
+export type WordPackSource = "llm" | "none" | "error";
+
+/** One curated pack word: the word, what it means, a worked example, and a
+ *  personal reason it was chosen for THIS speaker. `use_days` mirrors the
+ *  ownership counter so the pack can show progress dots. */
+export interface WordPackItem {
+  word: string;
+  meaning: string;
+  example: string;
+  why: string;
+  use_days: number;
+}
+export interface WordPack {
+  /** Monday of the pack's week (`YYYY-MM-DD`). */
+  week: string;
+  source: WordPackSource;
+  words: WordPackItem[];
+}
+/** This week's personalised 7-word pack. `source: "none"` = not curated yet
+ *  (offer the curate button). Instant/local read of the cached pack. */
+export const wordPackGet = () => invoke<WordPack>("word_pack_get");
+/** Curate this week's pack on the server with an LLM. SLOW — up to ~50 s — so
+ *  the caller shows a loading state with the "~40 seconds" hint. Resolves with
+ *  `source: "error"` on failure (toast + keep the cached pack). */
+export const wordPackFetch = () => invoke<WordPack>("word_pack_fetch");
+
+/** Last completed week's review. `week_prev` is that week's Monday; `xp_before`
+ *  is the XP total the week before it, so the card can show a delta. */
+export interface WeeklyReport {
+  week_prev: string;
+  xp: number;
+  xp_before: number;
+  finds: number;
+}
+/** The most recent weekly report, or null if none has been generated yet. */
+export const weeklyReportGet = () =>
+  invoke<WeeklyReport | null>("weekly_report_get");
+/** Fired Monday morning when a fresh weekly report is ready — update the card. */
+export const onWeeklyReport = (cb: (r: WeeklyReport) => void): Promise<UnlistenFn> =>
+  listen<WeeklyReport>("echo://weekly-report", (e) => cb(e.payload));

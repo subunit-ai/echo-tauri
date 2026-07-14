@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.137",
+    date: "2026-07-14",
+    title: {
+      de: "Der Lern-Loop: Wörter wirklich besitzen statt einmal benutzen",
+      en: "The learning loop: truly own words instead of using them once",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Besitz-Stufen: Jedes gelernte Wort durchläuft Benutzt → Gefestigt → Gemeistert — gefestigt wird nur, was du über Wochen wirklich in echten Diktaten benutzt (Spaced Repetition, ohne Karteikasten).",
+        en: "Ownership stages: every learned word progresses Used → Fortified → Mastered — words only solidify through real use in real dictations over weeks (spaced repetition, no flashcards).",
+      },
+      {
+        kind: "feature",
+        de: "Dein Wochenpaket: Auf Knopfdruck kuratiert Echo 7 neue Wörter aus DEINEM Sprachprofil — mit Bedeutung, Beispiel und einer persönlichen Begründung, welches deiner Gewohnheitswörter sie aufwerten. Erkennung und XP laufen automatisch.",
+        en: "Your weekly pack: on demand, Echo curates 7 new words from YOUR speech profile — with meaning, example and a personal note on which of your habit words they upgrade. Detection and XP work automatically.",
+      },
+      {
+        kind: "feature",
+        de: "Zur Festigung fällig: Der Coach zeigt, welche Wörter auf ihren nächsten Einsatz warten, bevor sie wieder verblassen.",
+        en: "Due for reinforcement: the coach shows which words await their next use before they fade again.",
+      },
+      {
+        kind: "feature",
+        de: "Wochenreport: Montags fasst Echo deine Woche zusammen — XP im Vergleich zur Vorwoche und neue Wortfunde, als Karte im Coach und dezente Benachrichtigung.",
+        en: "Weekly report: on Mondays Echo sums up your week — XP versus the week before and new word finds, as a coach card and a subtle notification.",
+      },
+    ],
+  },
+  {
     version: "0.5.136",
     date: "2026-07-14",
     title: {
