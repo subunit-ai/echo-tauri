@@ -1141,6 +1141,36 @@ pub fn learning_kind_count(account: &str, kind: &str, day: Option<&str>) -> i64 
     }
 }
 
+/// Distinct LOCAL days on/after `from_day` that carry an event of `kind` — the
+/// Rhetorik-Dojo's weekly "workouts" quest (COUNT DISTINCT day of kind 'dojo'
+/// since the week's Monday). Half-open lower bound (day >= from_day).
+pub fn learning_kind_days_since(account: &str, kind: &str, from_day: &str) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COUNT(DISTINCT day) FROM learning_events
+         WHERE account = ?1 AND kind = ?2 AND day >= ?3",
+        params![account, kind, from_day],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// COUNT of events of `kind` on/after `from_day` — the Dojo's "coach_5" quest
+/// (coach_word events this week). Sibling of `learning_kind_days_since` but
+/// counts rows, not distinct days.
+pub fn learning_kind_count_since(account: &str, kind: &str, from_day: &str) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COUNT(*) FROM learning_events
+         WHERE account = ?1 AND kind = ?2 AND day >= ?3",
+        params![account, kind, from_day],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
 // ---- Lern-Loop (Welle 3): ownership stages, word packs, weekly report ----
 // The XP ledger already holds ONE row per (account, day, kind, word) — so
 // distinct usage DAYS per taught word are readable straight from it, no new

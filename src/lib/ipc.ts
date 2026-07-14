@@ -846,3 +846,74 @@ export const weeklyReportGet = () =>
 /** Fired Monday morning when a fresh weekly report is ready — update the card. */
 export const onWeeklyReport = (cb: (r: WeeklyReport) => void): Promise<UnlistenFn> =>
   listen<WeeklyReport>("echo://weekly-report", (e) => cb(e.payload));
+
+// ---- Rhetorik-Dojo (Welle 4): spoken micro-workouts ------------------------
+// One short spoken drill a day. The server hands out today's exercise (one of
+// three kinds), Echo records + transcribes it against a countdown, and the
+// server scores it 0–100 with a per-kind breakdown and XP. All server truth —
+// this UI only renders the exercise, drives the recorder, and shows the verdict.
+
+/** Which drill today is:
+ *  - `gauntlet` (Füllwort-Gauntlet) — speak about `topic` with zero fillers.
+ *  - `tabu` (Tabu) — explain `term` without saying any of the `taboo` words.
+ *  - `better` (Sag es besser) — reformulate `weak_sentence` more powerfully. */
+export type DojoKind = "gauntlet" | "tabu" | "better";
+
+/** Today's exercise. Which of `topic` / `term`+`taboo` / `weak_sentence` is
+ *  populated depends on `kind`; the others are null. `seconds` is the recording
+ *  budget (45), `xp` the reward, `done_today` whether it was already completed
+ *  for XP today (a repeat is allowed but grants none). */
+export interface DojoToday {
+  kind: DojoKind;
+  topic: string;
+  term: string | null;
+  taboo: string[] | null;
+  weak_sentence: string | null;
+  seconds: number;
+  xp: number;
+  done_today: boolean;
+}
+export const dojoToday = () => invoke<DojoToday>("dojo_today");
+
+/** The scored per-kind breakdown of one workout. `violations` are the taboo
+ *  words that were actually spoken (tabu kind); `fillers` the filler count
+ *  (gauntlet); `weak`/`vague`/`elevated` the word-quality tallies (better);
+ *  `too_short` flags a take too brief to score fairly. */
+export interface DojoBreakdown {
+  words: number;
+  fillers: number;
+  violations: string[];
+  weak: number;
+  vague: number;
+  elevated: number;
+  too_short: boolean;
+}
+/** A completed workout's verdict. `xp_awarded` is 0 on a same-day repeat. */
+export interface DojoResult {
+  transcript: string;
+  score: number;
+  xp_awarded: number;
+  breakdown: DojoBreakdown;
+}
+/** Arm the dojo recorder. Throws "busy" if a dictation is already running. */
+export const dojoRecordStart = () => invoke<void>("dojo_record_start");
+/** Mic level 0..1 while recording — poll ~80 ms for the pulse visualisation. */
+export const dojoRecordLevel = () => invoke<number>("dojo_record_level");
+/** Tear the recorder down without scoring (cancel / unmount safety-net). */
+export const dojoRecordCancel = () => invoke<void>("dojo_record_cancel");
+/** Stop + transcribe + score. Async — takes the transcription time. */
+export const dojoRecordStop = () => invoke<DojoResult>("dojo_record_stop");
+
+/** A weekly quest. `id` picks its i18n name/description (learning.dojo.quest.<id>);
+ *  `progress`/`target` drive the bar and the completed check. */
+export interface Quest {
+  id: "workouts_3" | "coach_5" | "find_1";
+  progress: number;
+  target: number;
+}
+export interface QuestsData {
+  quests: Quest[];
+}
+/** This week's quests + their live progress. Local truth; refreshes as
+ *  dictations and workouts land. */
+export const questsGet = () => invoke<QuestsData>("quests_get");

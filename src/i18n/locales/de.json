@@ -1222,6 +1222,83 @@
       "stageUsed": "Benutzt",
       "stageFortified": "Gefestigt",
       "stageMastered": "Gemeistert"
+    },
+    "dojo": {
+      "tab": "Dojo",
+      "title": "Rhetorik-Dojo",
+      "sub": "Eine gesprochene Mikro-Übung am Tag — Aufnahme, Sofort-Bewertung, XP.",
+      "loading": "Lade die Übung des Tages …",
+      "todayEyebrow": "Übung des Tages",
+      "kind": {
+        "gauntlet": {
+          "name": "Füllwort-Gauntlet",
+          "rule": "Sprich frei über das Thema — ohne ein einziges Füllwort."
+        },
+        "tabu": {
+          "name": "Tabu",
+          "rule": "Erkläre den Begriff, ohne eines der Tabu-Wörter zu benutzen."
+        },
+        "better": {
+          "name": "Sag es besser",
+          "rule": "Formuliere den Satz kraftvoller — weg von schwachen und vagen Wörtern."
+        }
+      },
+      "termLabel": "Begriff",
+      "tabooLabel": "Tabu-Wörter",
+      "weakLabel": "Dieser Satz — besser gesagt",
+      "secondsBadge": "{{seconds}} s",
+      "xpBadge": "+{{xp}} XP",
+      "startBtn": "Übung starten",
+      "retryBtn": "Nochmal üben",
+      "doneToday": "Bereits absolviert",
+      "doneTodayHint": "Nochmal üben ist erlaubt — heute gibt es dafür aber kein weiteres XP.",
+      "recording": {
+        "title": "Sprich jetzt",
+        "starting": "Bereitmachen …",
+        "transcribing": "Werte aus …",
+        "stopBtn": "Fertig",
+        "tabooReminder": "Vermeide:"
+      },
+      "result": {
+        "title": "Dein Ergebnis",
+        "scoreOf100": "von 100",
+        "scoreGreat": "Stark",
+        "scoreMid": "Solide",
+        "scoreLow": "Ausbaufähig",
+        "words": "Wörter",
+        "fillers": "Füllwörter",
+        "violations": "Verstöße",
+        "violationsNone": "Kein Tabu-Wort benutzt",
+        "weak": "Schwach",
+        "vague": "Vage",
+        "elevated": "Gehoben",
+        "tooShort": "Zu kurz, um fair zu bewerten — sprich beim nächsten Mal länger.",
+        "transcriptShow": "Transkript anzeigen",
+        "transcriptHide": "Transkript verbergen",
+        "xpAwarded": "+{{xp}} XP verdient",
+        "xpAlready": "Heute schon belohnt"
+      },
+      "quests": {
+        "title": "Deine Wochen-Quests",
+        "sub": "Jede Woche frisch — drei Ziele, ein voller Balken.",
+        "progress": "{{progress}} / {{target}}",
+        "done": "Geschafft",
+        "workouts_3": {
+          "name": "Drei Workouts",
+          "desc": "Absolviere diese Woche drei Dojo-Übungen."
+        },
+        "coach_5": {
+          "name": "Fünf Coach-Wörter im Alltag",
+          "desc": "Benutze fünf empfohlene Wörter in echten Diktaten."
+        },
+        "find_1": {
+          "name": "Ein neuer Fund",
+          "desc": "Sammle ein neues seltenes Wort im Wortdex."
+        }
+      },
+      "busyError": "Gerade läuft ein Diktat.",
+      "recordFailed": "Aufnahme fehlgeschlagen",
+      "transcribeFailed": "Auswertung fehlgeschlagen"
     }
   },
   "vp": {

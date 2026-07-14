@@ -1220,6 +1220,83 @@
       "stageUsed": "Used",
       "stageFortified": "Fortified",
       "stageMastered": "Mastered"
+    },
+    "dojo": {
+      "tab": "Dojo",
+      "title": "Rhetoric Dojo",
+      "sub": "One spoken micro-workout a day — record, instant verdict, XP.",
+      "loading": "Loading today's exercise …",
+      "todayEyebrow": "Exercise of the day",
+      "kind": {
+        "gauntlet": {
+          "name": "Filler Gauntlet",
+          "rule": "Speak freely about the topic — without a single filler word."
+        },
+        "tabu": {
+          "name": "Taboo",
+          "rule": "Explain the term without using any of the taboo words."
+        },
+        "better": {
+          "name": "Say It Better",
+          "rule": "Reword the sentence more powerfully — away from weak and vague words."
+        }
+      },
+      "termLabel": "Term",
+      "tabooLabel": "Taboo words",
+      "weakLabel": "This sentence — said better",
+      "secondsBadge": "{{seconds}} s",
+      "xpBadge": "+{{xp}} XP",
+      "startBtn": "Start exercise",
+      "retryBtn": "Practice again",
+      "doneToday": "Already done",
+      "doneTodayHint": "You may practice again — but there's no further XP for it today.",
+      "recording": {
+        "title": "Speak now",
+        "starting": "Get ready …",
+        "transcribing": "Scoring …",
+        "stopBtn": "Done",
+        "tabooReminder": "Avoid:"
+      },
+      "result": {
+        "title": "Your result",
+        "scoreOf100": "out of 100",
+        "scoreGreat": "Strong",
+        "scoreMid": "Solid",
+        "scoreLow": "Room to grow",
+        "words": "Words",
+        "fillers": "Filler words",
+        "violations": "Violations",
+        "violationsNone": "No taboo word used",
+        "weak": "Weak",
+        "vague": "Vague",
+        "elevated": "Elevated",
+        "tooShort": "Too short to score fairly — speak longer next time.",
+        "transcriptShow": "Show transcript",
+        "transcriptHide": "Hide transcript",
+        "xpAwarded": "+{{xp}} XP earned",
+        "xpAlready": "Already rewarded today"
+      },
+      "quests": {
+        "title": "Your weekly quests",
+        "sub": "Fresh every week — three goals, one full bar.",
+        "progress": "{{progress}} / {{target}}",
+        "done": "Complete",
+        "workouts_3": {
+          "name": "Three workouts",
+          "desc": "Complete three dojo exercises this week."
+        },
+        "coach_5": {
+          "name": "Five coach words in the wild",
+          "desc": "Use five recommended words in real dictations."
+        },
+        "find_1": {
+          "name": "One new find",
+          "desc": "Collect a new rare word in the Wortdex."
+        }
+      },
+      "busyError": "A dictation is currently running.",
+      "recordFailed": "Recording failed",
+      "transcribeFailed": "Scoring failed"
     }
   },
   "vp": {

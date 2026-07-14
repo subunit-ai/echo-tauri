@@ -136,6 +136,14 @@ pub fn is_stopword(w: &str) -> bool {
     STOPWORDS.contains(w)
 }
 
+/// True when `w` (lowercase token) is a single-word discourse filler ("halt",
+/// "irgendwie", "quasi", "eigentlich", …). The Rhetorik-Dojo counts these as
+/// "vage" crutches (Besser-Sagen) and as discourse fillers (Gauntlet); reuses
+/// the same curated set the coach flags, so there is one source of truth.
+pub fn is_discourse_filler(w: &str) -> bool {
+    DISCOURSE_FILLERS.contains(w)
+}
+
 // ── Word frequency ───────────────────────────────────────────────────────────
 
 /// Content-word frequency over `texts`, descending by count then alphabetically,
