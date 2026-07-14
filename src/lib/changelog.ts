@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.135",
+    date: "2026-07-14",
+    title: {
+      de: "Aktivität: Diagramm-Beschriftung nicht mehr verzerrt",
+      en: "Activity: chart labels no longer distorted",
+    },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Stundenachse im Diagramm „Wann du diktierst“ wurde horizontal gestaucht — die Ziffern erschienen je nach Fensterbreite schmalgequetscht (gemessen: 65 % ihrer richtigen Breite). Das Diagramm vermisst sich jetzt selbst und zeichnet in echter Pixelgröße.",
+        en: "The hour axis in the “When you dictate” chart was squeezed horizontally — depending on the window width the digits rendered compressed (measured: 65% of their proper width). The chart now measures itself and draws at true pixel size.",
+      },
+    ],
+  },
+  {
     version: "0.5.133",
     date: "2026-07-14",
     title: {
