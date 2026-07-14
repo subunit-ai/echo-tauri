@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.130",
+    date: "2026-07-14",
+    title: {
+      de: "Dein Stimmabdruck — dichter, feiner, farbiger",
+      en: "Your voiceprint — denser, finer, more colourful",
+    },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Der Stimmabdruck ist jetzt ein echter Abdruck statt eines löchrigen Rads: rund dreimal so viele Teile, lückenlos über die ganze Fläche — auch wenn er erst zu 70 % gefüllt ist.",
+        en: "Your voiceprint now looks like a real print instead of a gappy wheel: about three times as many pieces, covering the whole face — even when it is only 70 % complete.",
+      },
+      {
+        kind: "improvement",
+        de: "Strichstärke, Helligkeit und Farbton folgen der Energie deiner Stimme: kräftige Obertöne werden dicke, leuchtende Bögen, leise Passagen feine Textur — jede Quelle (Kern, Meetings, Diktat) bekommt dabei ihre eigene Farbfamilie.",
+        en: "Line weight, brightness and hue follow the energy of your voice: strong harmonics become thick, glowing arcs, quiet passages fine texture — and each source (core, meetings, dictation) gets its own colour family.",
+      },
+      {
+        kind: "improvement",
+        de: "Neue Teile setzen sich gleichmäßig über den ganzen Abdruck — er entwickelt sich wie ein Foto, statt einzelne Tortenstücke aufleuchten zu lassen.",
+        en: "New pieces now land evenly across the whole print — it develops like a photograph instead of lighting up single pie slices.",
+      },
+    ],
+  },
+  {
     version: "0.5.129",
     date: "2026-07-13",
     title: {

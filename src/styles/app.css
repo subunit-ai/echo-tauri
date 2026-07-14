@@ -2751,18 +2751,20 @@ select:hover {
   border-radius: 16px;
   overflow: hidden;
 }
+/* Strichstärke (--vp-w) und Deckkraft (--vp-o) kommen pro Bogen aus der
+   Obertonenergie → dicke helle Ridges, dünne leise Textur dazwischen. */
 .vp-fp-off {
   fill: none;
   stroke: currentColor;
-  stroke-opacity: 0.13;
-  stroke-width: 1.5;
+  stroke-opacity: 0.11;
+  stroke-width: calc(var(--vp-w, 1.5px) * 0.8);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .vp-fp-on {
   fill: none;
-  stroke-opacity: 0.95;
-  stroke-width: 1.85;
+  stroke-opacity: var(--vp-o, 0.95);
+  stroke-width: var(--vp-w, 1.85px);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 1;
@@ -2771,7 +2773,7 @@ select:hover {
 }
 /* Während der Aufnahme atmen die gesetzten Stücke mit dem Pegel. */
 .vp-fp.rec .vp-fp-on {
-  stroke-width: calc(1.85px + 0.85px * var(--vp-live, 0));
+  stroke-width: calc(var(--vp-w, 1.85px) + 0.85px * var(--vp-live, 0));
   transition: stroke-width 0.08s linear;
 }
 @keyframes vp-fp-draw {
