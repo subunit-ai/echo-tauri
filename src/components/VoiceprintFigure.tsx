@@ -10,19 +10,47 @@ import { useMemo } from "react";
  * und Pausen entstehen aus der Aktivitäts-Hüllkurve — man sieht buchstäblich
  * Sprache im Kreis laufen. Dicht wie eine Iris, streng geometrisch.
  *
- * Puzzle: unverändert zu v0.5.125 — jeder Bogen ist ein Teil, die Teile werden
- * sektor-kohärent auf die DREI Quellen verteilt (45 % Kern · 30 % Meeting ·
+ * DICHTE (2026-07-14, TJ: „bei 70 % zu große Löcher, muss dichter, verschiedene
+ * Farben und Dicken"):
+ *  - Polar-Gitter mit ringweise HALBIERTER Sektorzahl nach innen (33/66/132) →
+ *    jedes Stück ist ~5 px lang, egal auf welchem Ring; keine Innen-Blobs, kein
+ *    ausgedünnter Außenrand. 24 Ringe × bis zu 132 Sektoren, ~1750 Teile.
+ *  - Zwischen den Obertonreihen liegt ein TEXTUR-BODEN (schwache, dünne Bögen)
+ *    statt Leere → die Rosette liest sich als Abdruck, nicht als Speichenrad.
+ *  - Energie steuert Strichstärke (0,85–3,0 px), Deckkraft und Farbton → jede
+ *    Quelle hat eine Farb-FAMILIE (5 Stufen, zum Nachbarakzent gemischt) statt
+ *    einer flachen Farbe.
+ *  - Füll-Reihenfolge innerhalb einer Quelle ist BLAU-RAUSCH-artig gestreut
+ *    (Van-der-Corput) statt sektor-kohärent → bei 70 % fehlen viele winzige
+ *    Stücke gleichmäßig verteilt, nicht ein paar große Keile.
+ *
+ * Puzzle: Semantik unverändert seit v0.5.125 — jeder Bogen ist ein Teil, die
+ * Teile gehören sektor-kohärent zu den DREI Quellen (45 % Kern · 30 % Meeting ·
  * 25 % Diktat, Server-Formel) und jede Quelle füllt nach ihrem EIGENEN
  * Fortschritt → gefüllte Teile / alle Teile == `completeness`.
  *
- * NEU: `seed` (Account-Key) macht die Rosette PRO PERSON einzigartig — der
- * Fingerabdruck war für alle User identisch. Deterministisch bleibt sie: kein
- * Math.random, dasselbe Konto zeigt immer dieselbe Rosette.
+ * `seed` (Account-Key) macht die Rosette PRO PERSON einzigartig. Deterministisch
+ * bleibt sie: kein Math.random, dasselbe Konto zeigt immer dieselbe Rosette.
  */
 
 type Progress = { core: number; far: number; near: number };
 
-type Piece = { d: string; ri: number };
+type Piece = {
+  d: string;
+  /** Voll-Auflösungs-Sektor (Zeit) — trägt die kohärente Quellen-Zuordnung. */
+  ri: number;
+  /** Zonen-Feld 0..1, GLATT über den Winkel → die Quellen bilden zusammenhängende
+   *  Farbregionen statt Konfetti (die Legende muss ablesbar bleiben). */
+  zk: number;
+  /** Ring (Frequenz) — nur für die räumliche Streuung der Füll-Reihenfolge. */
+  g: number;
+  /** Strichstärke in px (Energie). */
+  w: number;
+  /** Deckkraft 0..1 (Energie). */
+  o: number;
+  /** Stufe in der Farb-Familie der Quelle (0 = pur, 4 = am stärksten getönt). */
+  tone: number;
+};
 type Placed = Piece & { on: boolean; group: "core" | "far" | "near"; order: number };
 
 /** Deterministisch — der Abdruck einer Person darf sich nie zufällig ändern. */
@@ -50,6 +78,17 @@ function rng(seed: number): () => number {
 }
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
+/** Radikal-Inverse zur Basis 2 — streut eine Folge gleichmäßig über [0,1). */
+function vdc(i: number): number {
+  let n = i >>> 0;
+  n = ((n >>> 1) & 0x55555555) | ((n & 0x55555555) << 1);
+  n = ((n >>> 2) & 0x33333333) | ((n & 0x33333333) << 2);
+  n = ((n >>> 4) & 0x0f0f0f0f) | ((n & 0x0f0f0f0f) << 4);
+  n = ((n >>> 8) & 0x00ff00ff) | ((n & 0x00ff00ff) << 8);
+  n = ((n >>> 16) & 0xffff) | ((n & 0xffff) << 16);
+  return (n >>> 0) / 4294967296;
+}
+
 /** Stimm-Charakter aus dem Seed: Formant-Hüllkurve + Phasen (= Stimmenfarbe). */
 function makeVoice(seed: string) {
   const r = rng(seedOf("echo-vp:" + seed));
@@ -59,7 +98,33 @@ function makeVoice(seed: string) {
     formants.push({ mu: pos, sig: 0.05 + r() * 0.05, amp: (k === 0 ? 0.9 : 0.5) + r() * 0.5 });
     pos += 0.17 + r() * 0.13;
   }
-  return { formants, ph1: r() * 6.283, ph2: r() * 6.283, ph3: r() * 6.283, wob: 0.6 + r() * 0.9 };
+  return {
+    formants,
+    ph1: r() * 6.283,
+    ph2: r() * 6.283,
+    ph3: r() * 6.283,
+    wob: 0.6 + r() * 0.9,
+    // Phasen des Zonen-Felds (welche Quelle wo liegt) + der Ridge-Verformung
+    zp1: r() * 6.283,
+    zp2: r() * 6.283,
+    wp1: r() * 6.283,
+    wp2: r() * 6.283,
+  };
+}
+
+const S = 132; // Sektoren (Zeit) auf dem äußersten Ring
+const RINGS = 24; // Frequenz-Bänder
+// KEIN Ausdünnen mehr: JEDE Zelle bekommt ein Stück (~2180). Die Struktur trägt
+// allein Dicke/Deckkraft/Farbton — sonst reißt das Top-N-Ranking die leisen
+// Sektoren (Pausen) komplett raus und es entstehen genau die Keil-Löcher, die
+// TJ gestört haben. Ein Abdruck ist flächendeckend; er ist nur unterschiedlich
+// stark eingefärbt.
+
+/** Sektoren dieses Rings: nach innen halbiert, damit jedes Stück ~gleich lang ist. */
+function sectorsAt(g: number): number {
+  if (g < 6) return S / 4;
+  if (g < 12) return S / 2;
+  return S;
 }
 
 function buildRosette(size: number, seed: string): Piece[] {
@@ -70,60 +135,100 @@ function buildRosette(size: number, seed: string): Piece[] {
       e += f.amp * Math.exp(-((x - f.mu) * (x - f.mu)) / (2 * f.sig * f.sig));
     return e;
   };
-  const S = 96; // Sektoren (Zeit)
-  const rings = 17; // Frequenz-Bänder
   const cx = size / 2;
   const cy = size / 2;
   const r0 = size * 0.105;
   const r1 = size * 0.475;
+  const band = (r1 - r0) / RINGS;
 
-  const cand: { s: number; g: number; th: number; inten: number }[] = [];
-  for (let s = 0; s < S; s++) {
-    const th = (s / S) * Math.PI * 2;
-    // Phrasen + Pausen: die Stimme ist nicht immer an
-    let act = 0.72 + 0.4 * Math.sin(s * 0.3 + v.ph1) + 0.26 * Math.sin(s * 0.11 * v.wob + v.ph2);
-    act = clamp(act, 0, 1);
-    if (act < 0.15) act = 0;
-    // Grundton wandert langsam → Obertonreihen werden konzentrische Bänder
-    const f0 = 1.15 + 0.55 * Math.sin(s * 0.15 + v.ph3) + 0.25 * Math.sin(s * 0.06 * v.wob + v.ph1);
-    for (let g = 0; g < rings; g++) {
+  type Cell = { th: number; g: number; ri: number; zk: number; inten: number };
+  // Glattes Zonen-Feld über den Winkel: benachbarte Momente gehören meist zur
+  // selben Quelle → große, ablesbare Farbregionen (statt Sprenkel).
+  const zone = (th: number) =>
+    clamp(
+      0.5 + 0.34 * Math.sin(th + v.zp1) + 0.18 * Math.sin(2.6 * th + v.zp2) + 0.06 * Math.sin(5.3 * th),
+      0,
+      1,
+    );
+  const cand: Cell[] = [];
+  for (let g = 0; g < RINGS; g++) {
+    const Sg = sectorsAt(g);
+    for (let s = 0; s < Sg; s++) {
+      const th = (s / Sg) * Math.PI * 2;
+      // Zeit läuft über den WINKEL (nicht den Sektor-Index) → Obertonbänder
+      // bleiben über alle Ring-Auflösungen hinweg radial ausgerichtet.
+      const tt = (th / (Math.PI * 2)) * S;
+      // Phrasen + Pausen: die Stimme ist nicht immer an. Der Boden (0.32) hält
+      // auch die Pausen als feine Textur sichtbar — sonst klaffen Keile.
+      let act = 0.72 + 0.4 * Math.sin(tt * 0.3 + v.ph1) + 0.26 * Math.sin(tt * 0.11 * v.wob + v.ph2);
+      act = clamp(act, 0.32, 1);
+      // Grundton wandert langsam → Obertonreihen werden konzentrische Bänder
+      const f0 = 1.15 + 0.55 * Math.sin(tt * 0.15 + v.ph3) + 0.25 * Math.sin(tt * 0.06 * v.wob + v.ph1);
       let harm = 0;
-      for (let k = 1; k <= 13; k++) {
+      for (let k = 1; k <= 18; k++) {
         const d = g - k * f0;
-        harm = Math.max(harm, Math.exp(-(d * d) / (2 * 0.55 * 0.55)) * (1 - 0.035 * k));
+        harm = Math.max(harm, Math.exp(-(d * d) / (2 * 0.6 * 0.6)) * (1 - 0.028 * k));
       }
-      const inten =
-        act * harm * (0.55 + 0.65 * fenv(g / rings)) * (0.84 + 0.32 * h1(s * 7.7 + g * 3.1));
-      if (inten > 0.09) cand.push({ s, g, th, inten: Math.min(inten, 1) });
+      // Textur-Boden zwischen den Reihen: leise, aber da (Abdruck statt Speichen).
+      const floor = 0.22 + 0.1 * h1(g * 5.3 + tt * 1.7 + 11.1);
+      const e = Math.max(harm, floor);
+      const inten = clamp(
+        act * e * (0.55 + 0.65 * fenv(g / RINGS)) * (0.86 + 0.28 * h1(tt * 7.7 + g * 3.1)),
+        0,
+        1,
+      );
+      cand.push({ th, g, ri: Math.round((th / (Math.PI * 2)) * S) % S, zk: zone(th), inten });
     }
   }
-  cand.sort((a, b) => b.inten - a.inten);
-  const keep = cand.slice(0, 620);
 
-  return keep.map((c) => {
-    const rr = r0 + ((c.g + 0.5) * (r1 - r0)) / rings;
-    const half = (Math.PI / S) * (0.65 + 0.95 * c.inten);
+  return cand.map((c) => {
+    const Sg = sectorsAt(c.g);
+    // Ridge-Verformung: die Ringe laufen leicht wellig (Abdruck, kein Vinyl) —
+    // reine Ästhetik, die radiale Ordnung (Frequenz) bleibt erhalten.
+    const warp =
+      0.45 * Math.sin(2 * c.th + v.wp1) +
+      0.26 * Math.sin(3.4 * c.th + v.wp2) +
+      0.2 * (h1(c.g * 9.1 + c.th * 4.4) - 0.5);
+    const rr = r0 + (c.g + 0.5 + warp) * band;
+    // Kräftige Stücke überlappen minimal → Bögen verschmelzen zu Ridge-Linien.
+    const half = (Math.PI / Sg) * (0.92 + 0.5 * c.inten);
     const a0 = c.th - half;
     const a1 = c.th + half;
     const p0x = cx + rr * Math.cos(a0);
     const p0y = cy + rr * Math.sin(a0);
     const p1x = cx + rr * Math.cos(a1);
     const p1y = cy + rr * Math.sin(a1);
+    // Energie → Dicke · Deckkraft · Farbstufe. Hohe Ringe (Höhen) und starke
+    // Energie tönen zum Nachbarakzent → jede Quelle wird eine Farb-Familie.
+    const w = 0.75 + 2.35 * Math.pow(c.inten, 0.9);
+    const o = 0.3 + 0.7 * c.inten;
+    const tone = clamp(
+      Math.floor(
+        ((c.g / RINGS) * 0.62 + 0.3 * c.inten + 0.16 * (h1(c.th * 3.3 + c.g * 1.9) - 0.5)) * 5,
+      ),
+      0,
+      4,
+    );
     return {
       d:
         "M " + p0x.toFixed(1) + " " + p0y.toFixed(1) +
         " A " + rr.toFixed(1) + " " + rr.toFixed(1) + " 0 0 1 " +
         p1x.toFixed(1) + " " + p1y.toFixed(1),
-      // Sektor-kohärente Quellen-Zuordnung: Teile desselben Moments gehören
-      // meist zur selben Quelle (sonst wirkt es wie Konfetti)
-      ri: c.s,
+      ri: c.ri,
+      zk: c.zk,
+      g: c.g,
+      w: Number(w.toFixed(2)),
+      o: Number(o.toFixed(2)),
+      tone,
     };
   });
 }
 
 function place(pieces: Piece[], p: Progress): Placed[] {
+  // 1) Quellen-Zuordnung über das glatte Zonen-Feld → jede Quelle bekommt eine
+  //    zusammenhängende Region (Ränder leicht ausgefranst, kein Tortenstück).
   const order = pieces
-    .map((pc, i) => ({ i, k: 0.55 * h1(pc.ri * 3.71 + 0.5) + 0.45 * h1(i * 12.9898 + 78.233) }))
+    .map((pc, i) => ({ i, k: 0.86 * pc.zk + 0.14 * h1(i * 12.9898 + 78.233) }))
     .sort((a, b) => a.k - b.k);
   const N = order.length;
   const nCore = Math.round(N * 0.45);
@@ -136,22 +241,53 @@ function place(pieces: Piece[], p: Progress): Placed[] {
   const out: Placed[] = pieces.map((pc) => ({ ...pc, on: false, group: "core", order: 0 }));
   let step = 0;
   for (const grp of groups) {
-    const fill = Math.round(grp.items.length * Math.max(0, Math.min(1, grp.prog)));
-    grp.items.forEach((it, idx) => {
-      out[it.i].group = grp.g;
+    // 2) Füllen aber GESTREUT: räumlich sortieren (Ring, dann Winkel), dann per
+    //    Van-der-Corput permutieren → die ersten x % liegen gleichmäßig über die
+    //    ganze Fläche der Quelle verteilt. Sonst fehlt bei 70 % ein ganzer Keil.
+    const spatial = grp.items
+      .map((it) => ({ it, key: pieces[it.i].g * 1000 + pieces[it.i].ri }))
+      .sort((a, b) => a.key - b.key)
+      .map((x, idx) => ({ it: x.it, k: vdc(idx + 1) }))
+      .sort((a, b) => a.k - b.k);
+    const fill = Math.round(spatial.length * clamp(grp.prog, 0, 1));
+    spatial.forEach((x, idx) => {
+      out[x.it.i].group = grp.g;
       if (idx < fill) {
-        out[it.i].on = true;
-        out[it.i].order = step++;
+        out[x.it.i].on = true;
+        out[x.it.i].order = step++;
       }
     });
   }
   return out;
 }
 
-const COLOR: Record<Placed["group"], string> = {
-  core: "var(--cyan)",
-  far: "var(--violet)",
-  near: "var(--emerald)",
+/**
+ * Farb-Familien: Basis der Quelle, in 5 Stufen zum Nachbarakzent getönt. Alle
+ * Töne kommen aus den Theme-Tokens (--cyan/--violet/--emerald) → das `black`-
+ * Theme (Zero-Hue-Regel) grauträgt sie automatisch mit.
+ */
+const RAMP: Record<Placed["group"], string[]> = {
+  core: [
+    "var(--cyan)",
+    "color-mix(in srgb, var(--cyan) 88%, var(--emerald))",
+    "color-mix(in srgb, var(--cyan) 84%, var(--violet))",
+    "color-mix(in srgb, var(--cyan) 72%, var(--violet))",
+    "color-mix(in srgb, var(--cyan) 62%, var(--violet))",
+  ],
+  far: [
+    "var(--violet)",
+    "color-mix(in srgb, var(--violet) 88%, var(--cyan))",
+    "color-mix(in srgb, var(--violet) 76%, var(--cyan))",
+    "color-mix(in srgb, var(--violet) 68%, var(--cyan))",
+    "color-mix(in srgb, var(--violet) 78%, var(--emerald))",
+  ],
+  near: [
+    "var(--emerald)",
+    "color-mix(in srgb, var(--emerald) 88%, var(--cyan))",
+    "color-mix(in srgb, var(--emerald) 76%, var(--cyan))",
+    "color-mix(in srgb, var(--emerald) 68%, var(--cyan))",
+    "color-mix(in srgb, var(--emerald) 76%, var(--violet))",
+  ],
 };
 
 export function VoiceprintFigure({
@@ -179,7 +315,7 @@ export function VoiceprintFigure({
   return (
     <div
       className={"vp-fp" + (recording ? " rec" : "")}
-      style={{ ["--vp-live" as string]: String(Math.max(0, Math.min(1, live))) }}
+      style={{ ["--vp-live" as string]: String(clamp(live, 0, 1)) }}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
         {pieces.map((p, i) =>
@@ -191,11 +327,20 @@ export function VoiceprintFigure({
               className="vp-fp-on"
               d={p.d}
               pathLength={1}
-              stroke={COLOR[p.group]}
-              style={{ animationDelay: `${Math.min(p.order * 4, 1400)}ms` }}
+              stroke={RAMP[p.group][p.tone]}
+              style={{
+                ["--vp-w" as string]: `${p.w}px`,
+                ["--vp-o" as string]: String(p.o),
+                animationDelay: `${Math.min(p.order * 1.4, 1500)}ms`,
+              }}
             />
           ) : (
-            <path key={`off-${i}`} className="vp-fp-off" d={p.d} />
+            <path
+              key={`off-${i}`}
+              className="vp-fp-off"
+              d={p.d}
+              style={{ ["--vp-w" as string]: `${p.w}px` }}
+            />
           ),
         )}
       </svg>
