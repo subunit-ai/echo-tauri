@@ -158,6 +158,19 @@ const CURATED_DOMAINS: &[(&[&str], &str)] = &[
     (&["keep.google.com", "notes.google"], "notes"),
 ];
 
+// KI-chat name markers for the noisy WINDOW-TITLE signal only — the tight KI
+// subset of the "prompt" bucket (claude/chatgpt/gemini/perplexity/copilot/grok/
+// poe/deepseek/v0/bolt/lovable). The full prompt-title bucket also carries code
+// editors and terminals ("terminal", "cursor", "zed", "rider" …), which on an
+// arbitrary browser tab would misread a page as a prompt (the movie "The
+// Terminal", "Knight Rider"). So `is_prompt_target` restricts the title probe to
+// genuine AI chats; the app + URL signals keep the full bucket (a native app and
+// a real domain are unambiguous, and code editors counting there is wanted).
+const AI_CHAT_MARKERS: &[&str] = &[
+    "claude", "chatgpt", "chat.openai", "openai", "gemini", "perplexity", "copilot", "grok",
+    "poe.com", "deepseek", "v0.dev", "bolt.new", "lovable",
+];
+
 /// Pick the cleanup style for the focused `app`, active browser-tab `url`, and
 /// window `title`. Returns the style plus which rule decided it ("override" |
 /// "app" | "url" | "title" | "default") so the decision is diagnosable from the
@@ -205,6 +218,36 @@ pub fn pick_style(
         }
     }
     (default.to_string(), "default")
+}
+
+/// True when a dictation's target is a KI / prompt surface — the signal the
+/// Prompt-Coach gates on (post-hoc scoring + pattern learning). Three paths,
+/// reusing the auto-mode tables (no parallel list):
+///  1. a native app in the "prompt" cleanup bucket (AI chats, code editors,
+///     terminals) — the app name is unambiguous, and editors counting is wanted;
+///  2. a browser tab on a "prompt"-bucket domain (KI chats + in-browser coding
+///     sandboxes — full domains, so no false hits);
+///  3. a window title naming a genuine AI chat (the tight `AI_CHAT_MARKERS`
+///     subset — the title signal is too noisy for the full editor/terminal set).
+pub fn is_prompt_target(app: &str, url: &str, title: &str) -> bool {
+    let a = app.to_lowercase();
+    if !a.is_empty() {
+        for (subs, style) in CURATED_APPS {
+            if *style == "prompt" && subs.iter().any(|s| a.contains(s)) {
+                return true;
+            }
+        }
+    }
+    let u = url.to_lowercase();
+    if !u.is_empty() {
+        for (subs, style) in CURATED_DOMAINS {
+            if *style == "prompt" && subs.iter().any(|s| u.contains(s)) {
+                return true;
+            }
+        }
+    }
+    let t = title.to_lowercase();
+    !t.is_empty() && AI_CHAT_MARKERS.iter().any(|m| t.contains(m))
 }
 
 #[cfg(test)]
@@ -348,5 +391,25 @@ mod tests {
         let mut overrides = HashMap::new();
         overrides.insert("".to_string(), "empty".to_string());
         assert_eq!(style("", "Some Title", &overrides), "default");
+    }
+
+    #[test]
+    fn test_is_prompt_target() {
+        // Native prompt-bucket app (code editor) → prompt.
+        assert!(is_prompt_target("Cursor", "", ""));
+        assert!(is_prompt_target("Claude", "", ""));
+        // Browser tab on a KI domain → prompt (app name useless on macOS).
+        assert!(is_prompt_target("Safari", "https://claude.ai/chat/abc", ""));
+        assert!(is_prompt_target("Google Chrome", "https://chatgpt.com/c/1", ""));
+        // Window title naming a genuine AI chat → prompt.
+        assert!(is_prompt_target("Google Chrome", "", "ChatGPT - Google Chrome"));
+        // Non-prompt targets → false. "Word" maps to the formal bucket, not prompt.
+        assert!(!is_prompt_target("Microsoft Word", "", ""));
+        assert!(!is_prompt_target("Mail", "", ""));
+        // A movie titled "The Terminal" must NOT read as a prompt (title probe is
+        // restricted to AI chats — "terminal" is not one of them).
+        assert!(!is_prompt_target("Safari", "https://imdb.com/x", "The Terminal (2004)"));
+        // An un-mapped browser tab → false.
+        assert!(!is_prompt_target("Safari", "https://news.ycombinator.com", ""));
     }
 }

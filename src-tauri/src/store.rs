@@ -183,6 +183,27 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
     // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1", []);
+    // Migration (Prompt-Coach, Welle 5): history remembers the dictation TARGET
+    // app and — for dictations into a KI/prompt surface — the post-hoc rubric
+    // score. Additive + guarded by PRAGMA table_info so each column is added
+    // exactly once and never errors on a DB (fresh or old) that already has it.
+    // Existing rows read back with target_app '', is_prompt 0, prompt_score NULL.
+    let history_cols: std::collections::HashSet<String> = conn
+        .prepare("PRAGMA table_info(history)")
+        .and_then(|mut s| {
+            s.query_map([], |r| r.get::<_, String>(1))
+                .map(|rows| rows.filter_map(Result::ok).collect())
+        })
+        .unwrap_or_default();
+    if !history_cols.contains("target_app") {
+        let _ = conn.execute("ALTER TABLE history ADD COLUMN target_app TEXT NOT NULL DEFAULT ''", []);
+    }
+    if !history_cols.contains("is_prompt") {
+        let _ = conn.execute("ALTER TABLE history ADD COLUMN is_prompt INTEGER NOT NULL DEFAULT 0", []);
+    }
+    if !history_cols.contains("prompt_score") {
+        let _ = conn.execute("ALTER TABLE history ADD COLUMN prompt_score INTEGER", []);
+    }
     // One-time purge (v0.5.127, supersedes the v0.5.126 pending-only purge): the
     // suggestion machinery accumulated junk in TWO places — `pending` rows full
     // of ordinary words (raw finds were shown when the gatekeeper call failed,
@@ -252,9 +273,16 @@ pub fn migrate_from_config(history: &[Value], meetings: &[Value]) -> anyhow::Res
 pub fn add_history(entry: &Value, cap: usize) {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return };
+    // is_prompt may arrive as an int (0/1) or a bool — accept both.
+    let is_prompt: i64 = entry
+        .get("is_prompt")
+        .map(|v| if v.as_bool().unwrap_or(false) || v.as_i64().unwrap_or(0) != 0 { 1 } else { 0 })
+        .unwrap_or(0);
     let r = conn.execute(
-        "INSERT INTO history (ts, text, quality_mode, style, latency_ms, stt_ms, cleanup_ms, duration_s)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO history
+            (ts, text, quality_mode, style, latency_ms, stt_ms, cleanup_ms, duration_s,
+             target_app, is_prompt, prompt_score)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             entry.get("ts").and_then(Value::as_i64).unwrap_or(0),
             entry.get("text").and_then(Value::as_str).unwrap_or(""),
@@ -264,6 +292,9 @@ pub fn add_history(entry: &Value, cap: usize) {
             entry.get("stt_ms").and_then(Value::as_i64),
             entry.get("cleanup_ms").and_then(Value::as_i64),
             entry.get("duration_s").and_then(Value::as_f64),
+            entry.get("target_app").and_then(Value::as_str).unwrap_or(""),
+            is_prompt,
+            entry.get("prompt_score").and_then(Value::as_i64), // None → NULL
         ],
     );
     if let Err(e) = r {
@@ -579,6 +610,56 @@ pub fn history_texts_since(days: u32) -> Vec<String> {
     let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
     let since = format!("-{} days", days);
     let rows = stmt.query_map(params![since], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Prompt dictations of the last `days` local days (only `is_prompt = 1`),
+/// newest first, capped at 500 — the Prompt-Coach stats source. Each tuple is
+/// `(ts, target_app, prompt_score, text)`; `prompt_score` is None when the row
+/// was stored without a score.
+pub fn prompt_history_since(days: u32) -> Vec<(i64, String, Option<i64>, String)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT ts, target_app, prompt_score, text FROM history
+               WHERE is_prompt = 1
+                 AND ts >= CAST(strftime('%s', date('now', ?1, 'localtime')) AS INTEGER)
+               ORDER BY ts DESC, id DESC LIMIT 500";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<i64>>(2)?,
+            r.get::<_, String>(3)?,
+        ))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Prompt-score trend by LOCAL day over the last `days` (scored `is_prompt`
+/// rows only): `(day 'YYYY-MM-DD', avg_score, n)`, oldest day first. Grouped in
+/// SQL with localtime so late-night prompts bucket to the right day.
+pub fn prompt_trend_since(days: u32) -> Vec<(String, f64, i64)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let sql = "SELECT strftime('%Y-%m-%d', ts, 'unixepoch', 'localtime') AS day,
+                      AVG(prompt_score), COUNT(*)
+               FROM history
+               WHERE is_prompt = 1 AND prompt_score IS NOT NULL
+                 AND ts >= CAST(strftime('%s', date('now', ?1, 'localtime')) AS INTEGER)
+               GROUP BY day ORDER BY day ASC";
+    let Ok(mut stmt) = conn.prepare_cached(sql) else { return Vec::new() };
+    let since = format!("-{} days", days);
+    let rows = stmt.query_map(params![since], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)?))
+    });
     match rows {
         Ok(it) => it.filter_map(Result::ok).collect(),
         Err(_) => Vec::new(),
@@ -2402,6 +2483,39 @@ mod tests {
         weekly_report_upsert("em:ll", "2026-07-06", r#"{"xp":250}"#, 30); // overwrite latest
         assert_eq!(weekly_report_latest("em:ll").as_deref(), Some(r#"{"xp":250}"#));
         assert!(weekly_report_latest("em:other").is_none()); // isolation
+
+        // ── Prompt-Coach (Welle 5): additive history columns ────────────────
+        // The PRAGMA-guarded migration added target_app/is_prompt/prompt_score on
+        // this fresh DB, so add_history round-trips them AND an old-shape entry
+        // (no prompt fields) still inserts + stays readable (defaults fill in).
+        clear_history();
+        add_history(
+            &json!({ "ts": now_epoch, "text": "erstelle eine tabelle mit drei zeilen",
+                      "is_prompt": 1, "target_app": "cursor", "prompt_score": 80 }),
+            0,
+        );
+        add_history(&json!({ "ts": now_epoch, "text": "hallo welt ohne prompt-felder" }), 0); // old-shape
+        assert_eq!(count_history(), 2); // both inserted despite the NOT NULL columns
+        assert_eq!(list_history("", 10, 0).len(), 2); // old + new rows both readable
+        let prompts = prompt_history_since(1);
+        assert_eq!(prompts.len(), 1); // only is_prompt = 1
+        assert_eq!(prompts[0].1, "cursor");
+        assert_eq!(prompts[0].2, Some(80));
+        assert_eq!(prompts[0].3, "erstelle eine tabelle mit drei zeilen");
+        // A prompt row stored WITHOUT a score surfaces as None; newest-first order.
+        add_history(
+            &json!({ "ts": now_epoch + 1, "text": "gib mir code", "is_prompt": 1, "target_app": "claude" }),
+            0,
+        );
+        let p2 = prompt_history_since(1);
+        assert_eq!(p2.len(), 2);
+        assert_eq!(p2[0].1, "claude");
+        assert_eq!(p2[0].2, None); // NULL prompt_score → None
+        // Trend groups the scored rows by local day (one day here, one scored row).
+        let trend = prompt_trend_since(1);
+        assert_eq!(trend.len(), 1);
+        assert_eq!(trend[0].2, 1); // n = the single scored row (score 80)
+        assert!((trend[0].1 - 80.0).abs() < 1e-9);
 
         let _ = std::fs::remove_file(&path);
     }

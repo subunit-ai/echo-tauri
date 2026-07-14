@@ -17,6 +17,9 @@ import {
   onLearningReward,
   onWordFind,
   onWeeklyReport,
+  promptCoachStats,
+  promptPatternToday,
+  PROMPT_RUBRIC_KEYS,
   questsGet,
   speechProfile,
   speechProfileTrend,
@@ -33,8 +36,11 @@ import {
   type DojoToday,
   type Leaderboard,
   type LearningAnalysis,
+  type LearningEvent,
   type LearningSuggestions,
   type LearningXp,
+  type PromptCoachStats,
+  type PromptPatternToday,
   type Quest,
   type SpeechDimension,
   type SpeechInsight,
@@ -86,6 +92,22 @@ const CheckIcon = () => (
     aria-hidden="true"
   >
     <path d="M20 6 9 17l-5-5" />
+  </svg>
+);
+
+/** Hollow circle — the "criterion not met" counterpart to CheckIcon in the
+ *  golf-drill rubric list (stroke-SVG, no emojis). */
+const CircleOutlineIcon = () => (
+  <svg
+    width="11"
+    height="11"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.1"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="8.5" />
   </svg>
 );
 
@@ -593,6 +615,15 @@ function UpgradeCoach({
   );
 }
 
+/** XP-feed event kind → its i18n label. A prompt_pattern event is the newest
+ *  kind (Welle 5); unknown kinds fall back to the word-find label. */
+const XP_KIND_LABEL: Record<LearningEvent["kind"], string> = {
+  word_of_day: "learning.kindWod",
+  coach_word: "learning.kindCoach",
+  word_find: "learning.kindFind",
+  prompt_pattern: "learning.kindPattern",
+};
+
 /** The Coach tab: the whole existing learning surface, unchanged apart from the
  *  leaderboard rows now carrying a level-ring avatar + worn title, the XP feed
  *  learning the new "word_find" kind, and the gamification header refreshing on
@@ -801,13 +832,7 @@ function CoachTab() {
                 </span>
                 <span className="xp-feed-word">{e.word}</span>
                 <span className="xp-feed-kind">
-                  {t(
-                    e.kind === "word_of_day"
-                      ? "learning.kindWod"
-                      : e.kind === "coach_word"
-                        ? "learning.kindCoach"
-                        : "learning.kindFind",
-                  )}
+                  {t(XP_KIND_LABEL[e.kind] ?? "learning.kindFind")}
                 </span>
                 <span className="xp-feed-xp">+{e.xp}</span>
                 <span className="xp-feed-date">
@@ -1585,6 +1610,7 @@ const DOJO_KIND_CLASS: Record<DojoKind, string> = {
   gauntlet: "dojo-kind--gauntlet",
   tabu: "dojo-kind--tabu",
   better: "dojo-kind--better",
+  golf: "dojo-kind--golf",
 };
 
 /** Score → tier (colour class + qualitative label). ≥80 good (emerald), ≥50 mid
@@ -1888,6 +1914,28 @@ function DojoResultModal({
             </div>
           )}
 
+          {/* Prompt-Golf — the five rubric criteria as ✓ / ○ rows. */}
+          {today.kind === "golf" && b.rubric && (
+            <div className="dojo-bd-block">
+              <span className="dojo-bd-label">{t("learning.dojo.result.rubricTitle")}</span>
+              <div className="dojo-rubric-checks">
+                {PROMPT_RUBRIC_KEYS.map((k) => {
+                  const ok = !!b.rubric?.[k];
+                  return (
+                    <div key={k} className={`dojo-rubric-check ${ok ? "on" : "off"}`}>
+                      <span className="dojo-rubric-mark" aria-hidden="true">
+                        {ok ? <CheckIcon /> : <CircleOutlineIcon />}
+                      </span>
+                      <span className="dojo-rubric-name">
+                        {t(`learning.prompts.rubric.${k}.name`)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="dojo-bd-row">
             <span className="dojo-bd-label">{t("learning.dojo.result.words")}</span>
             <span className="dojo-bd-val">{b.words}</span>
@@ -2055,9 +2103,257 @@ function DojoTab() {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  Prompt-Coach (Welle 5) — Echo scores dictations aimed at AI tools against a
+//  5-criterion rubric and teaches better prompting: an overall score + trend, a
+//  rubric breakdown with a "lever" for each weak spot, a daily pattern to
+//  practise (word-of-the-day grammar), the tools you prompt, and recent prompts.
+// ════════════════════════════════════════════════════════════════════════
+
+/** Score → tier class. Mirrors dojoTier's thresholds (≥80 good, ≥50 mid, else
+ *  low) so a prompt score reads the same everywhere. The three colour tokens
+ *  (--emerald / --cyan-ink / --ink3) are all greyed for the black theme. */
+function promptTier(score: number): "good" | "mid" | "low" {
+  return score >= 80 ? "good" : score >= 50 ? "mid" : "low";
+}
+
+/** A small colour-coded score pill (≥80 / ≥50 / <50), used in by-app + recent. */
+function PromptScoreChip({ score }: { score: number }) {
+  return (
+    <span className={`prompts-score-chip prompts-score-chip--${promptTier(score)}`}>
+      {Math.round(score)}
+    </span>
+  );
+}
+
+/** Locale-correct "x ago" for an epoch-seconds timestamp; unit auto-picked so a
+ *  prompt from minutes ago and one from days ago both read naturally. */
+function relFromNow(ts: number, lang: string): string {
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+  const diff = Math.round((ts * 1000 - Date.now()) / 1000); // negative = past
+  const abs = Math.abs(diff);
+  if (abs < 60) return rtf.format(Math.round(diff), "second");
+  if (abs < 3600) return rtf.format(Math.round(diff / 60), "minute");
+  if (abs < 86400) return rtf.format(Math.round(diff / 3600), "hour");
+  return rtf.format(Math.round(diff / 86400), "day");
+}
+
+/** Below this satisfaction rate a rubric criterion surfaces its "lever" — the
+ *  one concrete tip for lifting it. */
+const RUBRIC_LEVER_THRESHOLD = 0.4;
+
+/** The daily prompt pattern — the WordOfDayCard grammar reused verbatim: name +
+ *  explanation + a concrete example, a +XP challenge badge, and the done state. */
+function PatternOfDayCard({ pattern }: { pattern: PromptPatternToday }) {
+  const { t } = useTranslation();
+  const base = `learning.prompts.patterns.${pattern.id}`;
+  return (
+    <div className="wod-card prompts-pattern">
+      <div className="wod-head">
+        <span className="wod-eyebrow">{t("learning.prompts.pattern.eyebrow")}</span>
+        {pattern.done_today ? (
+          <span className="dojo-done-badge">
+            <CheckIcon />
+            {t("learning.prompts.pattern.doneBadge", { xp: pattern.xp })}
+          </span>
+        ) : (
+          <span className="wod-challenge-badge">
+            {t("learning.prompts.pattern.challenge", { xp: pattern.xp })}
+          </span>
+        )}
+      </div>
+      <div className="wod-word">{t(`${base}.name`)}</div>
+      <div className="wod-meaning">{t(`${base}.desc`)}</div>
+      <div className="wod-synonyms-label">{t("learning.prompts.pattern.exampleLabel")}</div>
+      <div className="wod-example">{t(`${base}.example`)}</div>
+    </div>
+  );
+}
+
+/** The Prompts tab: hero score + trend, the rubric breakdown, the pattern of the
+ *  day, the tools you prompt and recent prompts. 100 % local; refreshes on every
+ *  dictation (a new prompt may land) and on the 7/30/90 range switch. */
+function PromptsTab() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language || "en";
+  const [days, setDays] = useState<number>(30);
+  const [stats, setStats] = useState<PromptCoachStats | null>(null);
+  const [pattern, setPattern] = useState<PromptPatternToday | null>(null);
+
+  const refresh = useCallback((d: number) => {
+    promptCoachStats(d).then(setStats).catch(() => {});
+  }, []);
+  useEffect(() => refresh(days), [days, refresh]);
+  useEffect(() => {
+    const un = onHistoryChanged(() => refresh(days));
+    const unr = onLearningReward(() => refresh(days));
+    return () => {
+      un.then((f) => f());
+      unr.then((f) => f());
+    };
+  }, [days, refresh]);
+
+  // The pattern of the day is range-independent; it flips to done the moment a
+  // real prompt applies it (learning-reward), exactly like the word of the day.
+  useEffect(() => {
+    const load = () => promptPatternToday().then(setPattern).catch(() => {});
+    load();
+    const un = onLearningReward(load);
+    return () => {
+      un.then((f) => f());
+    };
+  }, []);
+
+  const rangeSwitcher = (
+    <div className="sub-tabs speech-range">
+      {RANGES.map((d) => (
+        <button key={d} className={`sub-tab ${days === d ? "active" : ""}`} onClick={() => setDays(d)}>
+          {t(`activity.range${d}`)}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (stats === null) {
+    return (
+      <div>
+        {rangeSwitcher}
+        <div className="empty" aria-busy="true">
+          {t("learning.prompts.loading")}
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state — the pattern still shows (useful before any prompt lands), but
+  // the stats give way to the "how it works" hint.
+  if (!stats.enough) {
+    return (
+      <div>
+        {rangeSwitcher}
+        {pattern && <PatternOfDayCard pattern={pattern} />}
+        <div className="prompts-empty">
+          <div className="prompts-empty-title">{t("learning.prompts.empty.title")}</div>
+          <p className="prompts-empty-hint">{t("learning.prompts.empty.hint")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const trend = stats.trend.map((d) => d.avg);
+
+  return (
+    <div>
+      {rangeSwitcher}
+
+      {/* Hero — big average score + prompt count, trend sparkline. */}
+      <div className="chart-card prompts-hero">
+        <div className="prompts-hero-side">
+          <div className="prompts-hero-label">{t("learning.prompts.hero.label")}</div>
+          <div className="prompts-hero-score">{Math.round(stats.avg_score)}</div>
+          <div className="prompts-hero-of">{t("learning.prompts.hero.of100")}</div>
+          <div className="prompts-hero-count">
+            {t("learning.prompts.hero.count", { count: stats.prompts })}
+          </div>
+        </div>
+        <div className="prompts-hero-spark">
+          <Sparkline values={trend} height={54} />
+        </div>
+      </div>
+
+      {/* Rubric — the five criteria, each a rate bar + a lever for the weak ones. */}
+      <div className="chart-card">
+        <div className="chart-head">
+          <div>
+            <div className="chart-title">{t("learning.prompts.rubric.title")}</div>
+            <div className="chart-sub">{t("learning.prompts.rubric.sub")}</div>
+          </div>
+        </div>
+        <div className="prompts-rubric-list">
+          {PROMPT_RUBRIC_KEYS.map((k) => {
+            const rate = stats.rubric_rates[k] ?? 0;
+            const weak = rate < RUBRIC_LEVER_THRESHOLD;
+            const pct = Math.round(rate * 100);
+            return (
+              <div key={k} className="prompts-rubric-row">
+                <div className="prompts-rubric-main">
+                  <span className="prompts-rubric-name">
+                    {t(`learning.prompts.rubric.${k}.name`)}
+                    <InfoDot tip={t(`learning.prompts.rubric.${k}.desc`)} />
+                  </span>
+                  <span className="prompts-rubric-track" aria-hidden="true">
+                    <span
+                      className={`prompts-rubric-fill${weak ? " weak" : ""}`}
+                      style={{ width: `${Math.max(2, pct)}%` }}
+                    />
+                  </span>
+                  <span className="prompts-rubric-pct">{pct}%</span>
+                </div>
+                {weak && (
+                  <p className="prompts-rubric-lever">{t(`learning.prompts.rubric.${k}.lever`)}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Pattern of the day. */}
+      {pattern && <PatternOfDayCard pattern={pattern} />}
+
+      {/* Which tools you prompt — top apps, full names, count + mean score. */}
+      {stats.by_app.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-head">
+            <div>
+              <div className="chart-title">{t("learning.prompts.byApp.title")}</div>
+              <div className="chart-sub">{t("learning.prompts.byApp.sub")}</div>
+            </div>
+          </div>
+          <div className="prompts-app-list">
+            {stats.by_app.map((a) => (
+              <div key={a.app} className="prompts-app-row">
+                <span className="prompts-app-name">{a.app}</span>
+                <span className="prompts-app-n">
+                  {t("learning.prompts.byApp.count", { count: a.n })}
+                </span>
+                <PromptScoreChip score={a.avg} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent prompts — time, tool, score chip, dimmed head (ellipsis-capped). */}
+      {stats.recent.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-head">
+            <div>
+              <div className="chart-title">{t("learning.prompts.recent.title")}</div>
+              <div className="chart-sub">{t("learning.prompts.recent.sub")}</div>
+            </div>
+          </div>
+          <div className="prompts-recent-list">
+            {stats.recent.map((r, i) => (
+              <div key={`${r.ts}-${i}`} className="prompts-recent-row">
+                <span className="prompts-recent-time">{relFromNow(r.ts, lang)}</span>
+                <span className="prompts-recent-app">{r.app}</span>
+                <PromptScoreChip score={r.score} />
+                <span className="prompts-recent-head">{r.head}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Learning() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"coach" | "dex" | "speech" | "dojo" | "achievements">("coach");
+  const [tab, setTab] = useState<
+    "coach" | "dex" | "speech" | "dojo" | "prompts" | "achievements"
+  >("coach");
   const [wortdex, setWortdex] = useState<WortdexData | null>(null);
 
   // The collection is loaded once at section level (so the Wortdex tab count
@@ -2114,6 +2410,12 @@ export function Learning() {
           {t("learning.dojo.tab")}
         </button>
         <button
+          className={`sub-tab ${tab === "prompts" ? "active" : ""}`}
+          onClick={() => setTab("prompts")}
+        >
+          {t("learning.prompts.tab")}
+        </button>
+        <button
           className={`sub-tab ${tab === "achievements" ? "active" : ""}`}
           onClick={() => setTab("achievements")}
         >
@@ -2125,6 +2427,7 @@ export function Learning() {
       {tab === "dex" && <WortdexTab data={wortdex} />}
       {tab === "speech" && <SpeechProfileTab />}
       {tab === "dojo" && <DojoTab />}
+      {tab === "prompts" && <PromptsTab />}
       {tab === "achievements" && <AchievementsTab />}
     </div>
   );

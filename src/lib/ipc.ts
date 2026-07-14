@@ -603,7 +603,7 @@ export const wordOfDay = () => invoke<WordOfDay>("word_of_day");
 export interface LearningEvent {
   ts: number;
   day: string;
-  kind: "word_of_day" | "coach_word" | "word_find";
+  kind: "word_of_day" | "coach_word" | "word_find" | "prompt_pattern";
   word: string;
   xp: number;
 }
@@ -856,8 +856,10 @@ export const onWeeklyReport = (cb: (r: WeeklyReport) => void): Promise<UnlistenF
 /** Which drill today is:
  *  - `gauntlet` (Füllwort-Gauntlet) — speak about `topic` with zero fillers.
  *  - `tabu` (Tabu) — explain `term` without saying any of the `taboo` words.
- *  - `better` (Sag es besser) — reformulate `weak_sentence` more powerfully. */
-export type DojoKind = "gauntlet" | "tabu" | "better";
+ *  - `better` (Sag es besser) — reformulate `weak_sentence` more powerfully.
+ *  - `golf` (Prompt-Golf) — dictate a prompt for the AI task in `topic`; scored
+ *    against the 5-criterion prompt rubric (breakdown carries `rubric`). */
+export type DojoKind = "gauntlet" | "tabu" | "better" | "golf";
 
 /** Today's exercise. Which of `topic` / `term`+`taboo` / `weak_sentence` is
  *  populated depends on `kind`; the others are null. `seconds` is the recording
@@ -887,6 +889,9 @@ export interface DojoBreakdown {
   vague: number;
   elevated: number;
   too_short: boolean;
+  /** Golf kind only: which of the five prompt-rubric criteria the dictated
+   *  prompt satisfied (deterministic, local). Absent for the other kinds. */
+  rubric?: PromptRubric;
 }
 /** A completed workout's verdict. `xp_awarded` is 0 on a same-day repeat. */
 export interface DojoResult {
@@ -917,3 +922,89 @@ export interface QuestsData {
 /** This week's quests + their live progress. Local truth; refreshes as
  *  dictations and workouts land. */
 export const questsGet = () => invoke<QuestsData>("quests_get");
+
+// ---- Prompt-Coach (Welle 5): silent prompt scoring + pattern of the day ------
+// Echo now recognises dictations aimed at AI tools (Cursor, Claude, ChatGPT, the
+// Prompt Console …) as *prompts* and quietly scores each against a 5-criterion
+// rubric (goal · context · constraints · format · negative instructions, 20 pts
+// each, deterministic + local). This surface shows how well the user prompts,
+// what is systematically missing, and a daily "pattern" to practise. All server/
+// engine truth — the UI only renders it.
+
+/** The five prompt-quality criteria, each a boolean (satisfied or not). The same
+ *  five back the 0..1 `rubric_rates` in the stats and the golf-drill checks. */
+export interface PromptRubric {
+  /** A clear ask/objective is stated. */
+  goal: boolean;
+  /** Relevant background/context is supplied. */
+  context: boolean;
+  /** Boundaries/requirements are given (length, style, must-haves). */
+  constraints: boolean;
+  /** The desired output shape is named (list, table, JSON …). */
+  format: boolean;
+  /** What to avoid is spelled out (negative instructions). */
+  negative: boolean;
+}
+
+/** The five rubric criteria in canonical display order. */
+export const PROMPT_RUBRIC_KEYS = [
+  "goal",
+  "context",
+  "constraints",
+  "format",
+  "negative",
+] as const;
+export type PromptRubricKey = (typeof PROMPT_RUBRIC_KEYS)[number];
+
+/** One AI tool the user prompted, with its prompt count and mean score. */
+export interface PromptByApp {
+  app: string;
+  n: number;
+  avg: number;
+}
+
+/** One day of the prompt-score trend (ascending by day). `avg` is that day's
+ *  mean prompt score, `n` the number of prompts. */
+export interface PromptTrendDay {
+  day: string;
+  avg: number;
+  n: number;
+}
+
+/** One recent prompt: when, which tool, its score, and a short head/preview. */
+export interface PromptRecent {
+  ts: number;
+  app: string;
+  score: number;
+  head: string;
+}
+
+export interface PromptCoachStats {
+  /** False → too few scored prompts for meaningful stats; show the empty state. */
+  enough: boolean;
+  /** Prompts scored in the window. */
+  prompts: number;
+  /** Mean prompt score (0–100). */
+  avg_score: number;
+  /** Share (0..1) of prompts satisfying each rubric criterion. */
+  rubric_rates: Record<PromptRubricKey, number>;
+  by_app: PromptByApp[];
+  trend: PromptTrendDay[];
+  recent: PromptRecent[];
+}
+/** Aggregate prompt-coaching stats over the last `days` (7 / 30 / 90). 100 % local. */
+export const promptCoachStats = (days = 30) =>
+  invoke<PromptCoachStats>("prompt_coach_stats", { days });
+
+/** Today's prompt "pattern" — a single prompting technique to practise (like the
+ *  word of the day). `id` picks its i18n name/desc/example (12 ids: role,
+ *  context_anchor, constraints_first, output_format, negative, few_shot,
+ *  step_by_step, audience, tone, iterate, sources, length). `done_today` is set
+ *  once the user actually applied it in a real prompt (grants `xp`, once/day). */
+export interface PromptPatternToday {
+  id: string;
+  xp: number;
+  done_today: boolean;
+}
+export const promptPatternToday = () =>
+  invoke<PromptPatternToday>("prompt_pattern_today");

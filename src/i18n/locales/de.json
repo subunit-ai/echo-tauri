@@ -962,6 +962,7 @@
     "bandRare": "Selten",
     "bandLegendary": "Legendär",
     "kindFind": "Wortfund",
+    "kindPattern": "Prompt-Muster",
     "findToastNotable": "Bemerkenswertes Wort gefunden: „{{word}}“ · +{{xp}} XP",
     "findToastRare": "Seltenes Wort entdeckt: „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
     "findToastLegendary": "Legendäres Wort! „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
@@ -1241,6 +1242,10 @@
         "better": {
           "name": "Sag es besser",
           "rule": "Formuliere den Satz kraftvoller — weg von schwachen und vagen Wörtern."
+        },
+        "golf": {
+          "name": "Prompt-Golf",
+          "rule": "Diktiere einen starken Prompt für die Aufgabe — Ziel, Kontext, Vorgaben, Format, No-Gos."
         }
       },
       "termLabel": "Begriff",
@@ -1276,7 +1281,8 @@
         "transcriptShow": "Transkript anzeigen",
         "transcriptHide": "Transkript verbergen",
         "xpAwarded": "+{{xp}} XP verdient",
-        "xpAlready": "Heute schon belohnt"
+        "xpAlready": "Heute schon belohnt",
+        "rubricTitle": "Prompt-Rubrik"
       },
       "quests": {
         "title": "Deine Wochen-Quests",
@@ -1299,6 +1305,125 @@
       "busyError": "Gerade läuft ein Diktat.",
       "recordFailed": "Aufnahme fehlgeschlagen",
       "transcribeFailed": "Auswertung fehlgeschlagen"
+    },
+    "prompts": {
+      "tab": "Prompts",
+      "loading": "Lade deine Prompt-Auswertung …",
+      "hero": {
+        "label": "Ø Prompt-Score",
+        "of100": "von 100",
+        "count": "{{count}} Prompts im Zeitraum"
+      },
+      "rubric": {
+        "title": "Was deine Prompts können",
+        "sub": "Fünf Kriterien, je 20 Punkte — wie oft deine Prompts sie erfüllen.",
+        "goal": {
+          "name": "Ziel",
+          "desc": "Ein klares Ziel: was soll die KI konkret tun?",
+          "lever": "Sag zuerst, was du willst — die eine Aufgabe in einem Satz, bevor der Rest kommt."
+        },
+        "context": {
+          "name": "Kontext",
+          "desc": "Relevanter Hintergrund: worum geht es, für wen, in welcher Situation?",
+          "lever": "Gib der KI den Hintergrund: worum es geht, was schon passiert ist, worauf du aufbaust."
+        },
+        "constraints": {
+          "name": "Vorgaben",
+          "desc": "Rahmen und Anforderungen: Länge, Stil, Muss-Kriterien, Grenzen.",
+          "lever": "Setz einen Rahmen: Länge, Ton, Muss-Kriterien — je enger, desto treffsicherer die Antwort."
+        },
+        "format": {
+          "name": "Format",
+          "desc": "Die gewünschte Ausgabeform: Liste, Tabelle, JSON, Fließtext …",
+          "lever": "Sag der KI, WIE die Antwort aussehen soll: als Liste, Tabelle, JSON …"
+        },
+        "negative": {
+          "name": "No-Gos",
+          "desc": "Negativ-Anweisungen: was die KI vermeiden oder weglassen soll.",
+          "lever": "Nenn die No-Gos: was die KI NICHT tun soll — keine Floskeln, kein Code, nicht länger als …"
+        }
+      },
+      "pattern": {
+        "eyebrow": "Muster des Tages",
+        "challenge": "Wende es in einem Prompt an · +{{xp}} XP",
+        "doneBadge": "Heute angewandt · +{{xp}} XP",
+        "exampleLabel": "Beispiel"
+      },
+      "patterns": {
+        "role": {
+          "name": "Rolle geben",
+          "desc": "Weis der KI eine Rolle zu — als Experte antwortet sie präziser und im richtigen Register.",
+          "example": "„Du bist ein erfahrener Steuerberater. Erkläre mir …“"
+        },
+        "context_anchor": {
+          "name": "Kontext verankern",
+          "desc": "Stell den Hintergrund an den Anfang, damit die KI die Aufgabe an die richtigen Fakten koppelt.",
+          "example": "„Kontext: Ich baue eine React-App mit Tauri. Frage: …“"
+        },
+        "constraints_first": {
+          "name": "Vorgaben zuerst",
+          "desc": "Nenn Grenzen und Muss-Kriterien früh — Länge, Stil, Format —, statt sie nachzuschieben.",
+          "example": "„In maximal drei Sätzen, ohne Fachjargon: …“"
+        },
+        "output_format": {
+          "name": "Format vorgeben",
+          "desc": "Sag genau, wie die Ausgabe aussehen soll — Liste, Tabelle, JSON —, dann bekommst du sie so.",
+          "example": "„Antworte als Tabelle mit den Spalten Name, Preis, Vorteil.“"
+        },
+        "negative": {
+          "name": "No-Gos nennen",
+          "desc": "Sag explizit, was die KI NICHT tun soll — das verhindert die häufigsten Fehlgriffe.",
+          "example": "„Keine Einleitung, keine Floskeln, direkt zur Lösung.“"
+        },
+        "few_shot": {
+          "name": "Beispiele geben",
+          "desc": "Zeig ein, zwei Beispiele für das gewünschte Ergebnis — die KI ahmt das Muster nach.",
+          "example": "„Beispiel: ‚Apfel → Obst‘. Jetzt: ‚Karotte → ?‘“"
+        },
+        "step_by_step": {
+          "name": "Schritt für Schritt",
+          "desc": "Bitte um eine schrittweise Herleitung — bei komplexen Aufgaben steigt so die Trefferquote.",
+          "example": "„Denk Schritt für Schritt und zeig deinen Rechenweg.“"
+        },
+        "audience": {
+          "name": "Zielgruppe klären",
+          "desc": "Sag, für wen die Antwort ist — ein Kind, ein Vorstand, ein Fachpublikum brauchen anderes.",
+          "example": "„Erklär es so, dass ein Zwölfjähriger es versteht.“"
+        },
+        "tone": {
+          "name": "Ton festlegen",
+          "desc": "Gib den gewünschten Ton vor — sachlich, locker, überzeugend —, damit die Antwort passt.",
+          "example": "„Formuliere es freundlich und motivierend.“"
+        },
+        "iterate": {
+          "name": "Iterieren",
+          "desc": "Bau auf der letzten Antwort auf, statt neu zu starten — verfeinere gezielt in Runden.",
+          "example": "„Kürzer, und mit einem konkreten Beispiel.“"
+        },
+        "sources": {
+          "name": "Quellen fordern",
+          "desc": "Verlang Belege oder eine Herleitung — das zwingt zu prüfbaren statt erfundenen Antworten.",
+          "example": "„Nenn für jede Aussage die Quelle.“"
+        },
+        "length": {
+          "name": "Länge steuern",
+          "desc": "Gib die gewünschte Länge an — ein Satz, ein Absatz, 200 Wörter —, sonst rät die KI.",
+          "example": "„Fass es in genau einem Absatz zusammen.“"
+        }
+      },
+      "byApp": {
+        "title": "Wo du promptest",
+        "sub": "Deine KI-Tools mit Anzahl und Ø-Score.",
+        "count": "{{count}} Prompts"
+      },
+      "recent": {
+        "title": "Zuletzt geprompt",
+        "sub": "Deine letzten Prompts mit Score."
+      },
+      "empty": {
+        "title": "Noch keine Prompts erkannt",
+        "hint": "Echo erkennt Diktate in KI-Tools wie Cursor, Claude oder ChatGPT automatisch als Prompts und bewertet sie still. Diktier einfach dort — deine Prompt-Auswertung erscheint hier von selbst."
+      }
     }
   },
   "vp": {

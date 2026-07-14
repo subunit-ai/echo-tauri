@@ -960,6 +960,7 @@
     "bandRare": "Rare",
     "bandLegendary": "Legendary",
     "kindFind": "Word find",
+    "kindPattern": "Prompt pattern",
     "findToastNotable": "Notable word found: “{{word}}” · +{{xp}} XP",
     "findToastRare": "Rare word discovered: “{{word}}” · No. {{dex}} · +{{xp}} XP",
     "findToastLegendary": "Legendary word! “{{word}}” · No. {{dex}} · +{{xp}} XP",
@@ -1239,6 +1240,10 @@
         "better": {
           "name": "Say It Better",
           "rule": "Reword the sentence more powerfully — away from weak and vague words."
+        },
+        "golf": {
+          "name": "Prompt Golf",
+          "rule": "Dictate a strong prompt for the task — goal, context, constraints, format, no-gos."
         }
       },
       "termLabel": "Term",
@@ -1274,7 +1279,8 @@
         "transcriptShow": "Show transcript",
         "transcriptHide": "Hide transcript",
         "xpAwarded": "+{{xp}} XP earned",
-        "xpAlready": "Already rewarded today"
+        "xpAlready": "Already rewarded today",
+        "rubricTitle": "Prompt rubric"
       },
       "quests": {
         "title": "Your weekly quests",
@@ -1297,6 +1303,125 @@
       "busyError": "A dictation is currently running.",
       "recordFailed": "Recording failed",
       "transcribeFailed": "Scoring failed"
+    },
+    "prompts": {
+      "tab": "Prompts",
+      "loading": "Loading your prompt breakdown …",
+      "hero": {
+        "label": "Avg prompt score",
+        "of100": "of 100",
+        "count": "{{count}} prompts in range"
+      },
+      "rubric": {
+        "title": "What your prompts do well",
+        "sub": "Five criteria, 20 points each — how often your prompts hit them.",
+        "goal": {
+          "name": "Goal",
+          "desc": "A clear objective: what exactly should the AI do?",
+          "lever": "Lead with what you want — the one task in a sentence, before anything else."
+        },
+        "context": {
+          "name": "Context",
+          "desc": "Relevant background: what is this about, for whom, in what situation?",
+          "lever": "Give the AI the background: what it's about, what happened already, what you build on."
+        },
+        "constraints": {
+          "name": "Constraints",
+          "desc": "Scope and requirements: length, style, must-haves, limits.",
+          "lever": "Set a frame: length, tone, must-haves — the tighter, the more on-target the answer."
+        },
+        "format": {
+          "name": "Format",
+          "desc": "The output shape you want: list, table, JSON, prose …",
+          "lever": "Tell the AI HOW the answer should look: as a list, a table, JSON …"
+        },
+        "negative": {
+          "name": "No-gos",
+          "desc": "Negative instructions: what the AI should avoid or leave out.",
+          "lever": "Name the no-gos: what the AI should NOT do — no filler, no code, no longer than …"
+        }
+      },
+      "pattern": {
+        "eyebrow": "Pattern of the day",
+        "challenge": "Apply it in a prompt · +{{xp}} XP",
+        "doneBadge": "Applied today · +{{xp}} XP",
+        "exampleLabel": "Example"
+      },
+      "patterns": {
+        "role": {
+          "name": "Give a role",
+          "desc": "Assign the AI a role — as an expert it answers more precisely and in the right register.",
+          "example": "“You are a seasoned tax advisor. Explain to me …”"
+        },
+        "context_anchor": {
+          "name": "Anchor the context",
+          "desc": "Put the background up front so the AI couples the task to the right facts.",
+          "example": "“Context: I'm building a React app with Tauri. Question: …”"
+        },
+        "constraints_first": {
+          "name": "Constraints first",
+          "desc": "State limits and must-haves early — length, style, format — instead of tacking them on.",
+          "example": "“In at most three sentences, no jargon: …”"
+        },
+        "output_format": {
+          "name": "Specify the format",
+          "desc": "Say exactly how the output should look — list, table, JSON — and you get it that way.",
+          "example": "“Answer as a table with columns Name, Price, Benefit.”"
+        },
+        "negative": {
+          "name": "Name the no-gos",
+          "desc": "Spell out what the AI should NOT do — it heads off the most common misfires.",
+          "example": "“No intro, no filler, straight to the solution.”"
+        },
+        "few_shot": {
+          "name": "Give examples",
+          "desc": "Show one or two examples of the result you want — the AI mirrors the pattern.",
+          "example": "“Example: ‚apple → fruit‘. Now: ‚carrot → ?‘”"
+        },
+        "step_by_step": {
+          "name": "Step by step",
+          "desc": "Ask for a step-by-step derivation — on complex tasks it lifts the hit rate.",
+          "example": "“Think step by step and show your reasoning.”"
+        },
+        "audience": {
+          "name": "Define the audience",
+          "desc": "Say who the answer is for — a child, a board, an expert crowd each need something else.",
+          "example": "“Explain it so a 12-year-old gets it.”"
+        },
+        "tone": {
+          "name": "Set the tone",
+          "desc": "Give the tone you want — factual, casual, persuasive — so the answer fits.",
+          "example": "“Phrase it warmly and encouragingly.”"
+        },
+        "iterate": {
+          "name": "Iterate",
+          "desc": "Build on the last answer instead of starting over — refine in targeted rounds.",
+          "example": "“Shorter, and with one concrete example.”"
+        },
+        "sources": {
+          "name": "Ask for sources",
+          "desc": "Demand evidence or a derivation — it forces checkable answers over invented ones.",
+          "example": "“Cite a source for each claim.”"
+        },
+        "length": {
+          "name": "Control the length",
+          "desc": "State the length you want — one sentence, a paragraph, 200 words — or the AI guesses.",
+          "example": "“Sum it up in exactly one paragraph.”"
+        }
+      },
+      "byApp": {
+        "title": "Where you prompt",
+        "sub": "Your AI tools with count and avg score.",
+        "count": "{{count}} prompts"
+      },
+      "recent": {
+        "title": "Recent prompts",
+        "sub": "Your latest prompts with score."
+      },
+      "empty": {
+        "title": "No prompts detected yet",
+        "hint": "Echo automatically recognises dictations in AI tools like Cursor, Claude or ChatGPT as prompts and scores them silently. Just dictate there — your prompt breakdown appears here on its own."
+      }
     }
   },
   "vp": {
