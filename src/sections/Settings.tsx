@@ -14,10 +14,12 @@ import {
   appVersion,
   checkForUpdates,
   installUpdate,
+  deleteAvatar,
   listAudioDevices,
   openConfigDir,
   openExternal,
   setAutostart,
+  uploadAvatar,
   patchForUiMode,
   uiModeOf,
   listOrbProfiles,
@@ -603,6 +605,66 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
     const obj: Record<string, string> = {};
     for (const [k, v] of next) if (k.trim()) obj[k.trim()] = v;
     set("auto_mode_overrides", obj);
+  };
+
+  // ── Account profile picture ────────────────────────────────────────────────
+  // One image for the whole Subunit account (auth.subunit.ai) — upload/remove
+  // here, every app shows it. Rust mirrors config.avatar_url (+ config-changed),
+  // so no local state for the URL itself; only busy/error UI state lives here.
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarErr, setAvatarErr] = useState("");
+
+  /** Map the stable Rust/server error codes to translated user-facing texts. */
+  const avatarErrText = (code: string) => {
+    if (code.includes("too_large")) return t("settings.avatarErrSize");
+    if (code.includes("unsupported_image") || code.includes("invalid_request"))
+      return t("settings.avatarErrType");
+    if (code.includes("rate_limited")) return t("settings.avatarErrRate");
+    if (code.includes("network")) return t("settings.avatarErrOffline");
+    return t("settings.avatarErrGeneric");
+  };
+
+  const onAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file after an error
+    if (!file) return;
+    setAvatarErr("");
+    // Pre-check locally so obvious misses (screenshots > 8 MB, PDFs renamed to
+    // .png, …) fail instantly without a round-trip; the server re-validates.
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setAvatarErr(t("settings.avatarErrType"));
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setAvatarErr(t("settings.avatarErrSize"));
+      return;
+    }
+    setAvatarBusy(true);
+    try {
+      const buf = await file.arrayBuffer();
+      await uploadAvatar(Array.from(new Uint8Array(buf)), file.type);
+      await reload();
+    } catch (err) {
+      console.error("avatar upload failed", err);
+      setAvatarErr(avatarErrText(String(err)));
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
+  const doRemoveAvatar = async () => {
+    setAvatarErr("");
+    setAvatarBusy(true);
+    try {
+      await deleteAvatar();
+      await reload();
+    } catch (err) {
+      console.error("avatar delete failed", err);
+      setAvatarErr(avatarErrText(String(err)));
+    } finally {
+      setAvatarBusy(false);
+    }
   };
 
   const doLogin = async () => {
@@ -1326,7 +1388,7 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
           <>
             <Group title={t("settings.secProfile")}>
               <div className="profile-head">
-                <Avatar name={c.nickname || c.display_name || c.account_email} size={56} />
+                <Avatar name={c.nickname || c.display_name || c.account_email} src={c.avatar_url} size={56} />
                 <div className="profile-id">
                   <div className="profile-name">
                     {c.nickname || c.display_name || t("account.guest")}
@@ -1334,6 +1396,38 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                   {c.account_email && <div className="profile-mail">{c.account_email}</div>}
                 </div>
               </div>
+              {c.account_email && (
+                <Row name={t("settings.avatar")} hint={t("settings.avatarHint")}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {c.avatar_url && (
+                        <button className="sub-tab" onClick={doRemoveAvatar} disabled={avatarBusy}>
+                          {t("settings.avatarRemove")}
+                        </button>
+                      )}
+                      <button
+                        className="sub-tab"
+                        onClick={() => avatarFileRef.current?.click()}
+                        disabled={avatarBusy}
+                      >
+                        {avatarBusy ? t("settings.avatarUploading") : t("settings.avatarChoose")}
+                      </button>
+                    </div>
+                    {avatarErr && (
+                      <span style={{ color: "#f87171", fontSize: "0.78rem", maxWidth: 240, textAlign: "right" }}>
+                        {avatarErr}
+                      </span>
+                    )}
+                    <input
+                      ref={avatarFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: "none" }}
+                      onChange={onAvatarFile}
+                    />
+                  </div>
+                </Row>
+              )}
               <TextRow
                 name={t("settings.displayName")}
                 hint={t("settings.displayNameHint")}

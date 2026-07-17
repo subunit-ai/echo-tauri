@@ -94,6 +94,10 @@ export interface Config {
   /** Equipped Wortdex title: an achievement id (learning.titles.<id>) or "" —
    *  shown on the account card and carried into the leaderboard. */
   learning_title: string;
+  /** Account profile picture: versioned public URL (auth.subunit.ai, 512×512
+   *  WebP) or null. Mirrored from the JWT `picture` claim on login/refresh and
+   *  updated instantly after uploadAvatar/deleteAvatar. Use verbatim in <img>. */
+  avatar_url: string | null;
   last_cloud_mode: string;
   auto_update_check: boolean;
   autostart_enabled: boolean;
@@ -157,6 +161,14 @@ export const setConfig = (config: Config) => invoke<void>("set_config", { config
 /** Toggle launch-at-login (flips the OS autostart entry + persists). */
 export const setAutostart = (enabled: boolean) =>
   invoke<void>("set_autostart", { enabled });
+/** Upload a new account profile picture (raw file bytes + MIME). Resolves to
+ *  the new versioned avatar URL; config.avatar_url is mirrored Rust-side
+ *  (+ config-changed). Rejects with a stable error code ("too_large",
+ *  "unsupported_image", "rate_limited", "unauthorized", "network", …). */
+export const uploadAvatar = (bytes: number[], mime: string) =>
+  invoke<string>("upload_avatar", { bytes, mime });
+/** Remove the account profile picture (server + local mirror). */
+export const deleteAvatar = () => invoke<void>("delete_avatar");
 /** Persist a drag-set orb position (logical screen px). Takes the orb square's
  *  top-left; Rust stores the CENTRE ("center-x-y") so resizes scale in place. */
 export const setOrbPosition = (x: number, y: number) =>

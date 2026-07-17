@@ -319,7 +319,7 @@ function AccountCard({
   return (
     <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
       <TierRing level={level} size={40}>
-        <Avatar name={nickname || name || email} size={40} />
+        <Avatar name={nickname || name || email} src={config?.avatar_url} size={40} />
       </TierRing>
       <span className="sa-meta">
         <span className="sa-name">{primary}</span>

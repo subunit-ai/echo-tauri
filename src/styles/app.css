@@ -2253,6 +2253,9 @@ select:hover {
 .avatar {
   display: inline-grid;
   place-items: center;
+  /* Anchor + clip for the uploaded-photo overlay (.avatar-photo). */
+  position: relative;
+  overflow: hidden;
   border-radius: 50%;
   flex-shrink: 0;
   font-weight: 700;
@@ -2274,6 +2277,16 @@ select:hover {
   background: var(--glass2);
   color: var(--muted);
   box-shadow: inset 0 0 0 1px var(--glass-edge);
+}
+/* Uploaded account picture — an overlay ON TOP of the initials, so the gradient
+   + initials show while the image loads and remain the fallback when it fails
+   (Avatar.tsx latches onError). Server images are always square (512×512). */
+.avatar-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 /* Colourless dark mode: monochrome filled avatar (no hue bleeds through). Scoped
    to :not(.avatar-empty) so the recessed-glass guest placeholder keeps its look. */

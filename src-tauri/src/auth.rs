@@ -89,6 +89,7 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                 let workspace = params.get("workspace_id").cloned().unwrap_or_default();
                 let email = email_from_jwt(&access).unwrap_or_default();
                 let jwt_name = name_from_jwt(&access);
+                let jwt_picture = picture_from_jwt(&access);
 
                 {
                     let st = app.state::<AppState>();
@@ -108,6 +109,11 @@ pub fn login(app: &AppHandle) -> anyhow::Result<String> {
                             c.display_name = n;
                         }
                     }
+                    // The avatar is ACCOUNT-owned (auth server is the source of
+                    // truth), so mirror the `picture` claim unconditionally — also
+                    // back to None when the account has no picture. Not the
+                    // seed-once pattern above.
+                    c.avatar_url = jwt_picture;
                     let _ = c.save();
                 }
 
@@ -208,6 +214,9 @@ pub fn ensure_fresh(app: &AppHandle) {
     let now = now_secs();
     match do_refresh(&refresh) {
         Ok((access, new_refresh, exp)) => {
+            // Avatar changes (upload/delete from ANY Subunit app) propagate via the
+            // token's `picture` claim — mirror it on every refresh, also to None.
+            let jwt_picture = picture_from_jwt(&access);
             let st = app.state::<AppState>();
             let mut c = st.config.lock();
             c.subunit_access_token = access;
@@ -216,10 +225,17 @@ pub fn ensure_fresh(app: &AppHandle) {
             }
             c.subunit_token_expires_in = exp;
             c.subunit_token_issued_at = now;
+            let avatar_changed = c.avatar_url != jwt_picture;
+            c.avatar_url = jwt_picture;
             let _ = c.save();
             drop(c);
             // The session is healthy again — clear any pending re-login banner.
             set_session_expired(app, false);
+            if avatar_changed {
+                use tauri::Emitter;
+                // Nudge the UI to reload config so the new picture shows everywhere.
+                let _ = app.emit("echo://config-changed", ());
+            }
         }
         Err(RefreshFail::TokenDead) => {
             log::warn!("refresh token rejected by server (4xx) — clearing it; re-login required");
@@ -361,6 +377,125 @@ fn fetch_active_tier(token: &str) -> anyhow::Result<String> {
         .to_string())
 }
 
+/// Upload a new account profile picture (JPEG/PNG/WebP, ≤ 8 MB — the server
+/// re-crops to 512×512 WebP itself, so no client-side resizing). On success the
+/// returned versioned avatar URL is mirrored into config (+ config-changed).
+/// Errors are the STABLE server codes (`too_large`, `unsupported_image`,
+/// `rate_limited`, …) or `network`, which the frontend maps to i18n texts.
+pub fn upload_avatar(app: &AppHandle, bytes: Vec<u8>, mime: String) -> Result<String, String> {
+    let token = avatar_token(app)?;
+    // File name is cosmetic (the server keys on the MIME type) but multipart
+    // parsers commonly expect one to treat the part as a file.
+    let ext = match mime.as_str() {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => "jpg",
+    };
+    let part = reqwest::blocking::multipart::Part::bytes(bytes)
+        .file_name(format!("avatar.{ext}"))
+        .mime_str(&mime)
+        .map_err(|_| "unsupported_image".to_string())?;
+    let form = reqwest::blocking::multipart::Form::new().part("file", part);
+    let resp = crate::http::client()
+        .post(format!("{AUTH_BASE}/me/avatar"))
+        // Generous budget: up to 8 MB upstream on a possibly slow uplink.
+        .timeout(Duration::from_secs(60))
+        .bearer_auth(&token)
+        .multipart(form)
+        .send()
+        .map_err(|e| {
+            log::warn!("avatar upload failed: {e}");
+            "network".to_string()
+        })?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(avatar_error_code(status));
+    }
+    let j: serde_json::Value = resp.json().map_err(|e| {
+        log::warn!("avatar upload: bad response: {e}");
+        "network".to_string()
+    })?;
+    let url = j
+        .get("avatar_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if url.is_empty() {
+        return Err("network".to_string());
+    }
+    // Use the response URL immediately — the JWT `picture` claim only catches up
+    // with the next token refresh (≤ 5 min).
+    set_avatar_url(app, Some(url.clone()));
+    Ok(url)
+}
+
+/// Remove the account profile picture on the auth server and locally.
+pub fn delete_avatar(app: &AppHandle) -> Result<(), String> {
+    let token = avatar_token(app)?;
+    let resp = crate::http::client()
+        .delete(format!("{AUTH_BASE}/me/avatar"))
+        .timeout(Duration::from_secs(20))
+        .bearer_auth(&token)
+        .send()
+        .map_err(|e| {
+            log::warn!("avatar delete failed: {e}");
+            "network".to_string()
+        })?;
+    if !resp.status().is_success() {
+        return Err(avatar_error_code(resp.status()));
+    }
+    set_avatar_url(app, None);
+    Ok(())
+}
+
+/// Fresh access token for the avatar endpoints, or the stable `unauthorized`
+/// error code when there's no signed-in session.
+fn avatar_token(app: &AppHandle) -> Result<String, String> {
+    ensure_fresh(app);
+    let token = {
+        let st = app.state::<AppState>();
+        let c = st.config.lock();
+        c.subunit_access_token.clone()
+    };
+    if token.is_empty() {
+        return Err("unauthorized".to_string());
+    }
+    Ok(token)
+}
+
+/// Map an avatar-endpoint HTTP status to the server's stable error codes (see
+/// the subunit-auth avatar contract) so the frontend can translate them.
+fn avatar_error_code(status: reqwest::StatusCode) -> String {
+    match status.as_u16() {
+        401 => "unauthorized".to_string(),
+        413 => "too_large".to_string(),
+        415 => "unsupported_image".to_string(),
+        429 => "rate_limited".to_string(),
+        400 => "invalid_request".to_string(),
+        s => format!("http_{s}"),
+    }
+}
+
+/// Mirror the account avatar URL into config and nudge the UI. No-op (and no
+/// event) when the value is unchanged.
+fn set_avatar_url(app: &AppHandle, url: Option<String>) {
+    let changed = {
+        let st = app.state::<AppState>();
+        let mut c = st.config.lock();
+        if c.avatar_url != url {
+            c.avatar_url = url;
+            let _ = c.save();
+            true
+        } else {
+            false
+        }
+    };
+    if changed {
+        use tauri::Emitter;
+        let _ = app.emit("echo://config-changed", ());
+    }
+}
+
 fn read_request_line(stream: &TcpStream) -> anyhow::Result<String> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
@@ -473,4 +608,21 @@ fn name_from_jwt(token: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// OIDC `picture` claim from the access JWT — the versioned public URL of the
+/// account's profile picture (auth.subunit.ai avatar contract). Only present
+/// when an avatar exists, so None here means "no avatar" and must be mirrored
+/// as such. The URL is used verbatim (versioning/cache-busting is built in).
+fn picture_from_jwt(token: &str) -> Option<String> {
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let j: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let s = j.get("picture")?.as_str()?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    Some(s.to_string())
 }
