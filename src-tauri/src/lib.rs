@@ -198,6 +198,8 @@ pub fn run() {
             commands::login,
             commands::logout,
             commands::auth_session_expired,
+            commands::upload_avatar,
+            commands::delete_avatar,
             commands::set_autostart,
             commands::check_for_updates,
             commands::install_update,

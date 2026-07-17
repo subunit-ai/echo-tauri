@@ -318,6 +318,12 @@ pub struct Config {
     /// the name in the sidebar account card and pushed to the leaderboard.
     /// Empty = no title equipped. The catalog lives in commands::ACHIEVEMENTS.
     pub learning_title: String,
+    /// Versioned public URL of the ACCOUNT's profile picture (one image for the
+    /// whole Subunit account, served by auth.subunit.ai; always 512×512 WebP).
+    /// Mirrored 1:1 from the JWT `picture` claim on every login/refresh — also
+    /// back to None — and updated instantly after an upload/delete (auth.rs).
+    /// Unlike `display_name` this is NOT seeded-once: the account owns it.
+    pub avatar_url: Option<String>,
     pub last_cloud_mode: String,
     pub auto_update_check: bool,
     /// Auto-detect a running Teams/Zoom/Meet meeting and prompt to record it.
@@ -587,6 +593,7 @@ impl Default for Config {
             display_name: String::new(),
             nickname: String::new(),
             learning_title: String::new(),
+            avatar_url: None,
             last_cloud_mode: "subunit".to_string(),
             auto_update_check: true,
             meeting_autodetect: true,

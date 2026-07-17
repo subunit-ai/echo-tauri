@@ -1,11 +1,14 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-/** Initials-based profile picture (Slack/Google style) — no image upload infra
- *  needed, always looks intentional. The hue is DETERMINISTIC from the name so a
- *  given person always gets the same colour, and it's exposed as a CSS custom
- *  property (`--avatar-hue`) rather than a hard-coded gradient — that lets the
- *  colourless "Schwarz" theme override `.avatar` to neutral grey (see app.css).
- *  Falls back to a neutral placeholder glyph when there's no name yet. */
+/** Profile picture: the account's uploaded image when `src` is set, otherwise
+ *  initials (Slack/Google style) — always looks intentional. The hue is
+ *  DETERMINISTIC from the name so a given person always gets the same colour,
+ *  and it's exposed as a CSS custom property (`--avatar-hue`) rather than a
+ *  hard-coded gradient — that lets the colourless "Schwarz" theme override
+ *  `.avatar` to neutral grey (see app.css). Falls back to a neutral placeholder
+ *  glyph when there's no name yet. The image renders as an overlay ON TOP of
+ *  the initials, so while it loads — and if it fails (`onError`) — exactly
+ *  today's initials look shows through. */
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const hp = (((h % 360) + 360) % 360) / 60;
@@ -34,14 +37,24 @@ const contrast = (l1: number, l2: number) => (Math.max(l1, l2) + 0.05) / (Math.m
 
 export function Avatar({
   name,
+  src,
   size = 34,
   className = "",
 }: {
   name: string;
+  /** Versioned avatar URL from config (`avatar_url`); null/undefined = initials. */
+  src?: string | null;
   size?: number;
   className?: string;
 }) {
   const clean = name.trim();
+
+  // Latch a failed image load and fall back to initials. Reset when the URL
+  // changes — every new upload mints a new versioned URL (?v=…), so a previous
+  // failure must not suppress the fresh image.
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+  const photo = src && !broken ? src : "";
 
   // Code-point aware so an emoji / astral-plane first letter doesn't split into a
   // lone surrogate (which renders as "�"). [...str] iterates by code point.
@@ -93,6 +106,7 @@ export function Avatar({
           <path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" />
         </svg>
       )}
+      {photo && <img className="avatar-photo" src={photo} alt="" draggable={false} onError={() => setBroken(true)} />}
     </span>
   );
 }

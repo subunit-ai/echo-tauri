@@ -2558,6 +2558,25 @@ pub async fn login(app: AppHandle) -> Result<String, String> {
     res
 }
 
+/// Upload a new account profile picture (raw file bytes + MIME type from the
+/// webview's file picker). Blocking HTTP → run off the command thread, like
+/// `login`. Errors are stable codes (`too_large`, `unsupported_image`,
+/// `rate_limited`, `unauthorized`, `network`, …) the frontend translates.
+#[tauri::command]
+pub async fn upload_avatar(app: AppHandle, bytes: Vec<u8>, mime: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::auth::upload_avatar(&app, bytes, mime))
+        .await
+        .map_err(|e| format!("avatar task: {e}"))?
+}
+
+/// Remove the account profile picture (server + local mirror).
+#[tauri::command]
+pub async fn delete_avatar(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || crate::auth::delete_avatar(&app))
+        .await
+        .map_err(|e| format!("avatar task: {e}"))?
+}
+
 /// Toggle launch-at-login: flip the OS autostart entry and persist the preference.
 #[tauri::command]
 pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
@@ -2588,6 +2607,7 @@ pub fn logout(app: AppHandle) -> Result<(), String> {
         c.subunit_token_expires_in = 0;
         c.subunit_workspace_id.clear();
         c.account_email.clear();
+        c.avatar_url = None; // account-owned — gone with the account
         c.plan = "free".to_string(); // signed out → no entitlement
         c.save().map_err(|e| e.to_string())?;
     }
