@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.140",
+    date: "2026-07-17",
+    title: { de: "Dein Profilbild — einmal hochladen, überall dabei", en: "Your profile picture — upload once, everywhere with you" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Profilbild fürs Subunit-Konto: In den Einstellungen unter Konto ein Bild hochladen — es erscheint in Echo und allen anderen Subunit-Apps (SCAI, Desktop, Chat).",
+        en: "Profile picture for your Subunit account: upload an image in Settings → Account — it shows up in Echo and every other Subunit app (SCAI, Desktop, Chat).",
+      },
+      {
+        kind: "improvement",
+        de: "Ohne Bild bleibt alles wie gewohnt bei den farbigen Initialen — auch wenn ein Bild mal nicht lädt.",
+        en: "Without a picture everything stays on the familiar colored initials — also whenever an image fails to load.",
+      },
+    ],
+  },
+  {
     version: "0.5.139",
     date: "2026-07-15",
     title: {
