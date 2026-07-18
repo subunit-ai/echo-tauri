@@ -31,6 +31,23 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.142",
+    date: "2026-07-18",
+    title: { de: "Bestenliste mit Profilen — sieh, wie weit die anderen gekommen sind", en: "Leaderboard profiles — see how far everyone has come" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Tippe in der Wortschatz-Bestenliste auf eine Person und sieh ihr Profil: Level und Fortschritt zum nächsten, getragener Titel, alle freigeschalteten Erfolge (5 von 13 …) und die Wortschatz-Sammlung (bemerkenswert / selten / legendär).",
+        en: "Tap anyone in the vocabulary leaderboard to open their profile: level and progress to the next, worn title, every unlocked achievement (5 of 13 …) and their word collection (notable / rare / legendary).",
+      },
+      {
+        kind: "improvement",
+        de: "Die Bestenliste hat jetzt einen Umschalter zwischen dieser Woche und der ewigen Rangliste und zeigt die Stufe direkt neben jedem Namen.",
+        en: "The leaderboard now switches between this week and the all-time ranking, and shows each player's level right next to their name.",
+      },
+    ],
+  },
+  {
     version: "0.5.141",
     date: "2026-07-18",
     title: { de: "Das Dojo erwacht — Prompt-Katas, Gürtel und Hanko-Stempel", en: "The dojo awakens — prompt katas, belts and hanko seals" },

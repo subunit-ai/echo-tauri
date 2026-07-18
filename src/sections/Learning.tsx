@@ -39,6 +39,7 @@ import {
   type KataList,
   type KataResult,
   type Leaderboard,
+  type LeaderboardRow,
   type LearningAnalysis,
   type LearningEvent,
   type LearningSuggestions,
@@ -63,6 +64,7 @@ import {
 import { useToast } from "../state/ToastContext";
 import { Avatar } from "../components/Avatar";
 import { TierRing } from "../components/TierRing";
+import { MemberProfile } from "../components/MemberProfile";
 import { RadarChart, type RadarAxis } from "../components/charts/RadarChart";
 import { Sparkline } from "../components/charts/Sparkline";
 import { levelForXp } from "../lib/level";
@@ -644,6 +646,8 @@ function CoachTab() {
   const [wod, setWod] = useState<WordOfDay | null>(null);
   const [xp, setXp] = useState<LearningXp | null>(null);
   const [lb, setLb] = useState<Leaderboard | null>(null);
+  const [board, setBoard] = useState<"week" | "total">("week");
+  const [selectedMember, setSelectedMember] = useState<LeaderboardRow | null>(null);
   const [days, setDays] = useState<number>(30);
   const [analysis, setAnalysis] = useState<LearningAnalysis | null>(null);
   const [suggestions, setSuggestions] = useState<LearningSuggestions | null>(null);
@@ -856,45 +860,81 @@ function CoachTab() {
         </div>
       )}
 
-      {/* Leaderboard — likewise its own box, so names and scores fit. */}
-      {lb?.available && (lb.week?.length ?? 0) > 0 && (
-        <div className="chart-card">
-          <div className="chart-head">
-            <div>
-              <div className="chart-title">{t("learning.lbTitle")}</div>
-              <div className="chart-sub">{t("learning.lbSub")}</div>
+      {/* Leaderboard — likewise its own box, so names and scores fit. Now a
+          clickable board: week/all-time toggle, top-ten, and every row opens
+          a member profile. */}
+      {lb?.available && ((lb.week?.length ?? 0) > 0 || (lb.total?.length ?? 0) > 0) && (() => {
+        const activeRows = (board === "week" ? lb.week : lb.total) ?? [];
+        const shown = activeRows.slice(0, 10);
+        const meRank = board === "week" ? lb.me?.rank_week : lb.me?.rank_total;
+        const meXp = board === "week" ? xp?.xp_week : xp?.xp_total;
+        return (
+          <div className="chart-card">
+            <div className="chart-head">
+              <div>
+                <div className="chart-title">{t("learning.lbTitle")}</div>
+                <div className="chart-sub">{t("learning.lbSub")}</div>
+              </div>
+            </div>
+            <div className="sub-tabs" style={{ marginBottom: 12 }}>
+              <button
+                className={`sub-tab ${board === "week" ? "active" : ""}`}
+                onClick={() => setBoard("week")}
+              >
+                {t("learning.lbBoardWeek")}
+              </button>
+              <button
+                className={`sub-tab ${board === "total" ? "active" : ""}`}
+                onClick={() => setBoard("total")}
+              >
+                {t("learning.lbBoardTotal")}
+              </button>
+            </div>
+            <div className="xp-feed">
+              {shown.map((row) => (
+                <button
+                  key={row.rank}
+                  type="button"
+                  className={`xp-feed-row lb-row-btn${row.me ? " me" : ""}`}
+                  onClick={() => setSelectedMember(row)}
+                >
+                  <span className="lb-rank">{row.rank}</span>
+                  {/* Level ring only materialises when the server sends xp_total
+                      and it clears level 3 — old servers → bare avatar. */}
+                  <TierRing level={levelForXp(row.xp_total ?? 0)} size={22}>
+                    <Avatar name={row.name} size={22} />
+                  </TierRing>
+                  <span className="lb-level" aria-hidden="true">
+                    {levelForXp(row.xp_total ?? 0)}
+                  </span>
+                  <span className="xp-feed-word">
+                    {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
+                  </span>
+                  {row.title && (
+                    <span className="lb-title">{t(`learning.titles.${row.title}`)}</span>
+                  )}
+                  <span className="xp-feed-kind">
+                    {t("learning.lbWords", { count: row.words })}
+                  </span>
+                  <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
+                </button>
+              ))}
+              {meRank != null && !shown.some((r) => r.me) && (
+                <div className="xp-feed-row me">
+                  <span className="lb-rank">{meRank}</span>
+                  <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
+                  <span className="xp-feed-xp">
+                    {(meXp ?? 0).toLocaleString(i18n.language)} XP
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-          <div className="xp-feed">
-            {(lb.week ?? []).slice(0, 5).map((row) => (
-              <div key={row.rank} className={`xp-feed-row${row.me ? " me" : ""}`}>
-                <span className="lb-rank">{row.rank}</span>
-                {/* Level ring only materialises when the server sends xp_total
-                    and it clears level 3 — old servers → bare avatar. */}
-                <TierRing level={levelForXp(row.xp_total ?? 0)} size={22}>
-                  <Avatar name={row.name} size={22} />
-                </TierRing>
-                <span className="xp-feed-word">
-                  {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
-                </span>
-                {row.title && (
-                  <span className="lb-title">{t(`learning.titles.${row.title}`)}</span>
-                )}
-                <span className="xp-feed-kind">{t("learning.lbWords", { count: row.words })}</span>
-                <span className="xp-feed-xp">{row.xp.toLocaleString(i18n.language)} XP</span>
-              </div>
-            ))}
-            {lb.me?.rank_week != null && !(lb.week ?? []).slice(0, 5).some((r) => r.me) && (
-              <div className="xp-feed-row me">
-                <span className="lb-rank">{lb.me.rank_week}</span>
-                <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
-                <span className="xp-feed-xp">
-                  {(xp?.xp_week ?? 0).toLocaleString(i18n.language)} XP
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        );
+      })()}
+
+      {selectedMember && (
+        <MemberProfile row={selectedMember} onClose={() => setSelectedMember(null)} />
       )}
 
       <div className="sub-tabs" style={{ marginBottom: 16 }}>

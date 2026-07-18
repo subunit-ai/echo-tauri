@@ -642,6 +642,11 @@ export interface LeaderboardRow {
    *  achievement id (learning.titles.<id>). Both may be absent on old servers. */
   xp_total?: number;
   title?: string;
+  /** Earned achievement ids (see ACHIEVEMENTS / learning.ach.<id>). Absent on
+   *  old servers — callers must degrade gracefully (hide, don't show all-locked). */
+  achievements?: string[];
+  /** Wortdex collection tallies per rarity band. Absent on old servers. */
+  bands?: BandCounts;
 }
 export interface Leaderboard {
   available: boolean;
