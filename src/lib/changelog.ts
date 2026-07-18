@@ -31,6 +31,28 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.141",
+    date: "2026-07-18",
+    title: { de: "Das Dojo erwacht — Prompt-Katas, Gürtel und Hanko-Stempel", en: "The dojo awakens — prompt katas, belts and hanko seals" },
+    changes: [
+      {
+        kind: "feature",
+        de: "Prompt-Dojo mit Kata-Pfad: Sieben Stationen bringen dir Schritt für Schritt bei, wie ein starker Prompt entsteht — Ziel, Kontext, Format, Grenzen, Ausschlüsse, Beispiel und die Meisterprüfung. Jede Kata ist eine gesprochene Mission mit Sofort-Bewertung.",
+        en: "Prompt dojo with a kata path: seven stations teach you step by step how a strong prompt is built — goal, context, format, limits, exclusions, example and the master exam. Every kata is a spoken mission with instant scoring.",
+      },
+      {
+        kind: "feature",
+        de: "Gürtel-System: Vom weißen bis zum schwarzen Gürtel — Katas und Trainingstage in beiden Hallen zählen. Beim Aufstieg gibt es eine kleine Gürtel-Zeremonie.",
+        en: "Belt system: from white to black belt — katas and training days in both halls count. Rank up and you get a little belt ceremony.",
+      },
+      {
+        kind: "improvement",
+        de: "Dojo und Prompt-Dojo im neuen Japan-Stil: Torii-Bühne mit Bergen und Nebel, Missionen auf Schriftrollen und deine Punktzahl als roter Hanko-Stempel.",
+        en: "Dojo and prompt dojo in a new Japanese style: a torii stage with mountains and mist, missions on scrolls, and your score as a red hanko seal.",
+      },
+    ],
+  },
+  {
     version: "0.5.140",
     date: "2026-07-17",
     title: { de: "Dein Profilbild — einmal hochladen, überall dabei", en: "Your profile picture — upload once, everywhere with you" },

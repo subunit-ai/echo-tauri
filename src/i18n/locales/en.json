@@ -1315,7 +1315,7 @@
       "transcribeFailed": "Scoring failed"
     },
     "prompts": {
-      "tab": "Prompts",
+      "tab": "Prompt Dojo",
       "loading": "Loading your prompt breakdown …",
       "hero": {
         "label": "Avg prompt score",
@@ -1431,6 +1431,124 @@
       "empty": {
         "title": "No prompts detected yet",
         "hint": "Echo automatically recognises dictations in AI tools like Cursor, Claude or ChatGPT as prompts and scores them silently. Just dictate there — your prompt breakdown appears here on its own."
+      },
+      "statsDivider": "Your prompt stats"
+    },
+    "kata": {
+      "pathTitle": "The Kata Path",
+      "pathSub": "Seven katas from the goal to the master's exam — speak your way to the black belt.",
+      "stationLabel": "Station {{idx}}",
+      "teachLabel": "Lesson",
+      "missionLabel": "Your Mission",
+      "goodLabel": "Good",
+      "badLabel": "Bad",
+      "startBtn": "Start kata",
+      "retryBtn": "Again",
+      "lockedHint": "Pass the previous kata first",
+      "lockedError": "This kata is still locked.",
+      "bestLabel": "Best {{score}}",
+      "thresholdLabel": "Pass from {{score}}",
+      "masterHint": "All five elements in one prompt: goal, context, format, limits, no — all five lamps must light up.",
+      "resultTitle": "Verdict",
+      "passed": "Passed",
+      "failed": "Not yet passed",
+      "firstPass": "Kata passed",
+      "xpAwarded": "+{{xp}} XP",
+      "xpNone": "No new XP",
+      "transcriptShow": "Show transcript",
+      "transcriptHide": "Hide transcript",
+      "busyError": "A recording is already running.",
+      "recordFailed": "Recording failed",
+      "transcribeFailed": "Scoring failed",
+      "recording": {
+        "starting": "Get ready …",
+        "transcribing": "Scoring …",
+        "stopBtn": "Done"
+      },
+      "goal": {
+        "title": "The Goal",
+        "teach": "A prompt starts with the goal: in your first sentence, say WHAT should be produced — with a clear verb. ‚Write‘, ‚Draft‘, ‚Summarise‘. Put the goal last and you leave the model guessing.",
+        "good": "Write a cancellation for Friday's delivery date.",
+        "bad": "So we’ve got this thing with the delivery date, it’s all a bit tricky right now…",
+        "mission": "You need a short message to your team that tomorrow's meeting is cancelled. Speak the prompt — start with the goal."
+      },
+      "context": {
+        "title": "The Context",
+        "teach": "The model knows nothing about your situation. Give the WHY and FOR WHOM: background, occasion, recipient. One sentence of context saves three follow-up questions.",
+        "good": "…Background: the client has postponed twice and reacts badly to pressure.",
+        "bad": "„Write an email to the client.“ (Which client? What situation? What tone?)",
+        "mission": "You want an apology email to a client. Speak the prompt — with at least two sentences of background: what happened and how the client ticks."
+      },
+      "format": {
+        "title": "The Format",
+        "teach": "Say how the result should LOOK: list or prose, how long, what tone. Without a format you get the average shape — rarely the right one.",
+        "good": "…as a bullet list, at most five points, matter-of-fact tone.",
+        "bad": "…just make it kind of tidy.",
+        "mission": "You want to pull the tasks out of a meeting's minutes. Speak the prompt — and specify the exact output format."
+      },
+      "constraints": {
+        "title": "The Limits",
+        "teach": "Numbers and limits steer the whole answer: max length, count, budget, deadline. Name them EARLY — a limit at the end often comes too late.",
+        "good": "At most 120 words, exactly three suggestions, budget under 500 euros.",
+        "bad": "…not too long, and don't overdo it.",
+        "mission": "You want three ideas for a client gift. Speak the prompt — with at least two concrete numbers as limits."
+      },
+      "negative": {
+        "title": "The No",
+        "teach": "Say what should NOT be in it too: ‚no fluff‘, ‚no jargon‘, ‚not formal‘. A good no cuts off the most common mistake before it happens.",
+        "good": "…no anglicisms and no exclamation marks, don't beat around the bush.",
+        "bad": "(no boundaries at all — the model fills the gap with stock phrases)",
+        "mission": "You want a LinkedIn post about your new product. Speak the prompt — and explicitly exclude at least two things."
+      },
+      "example": {
+        "title": "The Example",
+        "teach": "Show ONE example of how the result should sound — one sentence is enough. An example says more about tone and form than three adjectives.",
+        "good": "…for example like this: ‚Quick logistics update: goods are out, ETA Thursday.‘",
+        "bad": "…just write it casually, but professional too, you know.",
+        "mission": "You want weekly status updates in a fixed style. Speak the prompt — and give a verbatim example of how an update should sound."
+      },
+      "master": {
+        "title": "The Master's Exam",
+        "teach": "The exam: ONE prompt, all five elements — goal, context, format, limits, no. Whoever can speak that freely prompts better than 99 percent.",
+        "good": "",
+        "bad": "",
+        "mission": "Free choice: a real concern from your day. Speak the perfect prompt — goal, context, format, at least one number as a limit and an explicit no. All five lamps must light up."
+      }
+    },
+    "dojoWorld": {
+      "stage": {
+        "rhetoric": {
+          "title": "Rhetoric Hall",
+          "subtitle": "Daily speaking drills — sharpen your voice in the dojo."
+        },
+        "prompt": {
+          "title": "Prompt Hall",
+          "subtitle": "The kata path: learn to prompt, step by step to mastery."
+        }
+      },
+      "belt": {
+        "white": "White Belt",
+        "yellow": "Yellow Belt",
+        "orange": "Orange Belt",
+        "green": "Green Belt",
+        "blue": "Blue Belt",
+        "brown": "Brown Belt",
+        "black": "Black Belt"
+      },
+      "next": {
+        "prefix": "To go:",
+        "max": "Highest rank reached",
+        "almost": "Almost there",
+        "kata_one": "{{count}} kata",
+        "kata_other": "{{count}} katas",
+        "day_one": "{{count}} training day",
+        "day_other": "{{count}} training days",
+        "high_one": "{{count}} top score",
+        "high_other": "{{count}} top scores"
+      },
+      "ceremony": {
+        "title": "Belt ceremony",
+        "body": "{{rank}} reached"
       }
     }
   },

@@ -7,6 +7,7 @@ import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/meet.css";
 import "./styles/activity.css";
+import "./styles/dojo.css";
 
 // Crash reporting. No-op unless VITE_SENTRY_DSN is set at build time.
 // We never send audio or transcript content.

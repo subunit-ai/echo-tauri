@@ -1020,3 +1020,83 @@ export interface PromptPatternToday {
 }
 export const promptPatternToday = () =>
   invoke<PromptPatternToday>("prompt_pattern_today");
+
+// ---- Kata-Pfad (Prompt-Dojo, Welle 6) --------------------------------------
+// The prompting curriculum: seven linear katas, each a spoken mission scored
+// against the same 5-criterion prompt rubric. Passing a kata (its focus
+// criterion met AND the score ≥ its threshold) unlocks the next and drives the
+// belt (Obi) rank. All server/engine truth — this UI renders the path, drives
+// the recorder (kata_record_*, mirroring the Dojo quartet) and shows the verdict.
+
+/** A kata's lifecycle: `done` (completed), `open` (the first not-yet-completed —
+ *  trainable), `locked` (still sealed). done + open are both trainable. */
+export type KataState = "done" | "open" | "locked";
+
+/** The next belt's remaining deltas, or null at the top rank (black). */
+export interface BeltNext {
+  rank: string;
+  need_katas: number;
+  need_days: number;
+  need_high: number;
+}
+
+/** The belt (Obi) standing: rank (white…black) + the three counters that feed
+ *  it, plus the deltas to the next rank. Recomputed after every kata take. */
+export interface Belt {
+  rank: string;
+  katas_done: number;
+  training_days: number;
+  high_scores: number;
+  next: BeltNext | null;
+}
+
+/** One kata in the path. `idx` is 1-based; `focus` is the criterion the pass
+ *  hinges on (`goal`|`context`|`format`|`constraints`|`negative`, `example` for
+ *  kata 6, `all` for the master exam); `threshold` is the score bar. */
+export interface KataInfo {
+  id: string;
+  idx: number;
+  state: KataState;
+  best_score: number;
+  threshold: number;
+  focus: string;
+}
+
+/** The whole path snapshot: the belt, the seven katas, and the recording budget
+ *  in seconds (60). */
+export interface KataList {
+  belt: Belt;
+  katas: KataInfo[];
+  seconds: number;
+}
+export const kataList = () => invoke<KataList>("kata_list");
+
+/** A completed kata take's verdict. `rubric` is the same 5-criterion structure
+ *  as PromptRubric; `focus_pass` = the focus criterion was met; `passed` =
+ *  focus_pass && score ≥ threshold (kata 7: score == 100); `first_pass` = this
+ *  take flipped completed 0→1; `belt` is the standing AFTER the update; `belt_up`
+ *  is the new rank if this take promoted, else null; `xp_awarded` is the XP
+ *  actually credited (0 / 10 / 50 / 60). */
+export interface KataResult {
+  transcript: string;
+  score: number;
+  rubric: PromptRubric;
+  focus_pass: boolean;
+  passed: boolean;
+  first_pass: boolean;
+  best_score: number;
+  xp_awarded: number;
+  belt: Belt;
+  belt_up: string | null;
+}
+/** Arm the kata recorder for `kata`. Throws "busy" if a dictation is running,
+ *  "locked" if the kata is still sealed. */
+export const kataRecordStart = (kata: string) =>
+  invoke<void>("kata_record_start", { kata });
+/** Mic level 0..1 while recording — poll ~80 ms for the pulse. */
+export const kataRecordLevel = () => invoke<number>("kata_record_level");
+/** Tear the recorder down without scoring (cancel / unmount safety-net). */
+export const kataRecordCancel = () => invoke<void>("kata_record_cancel");
+/** Stop + transcribe (raw) + score `kata`. Async — takes the transcription time. */
+export const kataRecordStop = (kata: string) =>
+  invoke<KataResult>("kata_record_stop", { kata });

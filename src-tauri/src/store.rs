@@ -177,6 +177,14 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
             payload    TEXT    NOT NULL DEFAULT '{}',
             created_at INTEGER NOT NULL,
             PRIMARY KEY (account, week)
+         );
+         CREATE TABLE IF NOT EXISTS kata_progress (
+            account    TEXT    NOT NULL,
+            kata       TEXT    NOT NULL,
+            best_score INTEGER NOT NULL DEFAULT 0,
+            completed  INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(account, kata)
          );",
     )?;
     // Migration (v0.5.80): note_folders became cloud-synced, gaining deleted +
@@ -1250,6 +1258,63 @@ pub fn learning_kind_count_since(account: &str, kind: &str, from_day: &str) -> i
         |r| r.get(0),
     )
     .unwrap_or(0)
+}
+
+// ---- Dojo-Welt Kata-Pfad (Obi belt persistence, contract §4) ----
+
+/// Distinct LOCAL days the account trained in EITHER dojo hall — the belt's
+/// `training_days`: COUNT(DISTINCT day) over the ledger kinds `dojo` (Rhetorik
+/// drills), `kata` (a kata passed) and `kata_train` (any kata attempt).
+pub fn learning_training_days(account: &str) -> i64 {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return 0 };
+    conn.query_row(
+        "SELECT COUNT(DISTINCT day) FROM learning_events
+         WHERE account = ?1 AND kind IN ('dojo', 'kata', 'kata_train')",
+        params![account],
+        |r| r.get(0),
+    )
+    .unwrap_or(0)
+}
+
+/// Record a kata attempt (contract §4): `best_score` keeps the MAX ever seen and
+/// `completed` is STICKY (once 1, stays 1) — so a later weaker/failed re-take
+/// never regresses the persisted best or un-completes a passed kata. Upsert keyed
+/// on UNIQUE(account, kata).
+pub fn kata_upsert(account: &str, kata: &str, score: i64, completed: i64, now: i64) {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return };
+    if let Err(e) = conn.execute(
+        "INSERT INTO kata_progress (account, kata, best_score, completed, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(account, kata) DO UPDATE SET
+            best_score = MAX(best_score, excluded.best_score),
+            completed  = MAX(completed, excluded.completed),
+            updated_at = excluded.updated_at",
+        params![account, kata, score, completed, now],
+    ) {
+        log::warn!("store: kata upsert failed: {e}");
+    }
+}
+
+/// All kata rows for `account`: `(kata, best_score, completed)`. Feeds the belt
+/// (katas_done = completed==1, high_scores = best_score ≥ 80) and the kata-path
+/// state. Empty for an account that never trained.
+pub fn kata_all(account: &str) -> Vec<(String, i64, i64)> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) =
+        conn.prepare_cached("SELECT kata, best_score, completed FROM kata_progress WHERE account = ?1")
+    else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+    });
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 // ---- Lern-Loop (Welle 3): ownership stages, word packs, weekly report ----
@@ -2516,6 +2581,56 @@ mod tests {
         assert_eq!(trend.len(), 1);
         assert_eq!(trend[0].2, 1); // n = the single scored row (score 80)
         assert!((trend[0].1 - 80.0).abs() < 1e-9);
+
+        // ── Dojo-Welt: kata_progress + training_days (contract §4/§6) ────────
+        let goal_row = |acc: &str| kata_all(acc).into_iter().find(|(k, ..)| k == "goal");
+        assert!(kata_all("em:kata").is_empty()); // fresh account
+        // Attempt 1: failed (score 40, not completed).
+        kata_upsert("em:kata", "goal", 40, 0, 100);
+        assert_eq!(goal_row("em:kata").unwrap(), ("goal".to_string(), 40, 0));
+        // Attempt 2: passed with a higher score → best MAX, completed 0→1.
+        kata_upsert("em:kata", "goal", 80, 1, 200);
+        assert_eq!(goal_row("em:kata").unwrap(), ("goal".to_string(), 80, 1));
+        // Attempt 3: weaker + failed → best_score stays 80, completed STICKY at 1.
+        kata_upsert("em:kata", "goal", 20, 0, 300);
+        assert_eq!(goal_row("em:kata").unwrap(), ("goal".to_string(), 80, 1));
+        // UNIQUE(account, kata): still exactly one 'goal' row.
+        assert_eq!(kata_all("em:kata").iter().filter(|(k, ..)| k == "goal").count(), 1);
+        // A second kata for the same account; then account isolation.
+        kata_upsert("em:kata", "context", 60, 1, 400);
+        assert_eq!(kata_all("em:kata").len(), 2);
+        assert!(kata_all("em:kata2").is_empty());
+        kata_upsert("em:kata2", "goal", 100, 1, 500);
+        assert_eq!(goal_row("em:kata").unwrap().1, 80); // untouched by the other account
+
+        // training_days: DISTINCT days across dojo/kata/kata_train only.
+        assert_eq!(learning_training_days("em:td"), 0);
+        assert!(learning_award("em:td", "2026-07-01", "dojo", "gauntlet", 15, 10));
+        assert!(learning_award("em:td", "2026-07-01", "kata_train", "train", 10, 11)); // same day
+        assert!(learning_award("em:td", "2026-07-02", "kata", "goal", 50, 20));
+        assert!(learning_award("em:td", "2026-07-03", "word_of_day", "x", 50, 30)); // wrong kind
+        assert_eq!(learning_training_days("em:td"), 2); // 07-01 + 07-02, not the word_of_day day
+        assert_eq!(learning_training_days("em:none"), 0); // isolation
+
+        // XP idempotency, exactly as kata_record_stop gates it (contract §6):
+        //  * kata_train: learning_award is idempotent per (account, day) → 2nd
+        //    attempt the SAME day awards nothing.
+        //  * kata (50 XP): the command's `!was_completed` gate — NOT the ledger —
+        //    makes it once-EVER (the ledger alone would re-insert on a new day).
+        let acc = "em:kidem";
+        // First pass ever: was_completed false → award fires.
+        let was1 = kata_all(acc).into_iter().find(|(k, ..)| k == "goal").map(|(_, _, c)| c == 1).unwrap_or(false);
+        assert!(!was1);
+        kata_upsert(acc, "goal", 80, 1, 600);
+        assert!(!was1 && learning_award(acc, "2026-08-01", "kata", "goal", 50, 600), "first pass awards 50");
+        // Second pass (another day): was_completed now true → NO award (even though
+        // the ledger row on a fresh day WOULD insert — proven on the next line).
+        let was2 = kata_all(acc).into_iter().find(|(k, ..)| k == "goal").map(|(_, _, c)| c == 1).unwrap_or(false);
+        assert!(was2);
+        assert!(learning_award(acc, "2026-08-02", "kata", "goal", 50, 700), "ledger alone is day-scoped, not once-ever");
+        // kata_train same-day idempotency: first attempt awards, second does not.
+        assert!(learning_award(acc, "2026-08-03", "kata_train", "train", 10, 800));
+        assert!(!learning_award(acc, "2026-08-03", "kata_train", "train", 10, 801));
 
         let _ = std::fs::remove_file(&path);
     }

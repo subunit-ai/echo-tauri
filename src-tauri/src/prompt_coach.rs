@@ -157,7 +157,7 @@ fn chk_output_format(t: &str) -> bool {
 fn chk_negative(t: &str) -> bool {
     has_any(t, NEGATIVE_MARKERS)
 }
-fn chk_few_shot(t: &str) -> bool {
+pub fn chk_few_shot(t: &str) -> bool {
     has_any(
         t,
         &["zum beispiel", "beispiel", "beispiele", "beispielsweise", "example", "for example", "e.g."],
