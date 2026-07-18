@@ -1317,7 +1317,7 @@
       "transcribeFailed": "Auswertung fehlgeschlagen"
     },
     "prompts": {
-      "tab": "Prompts",
+      "tab": "Prompt-Dojo",
       "loading": "Lade deine Prompt-Auswertung …",
       "hero": {
         "label": "Ø Prompt-Score",
@@ -1433,6 +1433,124 @@
       "empty": {
         "title": "Noch keine Prompts erkannt",
         "hint": "Echo erkennt Diktate in KI-Tools wie Cursor, Claude oder ChatGPT automatisch als Prompts und bewertet sie still. Diktier einfach dort — deine Prompt-Auswertung erscheint hier von selbst."
+      },
+      "statsDivider": "Deine Prompt-Statistik"
+    },
+    "kata": {
+      "pathTitle": "Der Kata-Pfad",
+      "pathSub": "Sieben Katas vom Ziel bis zur Meisterprüfung — sprich dich zum schwarzen Gürtel.",
+      "stationLabel": "Station {{idx}}",
+      "teachLabel": "Lehre",
+      "missionLabel": "Deine Mission",
+      "goodLabel": "Gut",
+      "badLabel": "Schlecht",
+      "startBtn": "Kata starten",
+      "retryBtn": "Nochmal",
+      "lockedHint": "Erst die vorige Kata bestehen",
+      "lockedError": "Diese Kata ist noch gesperrt.",
+      "bestLabel": "Bestwert {{score}}",
+      "thresholdLabel": "Bestehen ab {{score}}",
+      "masterHint": "Alle fünf Elemente in einem Prompt: Ziel, Kontext, Format, Grenzen, Nein — alle fünf Lampen müssen leuchten.",
+      "resultTitle": "Auswertung",
+      "passed": "Bestanden",
+      "failed": "Noch nicht bestanden",
+      "firstPass": "Kata bestanden",
+      "xpAwarded": "+{{xp}} XP",
+      "xpNone": "Keine neuen XP",
+      "transcriptShow": "Transkript zeigen",
+      "transcriptHide": "Transkript verbergen",
+      "busyError": "Gerade läuft schon eine Aufnahme.",
+      "recordFailed": "Aufnahme fehlgeschlagen",
+      "transcribeFailed": "Auswertung fehlgeschlagen",
+      "recording": {
+        "starting": "Bereitmachen …",
+        "transcribing": "Werte aus …",
+        "stopBtn": "Fertig"
+      },
+      "goal": {
+        "title": "Das Ziel",
+        "teach": "„Ein Prompt beginnt mit dem Ziel: Sag im ersten Satz, WAS entstehen soll — mit einem klaren Verb. ‚Schreib‘, ‚Erstell‘, ‚Fass zusammen‘. Wer das Ziel ans Ende stellt, lässt das Modell raten.“",
+        "good": "„Schreib eine Absage für den Liefertermin am Freitag.“",
+        "bad": "„Also wir haben da so ein Thema mit dem Liefertermin, das ist gerade alles etwas schwierig…“",
+        "mission": "„Du brauchst eine kurze Nachricht an dein Team, dass das Meeting morgen ausfällt. Sprich den Prompt — beginne mit dem Ziel.“"
+      },
+      "context": {
+        "title": "Der Kontext",
+        "teach": "„Das Modell weiß nichts über deine Lage. Gib das WARUM und FÜR WEN: Hintergrund, Anlass, Empfänger. Ein Satz Kontext ersetzt drei Nachfragen.“",
+        "good": "„…Hintergrund: Der Kunde hat zweimal verschoben und reagiert empfindlich auf Druck.“",
+        "bad": "„Schreib eine E-Mail an den Kunden.“ (Welcher Kunde? Welche Lage? Welcher Ton?)",
+        "mission": "„Du willst eine Entschuldigungs-Mail an einen Kunden. Sprich den Prompt — mit mindestens zwei Sätzen Hintergrund: was passiert ist und wie der Kunde tickt.“"
+      },
+      "format": {
+        "title": "Das Format",
+        "teach": "„Sag, wie das Ergebnis AUSSEHEN soll: Liste oder Fließtext, wie lang, welcher Ton. Ohne Format-Vorgabe bekommst du die Durchschnittsform — selten die richtige.“",
+        "good": "„…als Stichpunktliste, maximal fünf Punkte, sachlicher Ton.“",
+        "bad": "„…mach das irgendwie übersichtlich.“",
+        "mission": "„Du willst aus einem Meeting-Protokoll die Aufgaben ziehen. Sprich den Prompt — und gib das Ausgabeformat exakt vor.“"
+      },
+      "constraints": {
+        "title": "Die Grenzen",
+        "teach": "„Zahlen und Grenzen steuern die ganze Antwort: maximale Länge, Anzahl, Budget, Frist. Nenn sie FRÜH — eine Grenze am Ende kommt oft zu spät.“",
+        "good": "„Maximal 120 Wörter, genau drei Vorschläge, Budget unter 500 Euro.“",
+        "bad": "„…nicht zu lang, und übertreib’s nicht.“",
+        "mission": "„Du willst drei Ideen für ein Kunden-Geschenk. Sprich den Prompt — mit mindestens zwei konkreten Zahlen als Grenzen.“"
+      },
+      "negative": {
+        "title": "Das Nein",
+        "teach": "„Sag auch, was NICHT rein soll: ‚ohne Floskeln‘, ‚keine Fachbegriffe‘, ‚nicht förmlich‘. Ein gutes Nein schneidet den häufigsten Fehler ab, bevor er passiert.“",
+        "good": "„…ohne Anglizismen und ohne Ausrufezeichen, nicht um den heißen Brei.“",
+        "bad": "(gar keine Abgrenzung — das Modell füllt die Lücke mit Standardfloskeln)",
+        "mission": "„Du willst einen LinkedIn-Post über euer neues Produkt. Sprich den Prompt — und schließe mindestens zwei Dinge explizit aus.“"
+      },
+      "example": {
+        "title": "Das Beispiel",
+        "teach": "„Zeig EIN Beispiel, wie das Ergebnis klingen soll — ein Satz reicht. Ein Beispiel sagt mehr über Ton und Form als drei Adjektive.“",
+        "good": "„…zum Beispiel so: ‚Kurz-Update Logistik: Ware ist raus, ETA Donnerstag.‘“",
+        "bad": "„…schreib’s halt locker, aber schon professionell, du weißt schon.“",
+        "mission": "„Du willst wöchentliche Status-Updates in einem festen Stil. Sprich den Prompt — und gib ein wörtliches Beispiel, wie ein Update klingen soll.“"
+      },
+      "master": {
+        "title": "Die Meisterprüfung",
+        "teach": "„Die Prüfung: EIN Prompt, alle fünf Elemente — Ziel, Kontext, Format, Grenzen, Nein. Wer das frei sprechen kann, promptet besser als 99 Prozent.“",
+        "good": "",
+        "bad": "",
+        "mission": "„Freie Wahl: ein echtes Anliegen aus deinem Alltag. Sprich den perfekten Prompt — Ziel, Kontext, Format, mindestens eine Zahl als Grenze und ein explizites Nein. Alle fünf Lampen müssen leuchten.“"
+      }
+    },
+    "dojoWorld": {
+      "stage": {
+        "rhetoric": {
+          "title": "Rhetorik-Halle",
+          "subtitle": "Tägliche Sprech-Drills — schärfe deine Stimme im Dojo."
+        },
+        "prompt": {
+          "title": "Prompt-Halle",
+          "subtitle": "Der Kata-Pfad: lerne zu prompten, Schritt für Schritt bis zum Meister."
+        }
+      },
+      "belt": {
+        "white": "Weißer Gürtel",
+        "yellow": "Gelber Gürtel",
+        "orange": "Oranger Gürtel",
+        "green": "Grüner Gürtel",
+        "blue": "Blauer Gürtel",
+        "brown": "Brauner Gürtel",
+        "black": "Schwarzer Gürtel"
+      },
+      "next": {
+        "prefix": "Noch",
+        "max": "Höchster Rang erreicht",
+        "almost": "Fast geschafft",
+        "kata_one": "{{count}} Kata",
+        "kata_other": "{{count}} Katas",
+        "day_one": "{{count}} Trainingstag",
+        "day_other": "{{count}} Trainingstage",
+        "high_one": "{{count}} Top-Wertung",
+        "high_other": "{{count}} Top-Wertungen"
+      },
+      "ceremony": {
+        "title": "Gürtel-Zeremonie",
+        "body": "{{rank}} erreicht"
       }
     }
   },

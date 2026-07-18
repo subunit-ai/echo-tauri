@@ -8,6 +8,7 @@ import {
   dojoRecordStop,
   dojoToday,
   fillerRemovedCounts,
+  kataList,
   learningAnalysis,
   learningLeaderboard,
   learningSuggestions,
@@ -31,9 +32,12 @@ import {
   wortdexList,
   type Achievement,
   type Band,
+  type Belt,
   type DojoKind,
   type DojoResult,
   type DojoToday,
+  type KataList,
+  type KataResult,
   type Leaderboard,
   type LearningAnalysis,
   type LearningEvent,
@@ -63,6 +67,11 @@ import { RadarChart, type RadarAxis } from "../components/charts/RadarChart";
 import { Sparkline } from "../components/charts/Sparkline";
 import { levelForXp } from "../lib/level";
 import { useConfig } from "../state/ConfigContext";
+import { DojoStage } from "../components/dojo/DojoStage";
+import { KataPath } from "../components/dojo/KataPath";
+import { HankoSeal } from "../components/dojo/HankoSeal";
+import { BrushDivider } from "../components/dojo/BrushDivider";
+import { type BeltRank } from "../components/dojo/ObiBelt";
 
 /** Range presets steering the analysis window (days). Labels reuse the
  *  shared activity.range* keys so both sections speak the same language. */
@@ -1864,7 +1873,7 @@ function DojoResultModal({
         <h3 className="confirm-title">{t("learning.dojo.result.title")}</h3>
 
         <div className="dojo-score-stage">
-          <div className={`dojo-score dojo-score--${tier.cls}`}>{Math.round(result.score)}</div>
+          <HankoSeal score={result.score} size={112} />
           <div className="dojo-score-of">{t("learning.dojo.result.scoreOf100")}</div>
           <div className={`dojo-score-tier dojo-score--${tier.cls}`}>
             {t(`learning.dojo.result.${tier.label}`)}
@@ -2036,6 +2045,7 @@ function DojoTab() {
   const toast = useToast();
   const [today, setToday] = useState<DojoToday | null>(null);
   const [quests, setQuests] = useState<Quest[]>([]);
+  const [belt, setBelt] = useState<Belt | null>(null);
   const [recording, setRecording] = useState(false);
   const [result, setResult] = useState<DojoResult | null>(null);
 
@@ -2047,31 +2057,42 @@ function DojoTab() {
       .then((q) => setQuests(q.quests))
       .catch(() => {});
   }, []);
+  // The belt (Obi) is shared across both halls; the rhetoric hall's training
+  // days feed it, so refresh it on every reward too.
+  const loadBelt = useCallback(() => {
+    kataList().then((d) => setBelt(d.belt)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadToday();
     loadQuests();
+    loadBelt();
     const un = onLearningReward(() => {
       loadToday();
       loadQuests();
+      loadBelt();
     });
     const unh = onHistoryChanged(loadQuests);
     return () => {
       un.then((f) => f());
       unh.then((f) => f());
     };
-  }, [loadToday, loadQuests]);
+  }, [loadToday, loadQuests, loadBelt]);
 
   if (today === null) {
     return (
-      <div className="empty" aria-busy="true">
-        {t("learning.dojo.loading")}
+      <div>
+        <DojoStage variant="rhetoric" belt={belt} />
+        <div className="empty" aria-busy="true">
+          {t("learning.dojo.loading")}
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      <DojoStage variant="rhetoric" belt={belt} />
       <DojoExerciseCard today={today} onStart={() => setRecording(true)} />
       <DojoQuestsCard quests={quests} />
 
@@ -2176,9 +2197,12 @@ function PatternOfDayCard({ pattern }: { pattern: PromptPatternToday }) {
 function PromptsTab() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language || "en";
+  const toast = useToast();
   const [days, setDays] = useState<number>(30);
   const [stats, setStats] = useState<PromptCoachStats | null>(null);
   const [pattern, setPattern] = useState<PromptPatternToday | null>(null);
+  const [kata, setKata] = useState<KataList | null>(null);
+  const [beltUp, setBeltUp] = useState<BeltRank | null>(null);
 
   const refresh = useCallback((d: number) => {
     promptCoachStats(d).then(setStats).catch(() => {});
@@ -2204,6 +2228,41 @@ function PromptsTab() {
     };
   }, []);
 
+  // The kata path + belt. A take can flip a station's state or promote the belt,
+  // so reload the whole list after every take (onKataResult) and on any reward.
+  const loadKata = useCallback(() => {
+    kataList().then(setKata).catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadKata();
+    const un = onLearningReward(loadKata);
+    return () => {
+      un.then((f) => f());
+    };
+  }, [loadKata]);
+  const onKataResult = useCallback(
+    (r: KataResult) => {
+      loadKata();
+      if (r.belt_up) {
+        setBeltUp(r.belt_up as BeltRank);
+        // Let the stage's Obi play its promotion sweep, then clear the flag.
+        window.setTimeout(() => setBeltUp(null), 4000);
+      }
+    },
+    [loadKata],
+  );
+
+  // The stage + kata path crown the hall in every state (loading / empty / full).
+  const dojoHeader = (
+    <>
+      <DojoStage variant="prompt" belt={kata?.belt ?? null} beltUp={beltUp} />
+      {kata && (
+        <KataPath data={kata} onResult={onKataResult} toastErr={(m) => toast(m, "error")} />
+      )}
+      <BrushDivider label={t("learning.prompts.statsDivider")} />
+    </>
+  );
+
   const rangeSwitcher = (
     <div className="sub-tabs speech-range">
       {RANGES.map((d) => (
@@ -2217,6 +2276,7 @@ function PromptsTab() {
   if (stats === null) {
     return (
       <div>
+        {dojoHeader}
         {rangeSwitcher}
         <div className="empty" aria-busy="true">
           {t("learning.prompts.loading")}
@@ -2230,6 +2290,7 @@ function PromptsTab() {
   if (!stats.enough) {
     return (
       <div>
+        {dojoHeader}
         {rangeSwitcher}
         {pattern && <PatternOfDayCard pattern={pattern} />}
         <div className="prompts-empty">
@@ -2244,6 +2305,7 @@ function PromptsTab() {
 
   return (
     <div>
+      {dojoHeader}
       {rangeSwitcher}
 
       {/* Hero — big average score + prompt count, trend sparkline. */}
@@ -2260,6 +2322,8 @@ function PromptsTab() {
           <Sparkline values={trend} height={54} />
         </div>
       </div>
+
+      <BrushDivider />
 
       {/* Rubric — the five criteria, each a rate bar + a lever for the weak ones. */}
       <div className="chart-card">

@@ -10,6 +10,7 @@ mod config;
 mod dach;
 mod de_comma; // deterministic German comma insertion (zero-latency, sibling of dach)
 mod dojo; // Rhetorik-Dojo (Welle 4): spoken 45s drills, offline-scored, XP (no injection)
+mod kata; // Dojo-Welt Kata-Pfad (Prompt-Halle): 7-station prompt lesson + Obi belt, offline-scored
 // Speaker diarization fed the old meeting store, retired 2026-07-03 (long recordings
 // now land in the normal history). Kept for a possible future meeting revival.
 #[allow(dead_code)]
@@ -248,6 +249,11 @@ pub fn run() {
             dojo::dojo_record_stop,
             dojo::dojo_record_cancel,
             dojo::quests_get,
+            kata::kata_list,
+            kata::kata_record_start,
+            kata::kata_record_level,
+            kata::kata_record_stop,
+            kata::kata_record_cancel,
             voiceprint::voiceprint_me,
             voiceprint::voiceprint_adaptive,
             voiceprint::voiceprint_reset_learned,
