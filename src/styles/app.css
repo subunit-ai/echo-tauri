@@ -64,11 +64,16 @@ button {
 .app {
   display: grid;
   grid-template-rows: 56px 1fr;
-  grid-template-columns: 220px 1fr;
+  /* minmax(0, 1fr) instead of 1fr: a bare 1fr track is minmax(auto, 1fr), so it
+     refuses to shrink below its content's intrinsic width — a wide child (table,
+     long row) then forces the whole content column wider and the app scrolls
+     sideways. minmax(0, …) lets the column shrink so children can be clipped/wrapped. */
+  grid-template-columns: 220px minmax(0, 1fr);
   grid-template-areas:
     "header header"
     "sidebar content";
   height: 100vh;
+  overflow: hidden;
 }
 
 .header {
@@ -998,7 +1003,14 @@ button {
 
 .content {
   grid-area: content;
-  overflow-y: auto;
+  /* Vertical scroll ONLY. overflow-y:auto alone leaves overflow-x at `visible`,
+     which CSS computes to `auto` whenever the other axis is non-visible — that is
+     the sideways scrollbar. `hidden auto` pins X shut so nothing scrolls left/right;
+     min-width:0 lets this grid cell actually shrink to its column. */
+  overflow: hidden auto;
+  min-width: 0;
+  /* long unbreakable strings (tokens, URLs, paths) wrap instead of forcing width */
+  overflow-wrap: anywhere;
   padding: 26px 30px;
   /* EXACTLY the sidebar's treatment — glass tint + backdrop blur — so the inner section is
      the same soft frosted gradient as the top bar and sidebar (the blur is what turns the
@@ -1575,6 +1587,10 @@ select:hover {
 /* ---------- Vocabulary table ---------- */
 .vocab {
   width: 100%;
+  /* fixed layout: columns honor the container width instead of growing to fit
+     their content, so a long term/replacement never widens the table past the pane
+     (the inputs already carry min-width:0 and wrap-free ellipsis where needed). */
+  table-layout: fixed;
   border-collapse: collapse;
 }
 .vocab th {
