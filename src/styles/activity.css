@@ -3278,3 +3278,276 @@
 :root[data-theme="black"] .dojo-rubric-check.on .dojo-rubric-mark {
   color: #d6d6d9;
 }
+
+/* ================================================================
+   Leaderboard rows as buttons + member profile modal.
+   A tapped row opens MemberProfile — a floating panel over the board, so its
+   surface uses --menu-bg (opaque per theme), never a glass token.
+   ================================================================ */
+
+/* Row becomes a full-width button — reset native chrome, keep the feed rhythm. */
+.lb-row-btn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line2);
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  transition: background 0.14s var(--ease-out);
+}
+.lb-row-btn:hover {
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+}
+.lb-row-btn.me:hover {
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+}
+.lb-row-btn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+/* Level number beside the ring — small, tabular, unobtrusive. */
+.lb-level {
+  flex-shrink: 0;
+  min-width: 16px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cyan-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Member profile modal ---- */
+.mp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  animation: confirm-fade 0.16s ease-out;
+}
+.mp-panel {
+  position: relative;
+  width: min(440px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+  border-radius: var(--r);
+  /* Floats OVER the board → --menu-bg (opaque per theme), NOT a glass token,
+     or the rows behind it bleed through the text. */
+  background: var(--menu-bg);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--rim);
+  animation: confirm-pop 0.2s var(--ease-out);
+}
+.mp-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.mp-close:hover {
+  color: var(--ink);
+}
+.mp-close:active {
+  transform: scale(0.92);
+}
+.mp-close:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.mp-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 34px;
+}
+.mp-head-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mp-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.mp-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mp-level {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--cyan-ink);
+  font-variant-numeric: tabular-nums;
+}
+.mp-level-title {
+  font-size: 12px;
+  color: var(--ink2);
+}
+.mp-title-chip {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 34%, transparent);
+}
+
+.mp-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mp-progress-text {
+  font-size: 11.5px;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mp-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mp-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.mp-section-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Compact badge grid — earned = full colour, locked = dimmed + desaturated. */
+.mp-ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.mp-ach {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  min-width: 0;
+}
+.mp-ach.is-locked {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+.mp-ach-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--ink2);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+}
+.mp-ach.is-earned .mp-ach-icon {
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 13%, transparent);
+  border-color: color-mix(in srgb, var(--cyan) 38%, transparent);
+}
+.mp-ach-name {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Wortdex band tallies — three chips, rarity-tinted. */
+.mp-band-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mp-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink2);
+  background: var(--glass2);
+  border: 1px solid var(--glass-edge);
+}
+.mp-band-n {
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.mp-band.band-2 {
+  color: var(--cyan-ink);
+  border-color: color-mix(in srgb, var(--cyan) 34%, transparent);
+}
+.mp-band.band-3 {
+  color: var(--accent-bright, var(--cyan-ink));
+  border-color: color-mix(in srgb, var(--accent, var(--cyan)) 40%, transparent);
+}
+
+.mp-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line2);
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.mp-foot-xp {
+  font-weight: 800;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}

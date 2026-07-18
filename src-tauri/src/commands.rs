@@ -1649,44 +1649,97 @@ const ACHIEVEMENTS: &[(&str, i64)] = &[
     ("level_10", 10),
 ];
 
+/// Raw progress for one achievement id from the already-gathered ledger inputs.
+/// Pure and total — the single source of truth for the id→progress mapping, so
+/// the UI list, the earned-id push and any future reader all agree. Returns the
+/// progress BEFORE the display clamp; callers compare it against the target to
+/// derive the earned state.
+fn achievement_progress(
+    id: &str,
+    notable: i64,
+    rare: i64,
+    legendary: i64,
+    finds_total: i64,
+    wod: i64,
+    coach: i64,
+    longest_streak: i64,
+    level: i64,
+) -> i64 {
+    match id {
+        "first_notable" => notable.min(1),
+        "first_rare" => rare.min(1),
+        "first_legendary" => legendary.min(1),
+        "finds_10" | "finds_50" | "finds_200" => finds_total,
+        "wod_7" | "wod_30" => wod,
+        "coach_25" => coach,
+        "streak_7" | "streak_30" => longest_streak,
+        "level_5" | "level_10" => level,
+        _ => 0,
+    }
+}
+
+/// Every achievement as `(id, target, raw_progress, earned_ts)`. Gathers the
+/// ledgers once and routes progress through `achievement_progress`, so both the
+/// UI list (`achievements_list`) and the leaderboard push (`earned_achievement_ids`)
+/// build on identical numbers — no logic drift. `earned` is `raw_progress >=
+/// target`; `earned_ts` is only meaningful once earned (the datable ids look up
+/// their moment; the rest are `None`).
+fn achievement_states(account: &str) -> Vec<(&'static str, i64, i64, Option<i64>)> {
+    let (notable, rare, legendary) = crate::store::word_find_band_counts(account);
+    let finds_total = notable + rare + legendary;
+    let wod = crate::store::learning_kind_count(account, "word_of_day", None);
+    let coach = crate::store::learning_kind_count(account, "coach_word", None);
+    let (_, longest_streak, _, _) = compute_streak(account);
+    let (level, _, _) = level_for_xp(crate::store::learning_xp(account, None));
+    ACHIEVEMENTS
+        .iter()
+        .map(|(id, target)| {
+            let progress = achievement_progress(
+                id, notable, rare, legendary, finds_total, wod, coach, longest_streak, level,
+            );
+            let earned_ts: Option<i64> = match *id {
+                "first_notable" => crate::store::word_find_first_ts(account, 1),
+                "first_rare" => crate::store::word_find_first_ts(account, 2),
+                "first_legendary" => crate::store::word_find_first_ts(account, 3),
+                "finds_10" | "finds_50" | "finds_200" => {
+                    crate::store::word_finds_nth_ts(account, *target as u32)
+                }
+                _ => None,
+            };
+            (*id, *target, progress, earned_ts)
+        })
+        .collect()
+}
+
 /// All achievements with progress + earned state (and, where the ledgers can
 /// date it, the moment it was earned).
 #[tauri::command]
 pub fn achievements_list(state: State<'_, AppState>) -> Vec<serde_json::Value> {
     let account = crate::presets::account_key(&state.config.lock());
-    let (notable, rare, legendary) = crate::store::word_find_band_counts(&account);
-    let finds_total = notable + rare + legendary;
-    let wod = crate::store::learning_kind_count(&account, "word_of_day", None);
-    let coach = crate::store::learning_kind_count(&account, "coach_word", None);
-    let (_, longest_streak, _, _) = compute_streak(&account);
-    let (level, _, _) = level_for_xp(crate::store::learning_xp(&account, None));
-    ACHIEVEMENTS
-        .iter()
-        .map(|(id, target)| {
-            let (progress, earned_ts): (i64, Option<i64>) = match *id {
-                "first_notable" => (notable.min(1), crate::store::word_find_first_ts(&account, 1)),
-                "first_rare" => (rare.min(1), crate::store::word_find_first_ts(&account, 2)),
-                "first_legendary" => {
-                    (legendary.min(1), crate::store::word_find_first_ts(&account, 3))
-                }
-                "finds_10" | "finds_50" | "finds_200" => (
-                    finds_total,
-                    crate::store::word_finds_nth_ts(&account, *target as u32),
-                ),
-                "wod_7" | "wod_30" => (wod, None),
-                "coach_25" => (coach, None),
-                "streak_7" | "streak_30" => (longest_streak, None),
-                "level_5" | "level_10" => (level, None),
-                _ => (0, None),
-            };
+    achievement_states(&account)
+        .into_iter()
+        .map(|(id, target, progress, earned_ts)| {
+            let earned = progress >= target;
             serde_json::json!({
                 "id": id,
                 "target": target,
-                "progress": progress.min(*target),
-                "earned": progress >= *target,
-                "earned_ts": if progress >= *target { earned_ts } else { None },
+                "progress": progress.min(target),
+                "earned": earned,
+                "earned_ts": if earned { earned_ts } else { None },
             })
         })
+        .collect()
+}
+
+/// The ids the account has earned (`progress >= target`), in catalog order —
+/// the compact form the leaderboard push ships so a member's profile card can
+/// render its badges. Shares `achievement_states`, so it can never disagree
+/// with what `achievements_list` shows the same account.
+pub(crate) fn earned_achievement_ids(account: &str) -> Vec<String> {
+    achievement_states(account)
+        .into_iter()
+        .filter(|(_, target, progress, _)| progress >= target)
+        .map(|(id, ..)| id.to_string())
         .collect()
 }
 
@@ -1840,6 +1893,12 @@ fn push_learning_score(cfg: &Config, account: &str) {
         if !nick.is_empty() { nick } else { disp }
     };
     let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/learning/score");
+    // Profile payload for the clickable leaderboard cards: the member's earned
+    // badge ids + Wortdex band counts [notable, rare, legendary]. Both are
+    // derived from the same local ledgers the UI reads, so a card mirrors the
+    // account's own Achievements/Wortdex tabs exactly.
+    let earned = earned_achievement_ids(account);
+    let (band_notable, band_rare, band_legendary) = crate::store::word_find_band_counts(account);
     let mut req = crate::http::client()
         .post(&url)
         .timeout(std::time::Duration::from_secs(10))
@@ -1852,6 +1911,8 @@ fn push_learning_score(cfg: &Config, account: &str) {
             // Equipped achievement title (id) — rendered locale-side by every
             // client; unknown/empty ids are simply not shown.
             "title": cfg.learning_title,
+            "achievements": earned,
+            "bands": [band_notable, band_rare, band_legendary],
         }));
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);
@@ -3070,5 +3131,71 @@ mod learning_loop_tests {
         // mastered → never due.
         assert!(!word_due("mastered", 3));
         assert!(!word_due("mastered", 100));
+    }
+}
+
+#[cfg(test)]
+mod achievement_tests {
+    use super::{achievement_progress, ACHIEVEMENTS};
+
+    /// Reproduce `earned_achievement_ids`' predicate over hand-seeded ledger
+    /// inputs, exercising the *real* (pure) `achievement_progress` the command
+    /// path uses — so this proves the id-selection logic without drift. DB-free
+    /// on purpose: the store readers have their own round-trip test in `store`,
+    /// and the connection is a process-wide singleton (a second DB-touching test
+    /// would race that one).
+    fn earned(
+        notable: i64,
+        rare: i64,
+        legendary: i64,
+        wod: i64,
+        coach: i64,
+        streak: i64,
+        level: i64,
+    ) -> Vec<&'static str> {
+        let finds_total = notable + rare + legendary;
+        ACHIEVEMENTS
+            .iter()
+            .filter(|(id, target)| {
+                achievement_progress(
+                    id, notable, rare, legendary, finds_total, wod, coach, streak, level,
+                ) >= *target
+            })
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    #[test]
+    fn earned_ids_match_seeded_ledgers() {
+        // Empty account → no badges (level starts at 0, so even level_5 is out).
+        assert!(earned(0, 0, 0, 0, 0, 0, 0).is_empty());
+
+        // Mid-game: 12 notable + 3 rare + 1 legendary (=16 finds → clears
+        // finds_10, not finds_50/200), first sighting of every band, 8 WoD,
+        // 25 coach words, a 30-day streak, level 6. Result in catalog order.
+        assert_eq!(
+            earned(12, 3, 1, 8, 25, 30, 6),
+            vec![
+                "first_notable",
+                "first_rare",
+                "first_legendary",
+                "finds_10",
+                "wod_7",
+                "coach_25",
+                "streak_7",
+                "streak_30",
+                "level_5",
+            ]
+        );
+
+        // Exact boundaries only: 10 finds (all notable, so no first_rare/
+        // legendary), wod=7, coach=25, streak=7, level=5.
+        assert_eq!(
+            earned(10, 0, 0, 7, 25, 7, 5),
+            vec!["first_notable", "finds_10", "wod_7", "coach_25", "streak_7", "level_5"]
+        );
+
+        // Everything maxed → all 13 badges.
+        assert_eq!(earned(200, 50, 3, 30, 25, 30, 10).len(), ACHIEVEMENTS.len());
     }
 }
