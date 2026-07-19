@@ -943,6 +943,7 @@
     "lbSub": "Who has built the biggest vocabulary overall?",
     "lbYou": "You {{name}}",
     "lbWords": "{{count}} words",
+    "lbLevelProgress": "Level {{level}} · {{pct}}% to next",
     "profileTitle": "Profile",
     "profileClose": "Close",
     "levelLabel": "Level {{level}}",

@@ -945,6 +945,7 @@
     "lbSub": "Wer hat insgesamt den größten Wortschatz aufgebaut?",
     "lbYou": "Du {{name}}",
     "lbWords": "{{count}} Wörter",
+    "lbLevelProgress": "Level {{level}} · {{pct}}% zum nächsten",
     "profileTitle": "Profil",
     "profileClose": "Schließen",
     "levelLabel": "Level {{level}}",

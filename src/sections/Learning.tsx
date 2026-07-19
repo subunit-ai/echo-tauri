@@ -69,7 +69,7 @@ import { TierRing } from "../components/TierRing";
 import { MemberProfile } from "../components/MemberProfile";
 import { RadarChart, type RadarAxis } from "../components/charts/RadarChart";
 import { Sparkline } from "../components/charts/Sparkline";
-import { levelForXp } from "../lib/level";
+import { levelForXp, levelProgress } from "../lib/level";
 import { useConfig } from "../state/ConfigContext";
 import { DojoStage } from "../components/dojo/DojoStage";
 import { KataPath } from "../components/dojo/KataPath";
@@ -1056,9 +1056,28 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
                       size={22}
                     />
                   </TierRing>
-                  <span className="lb-level" aria-hidden="true">
-                    {levelForXp(row.xp_total ?? 0)}
-                  </span>
+                  {/* Level + fine progress within it, so two members on the same
+                      coarse level are still visibly ranked by their real XP. */}
+                  {(() => {
+                    const { level, pct } = levelProgress(row.xp_total ?? 0);
+                    return (
+                      <span
+                        className="lb-level"
+                        title={t("learning.lbLevelProgress", {
+                          level,
+                          pct: Math.round(pct * 100),
+                        })}
+                      >
+                        <span className="lb-level-n">{level}</span>
+                        <span className="lb-level-track" aria-hidden="true">
+                          <span
+                            className="lb-level-fill"
+                            style={{ width: `${Math.round(pct * 100)}%` }}
+                          />
+                        </span>
+                      </span>
+                    );
+                  })()}
                   <span className="xp-feed-word">
                     {row.me ? t("learning.lbYou", { name: row.name }) : row.name}
                   </span>
@@ -1081,6 +1100,26 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
                       size={22}
                     />
                   </TierRing>
+                  {(() => {
+                    const { level, pct } = levelProgress(xp?.xp_total ?? 0);
+                    return (
+                      <span
+                        className="lb-level"
+                        title={t("learning.lbLevelProgress", {
+                          level,
+                          pct: Math.round(pct * 100),
+                        })}
+                      >
+                        <span className="lb-level-n">{level}</span>
+                        <span className="lb-level-track" aria-hidden="true">
+                          <span
+                            className="lb-level-fill"
+                            style={{ width: `${Math.round(pct * 100)}%` }}
+                          />
+                        </span>
+                      </span>
+                    );
+                  })()}
                   <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
                   <span className="xp-feed-xp">
                     {(meXp ?? 0).toLocaleString(i18n.language)} XP

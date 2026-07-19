@@ -3358,13 +3358,36 @@
 }
 
 /* Level number beside the ring — small, tabular, unobtrusive. */
+/* Level number + a thin progress track: two members on the same coarse level
+   (100·n² buckets) are still told apart by how full their bar is. */
 .lb-level {
   flex-shrink: 0;
-  min-width: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 22px;
+}
+.lb-level-n {
   font-size: 11px;
   font-weight: 800;
   color: var(--cyan-ink);
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.lb-level-track {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  overflow: hidden;
+}
+.lb-level-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--cyan);
+  transition: width 0.3s ease;
 }
 
 /* ---- Member profile modal ---- */
