@@ -1,0 +1,28 @@
+/* The toast webview is a transparent hole punched over whatever app the user is
+   working in — no background, no scrollbars, and never a click target. The
+   banner styling itself comes from xpbanner.css, shared with the in-app host. */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+body {
+  /* Belt and braces next to the OS-level ignore_cursor_events. */
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Toasts stack from the top edge here (in-app they sit bottom-right). */
+.xpb-stack {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: auto;
+  align-items: flex-end;
+  padding: 0 4px;
+}

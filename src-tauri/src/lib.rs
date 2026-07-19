@@ -39,6 +39,7 @@ mod notes; // voice notes + folders (local-first, cross-device with Echo iOS)
 mod notes_sync; // /v1/notes cloud sync (byte-compatible with the iPhone)
 mod synapse;
 mod overlay;
+mod toast;
 mod recorder;
 mod sound; // native record-start cue (instant even when the window is hidden)
 mod store; // SQLite history + meetings + orb profiles (echo.db)
@@ -165,6 +166,8 @@ pub fn run() {
             commands::word_pack_get,
             commands::word_pack_fetch,
             commands::learning_coach,
+            toast::toast_show,
+            toast::toast_hide,
             commands::weekly_report_get,
             commands::account_stats,
             commands::delete_history_entry,
@@ -464,6 +467,13 @@ pub fn run() {
                     if let Err(e) = overlay::create(app.handle()) {
                         log::warn!("overlay: {e}");
                     }
+                }
+
+                // The system-wide achievement toast lives in its own hidden,
+                // click-through window — independent of the orb, so it works
+                // even with the overlay switched off.
+                if let Err(e) = toast::create(app.handle()) {
+                    log::warn!("toast: {e}");
                 }
             }
 

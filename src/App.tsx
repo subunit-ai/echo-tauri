@@ -17,7 +17,6 @@ import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
 import { WhatsNew } from "./components/WhatsNew";
 import { onState, onNeedsAccessibility } from "./lib/ipc";
-import { XpBannerHost } from "./components/XpBanner";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
@@ -121,8 +120,6 @@ export default function App() {
     <ToastProvider>
       <EngineErrorToasts />
       <ConfigProvider>
-        {/* Inside ConfigProvider: the banner reads the reward-sound toggle. */}
-        <XpBannerHost />
         <Shell />
       </ConfigProvider>
     </ToastProvider>
