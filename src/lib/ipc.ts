@@ -722,6 +722,9 @@ export interface WordFind {
   first_ts: number;
   last_ts: number;
   context: string;
+  /** How it entered the collection: "found" = spoken spontaneously, "learned" =
+   *  a word the coach taught first and you then used. Older rows read "found". */
+  origin: string;
 }
 export interface WortdexData {
   finds: WordFind[];

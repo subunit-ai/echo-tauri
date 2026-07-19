@@ -3845,3 +3845,21 @@ button.task-row.navigable:hover {
 .verdict-hint {
   margin-top: 12px;
 }
+
+/* Wortdex provenance badge: this one came from the coach's teaching, not from a
+   spontaneous find — the learning loop visibly paying into the collection. */
+.dex-origin {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--emerald);
+  background: color-mix(in srgb, var(--emerald) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--emerald) 34%, transparent);
+}
+:root[data-theme="black"] .dex-origin {
+  color: #c2c2c5;
+  background: color-mix(in srgb, #c2c2c5 12%, transparent);
+  border-color: color-mix(in srgb, #c2c2c5 30%, transparent);
+}

@@ -971,6 +971,8 @@
     "dexEmptyHint": "Sprich seltene, ausgefallene Wörter in deinen Diktaten — jedes neue landet hier in deinem Wortdex, mit Seltenheitsstufe, Nummer und Erstfund-Satz.",
     "dexFilterEmpty": "Keine Funde in dieser Kategorie.",
     "dexNr": "Nr. {{dex}}",
+    "dexLearned": "gelernt",
+    "dexLearnedHint": "Dieses Wort hat der Coach dir beigebracht — du hast es dann selbst benutzt.",
     "dexTimes": "{{count}}×",
     "dexFirstFound": "Erstfund {{date}}",
     "dexQuote": "„{{context}}“",

@@ -969,6 +969,8 @@
     "dexEmptyHint": "Speak rare, unusual words in your dictations — every new one lands here in your Wortdex, with its rarity tier, number and first-sighting sentence.",
     "dexFilterEmpty": "No finds in this category.",
     "dexNr": "No. {{dex}}",
+    "dexLearned": "learned",
+    "dexLearnedHint": "The coach taught you this word — and you then used it yourself.",
     "dexTimes": "{{count}}×",
     "dexFirstFound": "First found {{date}}",
     "dexQuote": "“{{context}}”",

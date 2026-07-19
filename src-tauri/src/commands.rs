@@ -1562,6 +1562,13 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
         .flat_map(|e| [e.write_as.trim().to_lowercase(), e.sounds_like.trim().to_lowercase()])
         .collect();
     let Some(hits) = detect_finds(text, &own) else { return };
+    // Words the coach taught first (word of the day, coach words, weekly pack).
+    // Speaking one of those is the learning loop paying INTO the collection, not
+    // a spontaneous discovery — the Wortdex remembers which it was.
+    let mut taught = crate::store::suggested_words_all();
+    for w in crate::store::wod_words_before(&day, 120) {
+        taught.insert(w.to_lowercase());
+    }
     let surfaces = crate::analysis::surface_forms(text);
     let mut awarded_today =
         crate::store::learning_kind_count(account, "word_find", Some(&day));
@@ -1576,6 +1583,7 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
         } else {
             String::new()
         };
+        let origin = if taught.contains(&word) { "learned" } else { "found" };
         let is_new = crate::store::word_find_record(
             account,
             &word,
@@ -1584,6 +1592,7 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
             dex as i64,
             &context,
             now,
+            origin,
         );
         if !is_new {
             continue;

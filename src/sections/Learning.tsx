@@ -1425,6 +1425,13 @@ function DexCard({ find }: { find: WordFind }) {
       </div>
       <div className="dex-card-meta">
         <span className="dex-band-chip">{t(BAND_LABEL[find.band])}</span>
+        {/* Provenance: the learning loop paying into the collection is worth
+            seeing — a taught word you then actually used. */}
+        {find.origin === "learned" && (
+          <span className="dex-origin" title={t("learning.dexLearnedHint")}>
+            {t("learning.dexLearned")}
+          </span>
+        )}
         <span className="dex-nr">{t("learning.dexNr", { dex: find.dex })}</span>
       </div>
       <div className="dex-date">{t("learning.dexFirstFound", { date })}</div>
