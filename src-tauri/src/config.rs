@@ -277,6 +277,13 @@ pub struct Config {
 
     pub synapse_save_enabled: bool,
 
+    /// Personal LLM coach (Wortschatz-Tab). OFF by default and deliberately
+    /// opt-in: it is the ONLY feature that sends dictation EXCERPTS to the
+    /// server — everything else in the learning section stays on-device. The
+    /// user turns it on in the coach card, which states exactly what is sent.
+    #[serde(default)]
+    pub coach_llm_enabled: bool,
+
     /// Global hotkey toggling the floating Prompt Console (empty = disabled).
     pub prompt_console_hotkey: String,
     /// "Konsole als Ziel": route every finished transcript into the Prompt
@@ -584,6 +591,7 @@ impl Default for Config {
             long_form_cleanup_style: "raw".to_string(),
 
             synapse_save_enabled: false,
+            coach_llm_enabled: false,
 
             prompt_console_hotkey: "<ctrl>+<shift>+p".to_string(),
             prompt_console_as_target: false,

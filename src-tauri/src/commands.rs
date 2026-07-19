@@ -2290,6 +2290,111 @@ pub fn word_pack_get(state: State<'_, AppState>) -> serde_json::Value {
     }
 }
 
+/// Personal rhetoric + vocabulary coach (LLM, subscription lane).
+///
+/// The ONLY learning feature that sends dictation EXCERPTS off the device, so it
+/// is hard-gated on `cfg.coach_llm_enabled` (opt-in, default OFF) on top of the
+/// usual subunit-mode gate. Everything it sends besides the excerpts is already
+/// derived locally: the six on-device rhetoric scores, the vocabulary metrics
+/// and the words the coach has taught (so it never re-teaches).
+///
+/// Best-effort like every other LLM lane: any failure returns
+/// `{available:false}` and the UI simply keeps its local content.
+#[tauri::command(async)]
+pub fn learning_coach(state: State<'_, AppState>, days: Option<u32>) -> serde_json::Value {
+    let unavailable = serde_json::json!({ "available": false });
+    let cfg = state.config.lock().clone();
+    if cfg.mode != "subunit" || !cfg.coach_llm_enabled {
+        return unavailable;
+    }
+    let days = days.unwrap_or(30).clamp(7, 90);
+
+    let texts = crate::store::history_texts_since(days);
+    if texts.len() < 3 {
+        return unavailable; // too little to say anything honest about
+    }
+    let stats = crate::analysis::learning(&texts);
+    let overused: Vec<serde_json::Value> = stats
+        .overused_words
+        .iter()
+        .take(8)
+        .map(|o| serde_json::json!({ "word": o.word, "count": o.count }))
+        .collect();
+    let weak: Vec<String> = stats.weak_words.iter().take(10).map(|w| w.word.clone()).collect();
+    let known: Vec<String> = crate::store::suggested_words_all().into_iter().take(60).collect();
+    // The excerpts — bounded on purpose: enough for the coach to hear HOW the
+    // user writes, never the whole history.
+    let samples: Vec<String> = texts
+        .iter()
+        .take(8)
+        .map(|t| t.chars().take(300).collect::<String>())
+        .collect();
+
+    // Rhetoric scores from the SAME on-device engine the Sprechprofil renders,
+    // so both surfaces always agree (and the server never re-derives them).
+    let prof = speech_profile(state, Some(days));
+    let mut rhetoric = serde_json::Map::new();
+    if let Some(o) = prof.get("overall").and_then(|v| v.as_f64()) {
+        rhetoric.insert("overall".into(), serde_json::json!(o.round() as i64));
+    }
+    if let Some(dims) = prof.get("dimensions").and_then(|v| v.as_array()) {
+        for d in dims {
+            if let (Some(k), Some(s)) = (
+                d.get("key").and_then(|v| v.as_str()),
+                d.get("score").and_then(|v| v.as_f64()),
+            ) {
+                rhetoric.insert(k.to_string(), serde_json::json!(s.round() as i64));
+            }
+        }
+    }
+
+    let mut body = serde_json::json!({
+        "samples": samples,
+        "rhetoric": rhetoric,
+        "unique_words": stats.unique_words,
+        "ttr": stats.type_token_ratio * 100.0,
+        "avg_sentence": stats.avg_sentence_length,
+        "overused": overused,
+        "weak": weak,
+        "known_words": known,
+    });
+    if cfg.language != "auto" {
+        body["language"] = serde_json::json!(cfg.language);
+    }
+
+    let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/learning/coach");
+    let mut req = crate::http::client()
+        .post(&url)
+        // Measured: the lane needs ~52 s for a full coaching pass, and the
+        // server gives it 110 s — the client must outlast that, never cut it off.
+        .timeout(std::time::Duration::from_secs(130))
+        .json(&body);
+    if !cfg.subunit_access_token.is_empty() {
+        req = req.bearer_auth(&cfg.subunit_access_token);
+    } else if !cfg.subunit_api_key.is_empty() {
+        req = req.header("X-API-Key", cfg.subunit_api_key.clone());
+    } else {
+        return unavailable;
+    }
+    let Ok(resp) = req.send() else { return unavailable };
+    if !resp.status().is_success() {
+        return unavailable;
+    }
+    let Ok(j) = resp.json::<serde_json::Value>() else { return unavailable };
+    let Some(coach) = j.get("coach") else { return unavailable };
+    let verdict = coach.get("verdict").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    if verdict.is_empty() {
+        return unavailable; // an empty verdict is not worth a card
+    }
+    serde_json::json!({
+        "available": true,
+        "verdict": verdict,
+        "strengths": coach.get("strengths").cloned().unwrap_or(serde_json::json!([])),
+        "improvements": coach.get("improvements").cloned().unwrap_or(serde_json::json!([])),
+        "words": coach.get("words").cloned().unwrap_or(serde_json::json!([])),
+    })
+}
+
 /// Fetch a fresh personalized word pack from the server, cache it for this week,
 /// and register its words for detection + XP (the coach_word path). Mirrors
 /// `word_upgrade_curate`'s endpoint/auth recipe. `(async)`: the lane really takes
