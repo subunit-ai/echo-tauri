@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.149",
+    date: "2026-07-20",
+    title: {
+      de: "Ein Coach, der dich wirklich liest",
+      en: "A coach that actually reads you",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neu im Wortschatz: ein persönlicher Coach, der deine Diktate liest und dir konkret sagt, was du besser machen kannst — inklusive Vorher/Nachher an deinen eigenen Sätzen. Du schaltest ihn selbst ein; die Karte sagt vorher genau, was dafür an den Server geht, und du kannst ihn jederzeit wieder abschalten. Alles andere im Wortschatz-Tab wird weiterhin nur auf deinem Gerät berechnet.",
+        en: "New in the vocabulary tab: a personal coach that reads your dictations and tells you concretely what to improve — including before/after on your own sentences. You switch it on yourself; the card states exactly what gets sent beforehand, and you can turn it off again at any time. Everything else in the tab is still computed on your device only.",
+      },
+      {
+        kind: "feature",
+        de: "Der Coach zeigt jetzt ein Gesamtbild aus Wortschatz UND Rhetorik statt zweier getrennter Ansichten — mit den drei Hebeln, die bei dir gerade am meisten bringen, und einem konkreten Tipp zu jedem.",
+        en: "The coach now shows one overall picture of vocabulary AND rhetoric instead of two separate views — with the three levers that pay off most for you right now, each with a concrete tip.",
+      },
+      {
+        kind: "improvement",
+        de: "Wörter, die dir der Coach beigebracht hat, sind im Wortdex jetzt als „gelernt\" markiert, sobald du sie das erste Mal selbst benutzt — dein Lernen zahlt sichtbar in deine Sammlung ein.",
+        en: "Words the coach taught you are now marked as \"learned\" in the Wortdex the first time you use them yourself — your learning visibly pays into your collection.",
+      },
+    ],
+  },
+  {
     version: "0.5.148",
     date: "2026-07-19",
     title: {
