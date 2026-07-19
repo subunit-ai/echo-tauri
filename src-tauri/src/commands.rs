@@ -1925,6 +1925,10 @@ fn push_learning_score(cfg: &Config, account: &str) {
             "title": cfg.learning_title,
             "achievements": earned,
             "bands": [band_notable, band_rare, band_legendary],
+            // Account profile-picture URL so the leaderboard can show this
+            // member's photo to everyone else. Empty/None → the row stays on
+            // initials; old servers ignore the extra field.
+            "avatar": cfg.avatar_url.clone().unwrap_or_default(),
         }));
     if !cfg.subunit_access_token.is_empty() {
         req = req.bearer_auth(&cfg.subunit_access_token);
