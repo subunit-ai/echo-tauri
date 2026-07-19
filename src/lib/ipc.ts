@@ -74,6 +74,9 @@ export interface Config {
   long_form_cleanup_style: string;
 
   synapse_save_enabled: boolean;
+  /** Personal LLM coach. OFF by default and opt-in: the one learning feature
+   *  that sends dictation EXCERPTS to the server (everything else stays local). */
+  coach_llm_enabled: boolean;
   /** Global hotkey toggling the floating Prompt Console (empty = disabled). */
   prompt_console_hotkey: string;
   /** "Konsole als Ziel": transcripts go into the Prompt Console, not the app. */
@@ -722,6 +725,9 @@ export interface WordFind {
   first_ts: number;
   last_ts: number;
   context: string;
+  /** How it entered the collection: "found" = spoken spontaneously, "learned" =
+   *  a word the coach taught first and you then used. Older rows read "found". */
+  origin: string;
 }
 export interface WortdexData {
   finds: WordFind[];
@@ -822,6 +828,34 @@ export const speechProfile = (days = 30) =>
 /** The day-by-day score trend that feeds the per-dimension sparklines. */
 export const speechProfileTrend = (days = 30) =>
   invoke<SpeechTrend>("speech_profile_trend", { days });
+
+// ---- Personal coach (LLM) --------------------------------------------------
+// The ONE learning feature that sends dictation excerpts off the device, so it
+// only ever returns content when the user opted in (config.coach_llm_enabled).
+
+/** One concrete lever, with a rewrite of the user's OWN sentence when the model
+ *  found a fitting one (`before`/`after` may be empty). */
+export interface CoachImprovement {
+  title: string;
+  advice: string;
+  before: string;
+  after: string;
+}
+export interface CoachWord {
+  word: string;
+  why: string;
+}
+export interface LearningCoachResult {
+  /** False whenever the coach is off, not subscribed, has too little history,
+   *  or the lane failed — the UI then simply keeps its local content. */
+  available: boolean;
+  verdict?: string;
+  strengths?: string[];
+  improvements?: CoachImprovement[];
+  words?: CoachWord[];
+}
+export const learningCoach = (days = 30) =>
+  invoke<LearningCoachResult>("learning_coach", { days });
 
 // ---- Lern-Loop (Welle 3): ownership levels, weekly pack, weekly report ------
 // The coach stops being a static readout and starts to *teach*: every word Echo

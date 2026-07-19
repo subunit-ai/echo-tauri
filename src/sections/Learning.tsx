@@ -24,6 +24,8 @@ import {
   PROMPT_RUBRIC_KEYS,
   questsGet,
   speechProfile,
+  learningCoach,
+  type LearningCoachResult,
   speechProfileTrend,
   weeklyReportGet,
   wordOfDay,
@@ -787,6 +789,104 @@ function DailyTasksCard({
   );
 }
 
+/** The personal LLM coach. Opt-in ON PURPOSE: this is the only learning feature
+ *  that sends dictation EXCERPTS to the server, so the card says so plainly and
+ *  stays completely inert until the user turns it on. Asking is explicit too —
+ *  the lane takes up to a minute, so it must never fire on a range switch. */
+function PersonalCoachCard({ days }: { days: number }) {
+  const { t } = useTranslation();
+  const { config, patch } = useConfig();
+  const [result, setResult] = useState<LearningCoachResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const enabled = config?.coach_llm_enabled === true;
+
+  const ask = useCallback(() => {
+    setLoading(true);
+    learningCoach(days)
+      .then(setResult)
+      .catch(() => setResult({ available: false }))
+      .finally(() => setLoading(false));
+  }, [days]);
+
+  if (!enabled) {
+    return (
+      <div className="card coach-llm-card">
+        <div className="chart-head">
+          <div>
+            <div className="chart-title">{t("learning.coachLlmTitle")}</div>
+            <div className="chart-sub">{t("learning.coachLlmSub")}</div>
+          </div>
+        </div>
+        <p className="hint coach-llm-privacy">{t("learning.coachLlmPrivacy")}</p>
+        <button className="dex-filter active" onClick={() => patch({ coach_llm_enabled: true })}>
+          {t("learning.coachLlmEnable")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card coach-llm-card">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">{t("learning.coachLlmTitle")}</div>
+          <div className="chart-sub">{t("learning.coachLlmSub")}</div>
+        </div>
+        <button className="dex-filter" onClick={ask} disabled={loading}>
+          {loading ? t("learning.coachLlmLoading") : t("learning.coachLlmAsk")}
+        </button>
+      </div>
+
+      {result && !result.available && !loading && (
+        <p className="hint">{t("learning.coachLlmUnavailable")}</p>
+      )}
+
+      {result?.available && (
+        <>
+          <p className="coach-llm-verdict">{result.verdict}</p>
+
+          {(result.strengths ?? []).length > 0 && (
+            <ul className="coach-llm-strengths">
+              {(result.strengths ?? []).map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          )}
+
+          {(result.improvements ?? []).map((imp, i) => (
+            <div key={i} className="coach-llm-imp">
+              <div className="coach-llm-imp-title">{imp.title}</div>
+              <div className="coach-llm-imp-advice">{imp.advice}</div>
+              {imp.before && imp.after && (
+                <div className="coach-llm-ba">
+                  <div className="coach-llm-before">{imp.before}</div>
+                  <div className="coach-llm-after">{imp.after}</div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {(result.words ?? []).length > 0 && (
+            <div className="coach-llm-words">
+              <div className="coach-llm-words-title">{t("learning.coachLlmWords")}</div>
+              {(result.words ?? []).map((w) => (
+                <div key={w.word} className="coach-llm-word">
+                  <span className="coach-llm-word-w">{w.word}</span>
+                  <span className="coach-llm-word-why">{w.why}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <button className="coach-llm-off" onClick={() => patch({ coach_llm_enabled: false })}>
+        {t("learning.coachLlmDisable")}
+      </button>
+    </div>
+  );
+}
+
 function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => void }) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
@@ -1151,6 +1251,11 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
         <div className="empty">{t("learning.empty")}</div>
       ) : analysis === null ? null : (
         <>
+          {/* The headline: vocabulary and rhetoric judged together, with the
+              three levers worth pulling first. */}
+          {/* The LLM deep-dive on top of the local verdict — opt-in. */}
+          <PersonalCoachCard days={days} />
+
           {/* Vocabulary richness */}
           <div className="card">
             <div className="chart-head">
@@ -1339,6 +1444,13 @@ function DexCard({ find }: { find: WordFind }) {
       </div>
       <div className="dex-card-meta">
         <span className="dex-band-chip">{t(BAND_LABEL[find.band])}</span>
+        {/* Provenance: the learning loop paying into the collection is worth
+            seeing — a taught word you then actually used. */}
+        {find.origin === "learned" && (
+          <span className="dex-origin" title={t("learning.dexLearnedHint")}>
+            {t("learning.dexLearned")}
+          </span>
+        )}
         <span className="dex-nr">{t("learning.dexNr", { dex: find.dex })}</span>
       </div>
       <div className="dex-date">{t("learning.dexFirstFound", { date })}</div>

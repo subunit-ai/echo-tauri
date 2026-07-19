@@ -164,6 +164,7 @@ pub fn run() {
             commands::learning_words_progress,
             commands::word_pack_get,
             commands::word_pack_fetch,
+            commands::learning_coach,
             commands::weekly_report_get,
             commands::account_stats,
             commands::delete_history_entry,

@@ -191,6 +191,13 @@ pub fn init_at(path: &std::path::Path) -> anyhow::Result<()> {
     // dirty. ADD COLUMN errors on a fresh table that already has them → ignore.
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0", []);
     let _ = conn.execute("ALTER TABLE note_folders ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1", []);
+    // Migration: a Wortdex entry now remembers HOW it was collected — "found"
+    // (spoken spontaneously) vs "learned" (a word the coach taught first). Older
+    // rows keep the default, which is exactly what they were.
+    let _ = conn.execute(
+        "ALTER TABLE word_finds ADD COLUMN origin TEXT NOT NULL DEFAULT 'found'",
+        [],
+    );
     // Migration (Prompt-Coach, Welle 5): history remembers the dictation TARGET
     // app and — for dictations into a KI/prompt surface — the post-hoc rubric
     // score. Additive + guarded by PRAGMA table_info so each column is added
@@ -1096,14 +1103,15 @@ pub fn word_find_record(
     dex: i64,
     context: &str,
     now: i64,
+    origin: &str, // "found" | "learned"
 ) -> bool {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return false };
     let inserted = conn.execute(
         "INSERT OR IGNORE INTO word_finds
-            (account, word, display, band, dex, count, first_ts, last_ts, context)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?7)",
-        params![account, word, display, band, dex, now, context],
+            (account, word, display, band, dex, count, first_ts, last_ts, context, origin)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?7, ?8)",
+        params![account, word, display, band, dex, now, context, origin],
     );
     match inserted {
         Ok(n) if n > 0 => true,
@@ -1128,7 +1136,7 @@ pub fn word_finds_list(account: &str, limit: u32) -> Vec<Value> {
     let guard = DB.lock();
     let Some(conn) = guard.as_ref() else { return Vec::new() };
     let Ok(mut stmt) = conn.prepare_cached(
-        "SELECT word, display, band, dex, count, first_ts, last_ts, context
+        "SELECT word, display, band, dex, count, first_ts, last_ts, context, origin
          FROM word_finds WHERE account = ?1
          ORDER BY first_ts DESC, word ASC LIMIT ?2",
     ) else {
@@ -1144,6 +1152,7 @@ pub fn word_finds_list(account: &str, limit: u32) -> Vec<Value> {
             "first_ts": r.get::<_, i64>(5)?,
             "last_ts": r.get::<_, i64>(6)?,
             "context": r.get::<_, String>(7)?,
+            "origin": r.get::<_, String>(8)?,
         }))
     });
     match rows {
@@ -2455,11 +2464,12 @@ mod tests {
 
         // Wortdex finds: first sighting inserts (true), repeat bumps count
         // (false), per-band counts + chronology helpers, account isolation.
-        assert!(word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "Die Diskrepanz war groß.", 1000));
-        assert!(!word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "ignored", 1500));
-        assert!(word_find_record("em:w", "eloquenz", "Eloquenz", 2, 7671, "", 2000));
-        assert!(word_find_record("em:w", "apodiktisch", "apodiktisch", 3, 26766, "", 3000));
-        assert!(word_find_record("em:x", "eloquenz", "Eloquenz", 2, 7671, "", 4000)); // other account
+        assert!(word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "Die Diskrepanz war groß.", 1000, "found"));
+        assert!(!word_find_record("em:w", "diskrepanz", "Diskrepanz", 1, 2388, "ignored", 1500, "found"));
+        // A word the coach taught first — collected via the learning loop.
+        assert!(word_find_record("em:w", "eloquenz", "Eloquenz", 2, 7671, "", 2000, "learned"));
+        assert!(word_find_record("em:w", "apodiktisch", "apodiktisch", 3, 26766, "", 3000, "found"));
+        assert!(word_find_record("em:x", "eloquenz", "Eloquenz", 2, 7671, "", 4000, "found")); // other account
         let finds = word_finds_list("em:w", 100);
         assert_eq!(finds.len(), 3);
         assert_eq!(finds[0]["word"], "apodiktisch"); // newest first
@@ -2467,6 +2477,9 @@ mod tests {
         assert_eq!(disk["count"], 2); // repeat bumped
         assert_eq!(disk["last_ts"], 1500);
         assert_eq!(disk["first_ts"], 1000); // first sighting wins
+        assert_eq!(disk["origin"], "found"); // spontaneous discovery
+        let eloq = finds.iter().find(|f| f["word"] == "eloquenz").unwrap();
+        assert_eq!(eloq["origin"], "learned"); // taught first, then spoken
         assert_eq!(disk["context"], "Die Diskrepanz war groß."); // original context kept
         assert_eq!(word_find_band_counts("em:w"), [1, 1, 1, 0, 0, 0]);
         assert_eq!(word_find_band_counts("em:x"), [0, 1, 0, 0, 0, 0]); // isolation
