@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.145",
+    date: "2026-07-19",
+    title: {
+      de: "Das Mikrofon geht nach dem Diktat jetzt wirklich aus",
+      en: "The microphone really turns off after dictation now",
+    },
+    changes: [
+      {
+        kind: "fix",
+        de: "Das orange Mikrofon-Symbol konnte nach dem Diktieren dauerhaft an bleiben, obwohl Echo längst nicht mehr zuhörte — die Audio-Schicht hat das Mikrofon beim Beenden nicht sauber freigegeben. Echo stoppt die Mikrofon-Hardware jetzt explizit, sobald ein Diktat (oder eine lokale Meeting-Aufnahme) endet, damit das Symbol zuverlässig erlischt.",
+        en: "The orange microphone indicator could stay on permanently after dictating even though Echo had long stopped listening — the audio layer didn't cleanly release the mic on stop. Echo now explicitly stops the microphone hardware the moment a dictation (or a local meeting recording) ends, so the indicator reliably goes out.",
+      },
+    ],
+  },
+  {
     version: "0.5.144",
     date: "2026-07-19",
     title: {

@@ -123,7 +123,12 @@ impl MeetCapture {
                         Err(_) => break, // Stream weg
                     }
                 }
-                drop(stream); // Mic freigeben
+                // Mic freigeben: EXPLIZIT stoppen vor dem Drop — cpal 0.15 hält über
+                // seinen Disconnect-Listener einen Stream-Klon in derselben StreamInner
+                // (Referenz-Zyklus), sodass drop das AudioUnit nie disposed und das
+                // Mikro an bliebe. pause() → AudioOutputUnitStop stoppt die Hardware.
+                let _ = stream.pause();
+                drop(stream);
                 // Rest-Chunks noch einsammeln (Callback könnte vor dem Drop gesendet haben)
                 while let Ok(chunk) = chunk_rx.try_recv() {
                     let out = rs.push(&chunk);

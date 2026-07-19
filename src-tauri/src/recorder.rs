@@ -336,10 +336,17 @@ fn worker(rx: Receiver<Cmd>, level: Arc<AtomicU32>, recording: Arc<AtomicBool>) 
                 clear_bands();
                 match active.take() {
                     Some((stream, buf, sr)) => {
-                        drop(stream); // halt capture + release the mic (coreaudio
-                        // uninitialize/dispose runs in the Stream's Drop → the macOS
-                        // mic indicator turns off). Logged so a field log proves the
-                        // mic was released after a session (diagnose a lingering dot).
+                        // Stop the AudioUnit EXPLICITLY before dropping — dropping the
+                        // handle alone does NOT release the mic. cpal 0.15's coreaudio
+                        // backend registers a device-disconnect listener that stores a
+                        // clone of the Stream inside the very same StreamInner
+                        // (add_disconnect_listener) → a reference cycle. Our drop takes
+                        // the Arc from 2→1, never 0, so StreamInner (and its AudioUnit)
+                        // is never dropped/disposed and the macOS mic indicator stays
+                        // lit until the process exits. pause() → AudioOutputUnitStop
+                        // halts the hardware mic regardless of the leaked object.
+                        let _ = stream.pause();
+                        drop(stream);
                         let samples = std::mem::take(&mut *buf.lock());
                         log::info!(
                             "recorder: stopped — input stream dropped, mic released ({} samples @ {} Hz)",
