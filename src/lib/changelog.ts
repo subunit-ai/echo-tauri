@@ -44,11 +44,6 @@ export const CHANGELOG: ChangelogEntry[] = [
         en: "New in the vocabulary tab: a personal coach that reads your dictations and tells you concretely what to improve — including before/after on your own sentences. You switch it on yourself; the card states exactly what gets sent beforehand, and you can turn it off again at any time. Everything else in the tab is still computed on your device only.",
       },
       {
-        kind: "feature",
-        de: "Der Coach zeigt jetzt ein Gesamtbild aus Wortschatz UND Rhetorik statt zweier getrennter Ansichten — mit den drei Hebeln, die bei dir gerade am meisten bringen, und einem konkreten Tipp zu jedem.",
-        en: "The coach now shows one overall picture of vocabulary AND rhetoric instead of two separate views — with the three levers that pay off most for you right now, each with a concrete tip.",
-      },
-      {
         kind: "improvement",
         de: "Wörter, die dir der Coach beigebracht hat, sind im Wortdex jetzt als „gelernt\" markiert, sobald du sie das erste Mal selbst benutzt — dein Lernen zahlt sichtbar in deine Sammlung ein.",
         en: "Words the coach taught you are now marked as \"learned\" in the Wortdex the first time you use them yourself — your learning visibly pays into your collection.",

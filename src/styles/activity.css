@@ -3745,107 +3745,6 @@ button.task-row.navigable:hover {
   background: rgba(198, 198, 201, 0.07);
 }
 
-/* ================================================================
-   Coach verdict — the unified headline card: vocabulary and rhetoric
-   judged together plus the three weakest dimensions as "levers".
-   Reuses the glass card chrome; only the score/lever bits are new.
-   ================================================================ */
-.verdict-scores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px;
-  padding: 4px 0 2px;
-}
-.verdict-score {
-  min-width: 120px;
-}
-.verdict-num {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1.1;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.verdict-delta {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-.verdict-delta.up {
-  color: var(--emerald);
-  background: color-mix(in srgb, var(--emerald) 14%, transparent);
-}
-.verdict-delta.down {
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
-}
-.verdict-label {
-  margin-top: 3px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink2);
-}
-.verdict-foot {
-  margin-top: 1px;
-  font-size: 11.5px;
-  color: var(--ink2);
-  opacity: 0.8;
-}
-
-.verdict-levers {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--glass-edge);
-}
-.verdict-levers-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--ink2);
-  margin-bottom: 10px;
-}
-.verdict-lever {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 8px 0;
-}
-.verdict-lever + .verdict-lever {
-  border-top: 1px solid color-mix(in srgb, var(--glass-edge) 55%, transparent);
-}
-/* The score doubles as the severity cue — low number, more attention. */
-.verdict-lever-score {
-  flex: none;
-  min-width: 30px;
-  text-align: center;
-  padding: 3px 0;
-  border-radius: var(--r-sm);
-  font-size: 13px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--cyan-ink);
-  background: color-mix(in srgb, var(--cyan) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--cyan) 26%, transparent);
-}
-.verdict-lever-name {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--ink);
-}
-.verdict-lever-tip {
-  margin-top: 2px;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--ink2);
-}
-.verdict-hint {
-  margin-top: 12px;
-}
-
 /* Wortdex provenance badge: this one came from the coach's teaching, not from a
    spontaneous find — the learning loop visibly paying into the collection. */
 .dex-origin {
@@ -3930,6 +3829,13 @@ button.task-row.navigable:hover {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--glass-edge);
+}
+.coach-llm-words-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink2);
+  margin-bottom: 8px;
 }
 .coach-llm-word {
   display: flex;
