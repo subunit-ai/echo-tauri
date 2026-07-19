@@ -647,6 +647,10 @@ export interface LeaderboardRow {
   achievements?: string[];
   /** Wortdex collection tallies per rarity band. Absent on old servers. */
   bands?: BandCounts;
+  /** Account profile-picture URL (auth.subunit.ai), mirrored from the member's
+   *  last score push. Absent on old servers / old clients → the row falls back
+   *  to initials. */
+  avatar?: string | null;
 }
 export interface Leaderboard {
   available: boolean;

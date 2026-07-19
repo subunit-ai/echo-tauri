@@ -757,9 +757,19 @@
 .xp-feed-row:last-child {
   border-bottom: none;
 }
+/* The marked row (you — often rank 1) gets the cyan highlight WITHOUT nudging
+   its content right: the +6px side padding that draws the pill is offset by an
+   equal negative margin, so the badge/name/XP stay in the same column as every
+   other row and only the background bleeds outward. The explicit
+   width:calc(100% + 12px) keeps that symmetric on the width:100% button rows
+   too (a bare negative margin would only bleed one side there). Card has 22px
+   padding → the 6px bleed never reaches the edge. */
 .xp-feed-row.me {
   background: color-mix(in srgb, var(--cyan) 7%, transparent);
   border-radius: 8px;
+  width: calc(100% + 12px);
+  margin-left: -6px;
+  margin-right: -6px;
   padding-left: 8px;
   padding-right: 8px;
 }

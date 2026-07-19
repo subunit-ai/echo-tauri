@@ -642,6 +642,9 @@ const XP_KIND_LABEL: Record<LearningEvent["kind"], string> = {
 function CoachTab() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
+  // Own account picture — the freshest local truth for the "me" row (shows a
+  // just-uploaded avatar even before the next score push has mirrored it).
+  const { config } = useConfig();
 
   const [wod, setWod] = useState<WordOfDay | null>(null);
   const [xp, setXp] = useState<LearningXp | null>(null);
@@ -900,9 +903,16 @@ function CoachTab() {
                 >
                   <span className="lb-rank">{row.rank}</span>
                   {/* Level ring only materialises when the server sends xp_total
-                      and it clears level 3 — old servers → bare avatar. */}
+                      and it clears level 3 — old servers → bare avatar. The photo
+                      is the member's account picture (server-mirrored); for me
+                      prefer the local config URL so a fresh upload shows at once.
+                      No src → initials, exactly as before. */}
                   <TierRing level={levelForXp(row.xp_total ?? 0)} size={22}>
-                    <Avatar name={row.name} size={22} />
+                    <Avatar
+                      name={row.name}
+                      src={row.me ? (config?.avatar_url ?? row.avatar) : row.avatar}
+                      size={22}
+                    />
                   </TierRing>
                   <span className="lb-level" aria-hidden="true">
                     {levelForXp(row.xp_total ?? 0)}
@@ -922,6 +932,13 @@ function CoachTab() {
               {meRank != null && !shown.some((r) => r.me) && (
                 <div className="xp-feed-row me">
                   <span className="lb-rank">{meRank}</span>
+                  <TierRing level={levelForXp(xp?.xp_total ?? 0)} size={22}>
+                    <Avatar
+                      name={config?.nickname || config?.display_name || ""}
+                      src={config?.avatar_url}
+                      size={22}
+                    />
+                  </TierRing>
                   <span className="xp-feed-word">{t("learning.lbYou", { name: "" })}</span>
                   <span className="xp-feed-xp">
                     {(meXp ?? 0).toLocaleString(i18n.language)} XP

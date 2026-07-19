@@ -122,7 +122,9 @@ export function MemberProfile({ row, onClose }: { row: LeaderboardRow; onClose: 
         {/* Header — level ring, name, level standing, equipped title. */}
         <div className="mp-head">
           <TierRing level={level} size={44}>
-            <Avatar name={row.name} size={44} />
+            {/* Member's account picture (server-mirrored from their last score
+                push); no avatar → initials. */}
+            <Avatar name={row.name} src={row.avatar} size={44} />
           </TierRing>
           <div className="mp-head-info">
             <div className="mp-name">{displayName}</div>

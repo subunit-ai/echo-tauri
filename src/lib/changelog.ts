@@ -31,6 +31,26 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.146",
+    date: "2026-07-19",
+    title: {
+      de: "Echte Profilbilder in der Bestenliste",
+      en: "Real profile pictures in the leaderboard",
+    },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Wortschatz-Bestenliste zeigt jetzt die echten Profilbilder aller Mitglieder — in der Liste und im Profil — statt nur der Initialen. Wer noch kein Bild hochgeladen hat, behält weiterhin seine farbigen Initialen.",
+        en: "The vocabulary leaderboard now shows everyone's real profile picture — in the list and in the profile — instead of just initials. Anyone who hasn't uploaded a picture keeps their coloured initials.",
+      },
+      {
+        kind: "fix",
+        de: "Dein eigener Eintrag wird jetzt nur noch dezent hervorgehoben und bleibt dabei sauber in einer Flucht mit den anderen Plätzen — vorher rutschte besonders Platz 1 durch die Markierung ein Stück nach rechts.",
+        en: "Your own row is now highlighted subtly while staying perfectly aligned with the other ranks — previously the highlight nudged it (rank 1 especially) a little to the right.",
+      },
+    ],
+  },
+  {
     version: "0.5.145",
     date: "2026-07-19",
     title: {
