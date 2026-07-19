@@ -641,7 +641,9 @@
     "liveTyping": "Live typing",
     "liveTypingHint": "Types the text into the target window while you speak. Off = the full result is pasted when you release (recommended, fastest mode).",
     "tabVoice": "Voice",
-    "secVoiceprint": "Voiceprint"
+    "secVoiceprint": "Voiceprint",
+    "soundReward": "Reward sound",
+    "soundRewardHint": "A short jingle when you earn XP or unlock a word."
   },
   "meetLocal": {
     "cardTitle": "Local meeting",
@@ -938,19 +940,15 @@
     "kindWod": "Word of the day",
     "kindCoach": "Coach word",
     "lbTitle": "Leaderboard",
-    "lbSub": "Who is growing their vocabulary the most this week?",
+    "lbSub": "Who has built the biggest vocabulary overall?",
     "lbYou": "You {{name}}",
     "lbWords": "{{count}} words",
-    "lbBoardWeek": "This week",
-    "lbBoardTotal": "All-time",
     "profileTitle": "Profile",
     "profileClose": "Close",
     "levelLabel": "Level {{level}}",
     "xpToLevel": "{{xp}} XP to level {{level}}",
     "achCount": "{{earned}} / {{total}} achievements",
     "wortdexSection": "Word collection",
-    "rewardWodToast": "Word of the day used: “{{word}}” · +{{xp}} XP",
-    "rewardCoachToast": "New word used: “{{word}}” · +{{xp}} XP",
     "topWordsTitle": "Most used words",
     "topWordsSub": "Your most frequent words in the selected period.",
     "distinctiveTitle": "Your distinctive words",
@@ -979,9 +977,6 @@
     "bandLegendary": "Legendary",
     "kindFind": "Word find",
     "kindPattern": "Prompt pattern",
-    "findToastNotable": "Notable word found: “{{word}}” · +{{xp}} XP",
-    "findToastRare": "Rare word discovered: “{{word}}” · No. {{dex}} · +{{xp}} XP",
-    "findToastLegendary": "Legendary word! “{{word}}” · No. {{dex}} · +{{xp}} XP",
     "achTitle": "Achievements",
     "achSub": "Milestones you unlock as you collect and practise — each grants a wearable title.",
     "achLoading": "Loading achievements …",
@@ -1558,6 +1553,37 @@
         "title": "Belt ceremony",
         "body": "{{rank}} reached"
       }
+    },
+    "tasks": {
+      "title": "Daily tasks",
+      "sub": "How to earn XP today",
+      "doneChip": "{{done}}/{{total}} done",
+      "wod": "Use the word of the day in a dictation",
+      "coach": "Use one of your coach words",
+      "dojo": "Rhetoric dojo: {{name}}",
+      "kataTrain": "Kata training in the prompt dojo",
+      "kataNext": "Master the next kata: {{name}}",
+      "pattern": "Apply the prompt pattern: {{name}}",
+      "finds": "Discover rare words while speaking",
+      "findsXp": "+10–100 XP"
+    },
+    "banner": {
+      "kind": {
+        "word_of_day": "Word of the day used",
+        "coach_word": "New word used",
+        "dojo": "Dojo drill passed",
+        "kata": "Kata mastered",
+        "kata_train": "Kata training done",
+        "prompt_pattern": "Prompt pattern applied"
+      },
+      "more_one": "+{{count}} more reward",
+      "more_other": "+{{count}} more rewards",
+      "findNotable": "Notable word discovered",
+      "findRare": "Rare word discovered",
+      "findLegendary": "Legendary word discovered",
+      "findNoXp": "New in your Wortdex",
+      "dexNo": "No. {{dex}}",
+      "levelUp": "Level {{level}} reached"
     }
   },
   "vp": {

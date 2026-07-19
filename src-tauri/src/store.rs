@@ -1230,6 +1230,23 @@ pub fn learning_kind_count(account: &str, kind: &str, day: Option<&str>) -> i64 
     }
 }
 
+/// Words already credited today for `kind` — the daily-tasks card uses it to
+/// only suggest coach words that still pay XP today.
+pub fn learning_words_today(account: &str, day: &str, kind: &str) -> Vec<String> {
+    let guard = DB.lock();
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT word FROM learning_events WHERE account = ?1 AND day = ?2 AND kind = ?3",
+    ) else {
+        return Vec::new();
+    };
+    let rows = stmt.query_map(params![account, day, kind], |r| r.get::<_, String>(0));
+    match rows {
+        Ok(it) => it.filter_map(Result::ok).collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Distinct LOCAL days on/after `from_day` that carry an event of `kind` — the
 /// Rhetorik-Dojo's weekly "workouts" quest (COUNT DISTINCT day of kind 'dojo'
 /// since the week's Monday). Half-open lower bound (day >= from_day).
@@ -2468,6 +2485,17 @@ mod tests {
         assert_eq!(learning_kind_count("em:w", "word_find", Some("2026-07-14")), 2);
         assert_eq!(learning_kind_count("em:w", "word_find", None), 3);
         assert_eq!(learning_kind_count("em:x", "word_find", None), 0);
+
+        // Per-day credited words of one kind (daily-tasks card): day- and
+        // kind-scoped, other accounts invisible.
+        assert!(learning_award("em:w", "2026-07-14", "coach_word", "prägnant", 20, 3000));
+        let today_words = learning_words_today("em:w", "2026-07-14", "word_find");
+        assert_eq!(today_words.len(), 2);
+        assert!(today_words.contains(&"diskrepanz".to_string()));
+        assert!(today_words.contains(&"eloquenz".to_string()));
+        assert_eq!(learning_words_today("em:w", "2026-07-14", "coach_word"), vec!["prägnant"]);
+        assert!(learning_words_today("em:w", "2026-07-15", "coach_word").is_empty());
+        assert!(learning_words_today("em:x", "2026-07-14", "coach_word").is_empty());
 
         // Sprechprofil daily cache: compute-from-history, reuse, stale + version
         // recompute. History currently holds the two backfill rows (today).

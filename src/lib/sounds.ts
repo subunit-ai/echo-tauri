@@ -169,6 +169,38 @@ function synth(notes: Note[], volume: number) {
   }
 }
 
+// ---- Reward chime (XP banner) ----------------------------------------------
+// Three tiers, scaled to the size of the win: 1 = small XP (coach word, dojo
+// drill, capped find), 2 = the day's marquee rewards (word of the day, kata,
+// pattern, rare find), 3 = the big moments (legendary find, level-up). Synth
+// only — no asset files, same envelope machinery as the presets above.
+const REWARD_SYNTH: Record<1 | 2 | 3, Note[]> = {
+  1: [
+    { f: 659, t: 0, d: 0.14 }, // E5
+    { f: 988, t: 0.06, d: 0.24 }, // B5
+  ],
+  2: [
+    { f: 587, t: 0, d: 0.16 }, // D5
+    { f: 740, t: 0.07, d: 0.18 }, // F#5
+    { f: 880, t: 0.14, d: 0.28 }, // A5
+    { f: 1480, t: 0.2, d: 0.3, type: "triangle" }, // sparkle
+  ],
+  3: [
+    { f: 294, t: 0, d: 0.55 }, // D4 fundament under the run
+    { f: 587, t: 0, d: 0.2 },
+    { f: 740, t: 0.08, d: 0.2 },
+    { f: 880, t: 0.16, d: 0.24 },
+    { f: 1175, t: 0.24, d: 0.34 },
+    { f: 1760, t: 0.32, d: 0.4, type: "triangle" },
+    { f: 2217, t: 0.4, d: 0.44, type: "triangle" },
+  ],
+};
+
+/** Reward chime for the XP banner. Best-effort like `playSound`. */
+export function playReward(tier: 1 | 2 | 3, volume: number) {
+  synth(REWARD_SYNTH[tier], volume);
+}
+
 /** Play a sound preset for the given event at `volume` (0–1). Best-effort: any
  *  failure (autoplay policy, no AudioContext) is swallowed — sounds are non-critical. */
 export function playSound(id: string, event: SoundEvent, volume: number) {

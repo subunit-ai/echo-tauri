@@ -1,0 +1,157 @@
+/* ================================================================
+   XP celebration banners (src/components/XpBanner.tsx)
+
+   Top-center stack, floating OVER content → the surface is --menu-bg
+   (the near-opaque dropdown/sheet plane), never a translucent glass
+   token. Each banner carries its accent in --xpb-accent so one rule
+   set styles every class; the black (zero-hue) theme only remaps the
+   property to its brightness ramp.
+   ================================================================ */
+
+.xpb-stack {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 10000; /* above the toast stack (9999) — a reward outranks a status note */
+  pointer-events: none;
+}
+
+.xpb {
+  --xpb-accent: var(--cyan);
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 11px 16px 11px 13px;
+  border-radius: 14px;
+  background: var(--menu-bg);
+  border: 1px solid color-mix(in srgb, var(--xpb-accent) 42%, transparent);
+  box-shadow:
+    0 6px 28px rgba(0, 0, 0, 0.35),
+    0 0 22px color-mix(in srgb, var(--xpb-accent) 22%, transparent);
+  animation: xpb-in 0.42s cubic-bezier(0.2, 1.25, 0.35, 1) both;
+}
+.xpb-leaving {
+  animation: xpb-out 0.32s ease-in both;
+}
+
+/* Accent per event class. Bands mirror the Wortdex accents: 1 = notable
+   (cyan), 2 = rare (violet), 3 = legendary (amber). */
+.xpb-reward {
+  --xpb-accent: var(--cyan);
+}
+.xpb-find-1 {
+  --xpb-accent: var(--cyan);
+}
+.xpb-find-2 {
+  --xpb-accent: var(--violet);
+}
+.xpb-find-3 {
+  --xpb-accent: var(--amber);
+}
+.xpb-level {
+  --xpb-accent: var(--amber);
+}
+
+.xpb-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  color: var(--xpb-accent);
+  background: color-mix(in srgb, var(--xpb-accent) 14%, transparent);
+}
+
+.xpb-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.xpb-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+  line-height: 1.25;
+}
+.xpb-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.xpb-word {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--xpb-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xpb-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.xpb-xp {
+  font-size: 15px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--xpb-accent);
+  flex-shrink: 0;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--xpb-accent) 45%, transparent);
+}
+
+@keyframes xpb-in {
+  from {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes xpb-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+}
+
+/* Black theme: zero-hue rule — accents collapse to the brightness ramp
+   (legendary/level = brightest, like the Wortdex chips). */
+:root[data-theme="black"] .xpb-reward,
+:root[data-theme="black"] .xpb-find-1 {
+  --xpb-accent: #9a9a9e;
+}
+:root[data-theme="black"] .xpb-find-2 {
+  --xpb-accent: #c6c6c9;
+}
+:root[data-theme="black"] .xpb-find-3,
+:root[data-theme="black"] .xpb-level {
+  --xpb-accent: #dededf;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xpb,
+  .xpb-leaving {
+    animation: none;
+  }
+}
