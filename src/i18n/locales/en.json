@@ -972,8 +972,11 @@
     "dexFirstFound": "First found {{date}}",
     "dexQuote": "“{{context}}”",
     "bandAll": "All",
-    "bandNotable": "Notable",
+    "bandCommon": "Common",
+    "bandUncommon": "Uncommon",
     "bandRare": "Rare",
+    "bandEpic": "Epic",
+    "bandMythic": "Mythic",
     "bandLegendary": "Legendary",
     "kindFind": "Word find",
     "kindPattern": "Prompt pattern",
@@ -984,13 +987,17 @@
     "achWearTitle": "Wear title",
     "achRemoveTitle": "Remove title",
     "ach": {
-      "first_notable": {
-        "name": "Ears Open",
-        "desc": "Speak your first notable word."
-      },
       "first_rare": {
         "name": "Rarity Found",
         "desc": "Speak your first rare word."
+      },
+      "first_epic": {
+        "name": "Epic Spoken",
+        "desc": "Speak your first epic word."
+      },
+      "first_mythic": {
+        "name": "Myth Summoned",
+        "desc": "Speak your first mythic word."
       },
       "first_legendary": {
         "name": "Legend Spoken",
@@ -1038,8 +1045,9 @@
       }
     },
     "titles": {
-      "first_notable": "The Attuned",
       "first_rare": "Rarity Hunter",
+      "first_epic": "Epicist",
+      "first_mythic": "Myth Weaver",
       "first_legendary": "Legend Whisperer",
       "finds_10": "Syllable Collector",
       "finds_50": "Lexicon Apprentice",
@@ -1578,9 +1586,7 @@
       },
       "more_one": "+{{count}} more reward",
       "more_other": "+{{count}} more rewards",
-      "findNotable": "Notable word discovered",
-      "findRare": "Rare word discovered",
-      "findLegendary": "Legendary word discovered",
+      "find": "{{tier}} word discovered",
       "findNoXp": "New in your Wortdex",
       "dexNo": "No. {{dex}}",
       "levelUp": "Level {{level}} reached"

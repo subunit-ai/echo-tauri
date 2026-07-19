@@ -43,18 +43,28 @@
   animation: xpb-out 0.32s ease-in both;
 }
 
-/* Accent per event class. Bands mirror the Wortdex accents: 1 = notable
-   (cyan), 2 = rare (violet), 3 = legendary (amber). */
+/* Accent per event class. Bands mirror the six Wortdex accents: 1 Gewöhnlich
+   (slate), 2 Ungewöhnlich (green), 3 Selten (blue), 4 Episch (violet),
+   5 Mythisch (magenta), 6 Legendär (gold). */
 .xpb-reward {
   --xpb-accent: var(--cyan);
 }
 .xpb-find-1 {
-  --xpb-accent: var(--cyan);
+  --xpb-accent: #8a94a6;
 }
 .xpb-find-2 {
-  --xpb-accent: var(--violet);
+  --xpb-accent: var(--emerald);
 }
 .xpb-find-3 {
+  --xpb-accent: #4c8dff;
+}
+.xpb-find-4 {
+  --xpb-accent: var(--violet);
+}
+.xpb-find-5 {
+  --xpb-accent: #ec5aa6;
+}
+.xpb-find-6 {
   --xpb-accent: var(--amber);
 }
 .xpb-level {
@@ -139,14 +149,23 @@
    (legendary/level = brightest, like the Wortdex chips). */
 :root[data-theme="black"] .xpb-reward,
 :root[data-theme="black"] .xpb-find-1 {
-  --xpb-accent: #9a9a9e;
+  --xpb-accent: #6f6f72;
 }
 :root[data-theme="black"] .xpb-find-2 {
-  --xpb-accent: #c6c6c9;
+  --xpb-accent: #8c8c8f;
 }
-:root[data-theme="black"] .xpb-find-3,
+:root[data-theme="black"] .xpb-find-3 {
+  --xpb-accent: #a7a7aa;
+}
+:root[data-theme="black"] .xpb-find-4 {
+  --xpb-accent: #c2c2c5;
+}
+:root[data-theme="black"] .xpb-find-5 {
+  --xpb-accent: #dcdcdf;
+}
+:root[data-theme="black"] .xpb-find-6,
 :root[data-theme="black"] .xpb-level {
-  --xpb-accent: #dededf;
+  --xpb-accent: #f2f2f4;
 }
 
 @media (prefers-reduced-motion: reduce) {

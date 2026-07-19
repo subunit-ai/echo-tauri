@@ -193,7 +193,7 @@ function achIcon(id: string) {
   if (id.startsWith("finds_")) return <BookIcon />;
   if (id.startsWith("coach_")) return <BookIcon />;
   if (id.startsWith("wod_")) return <MedalIcon />;
-  return <StarIcon />; // first_notable / first_rare / first_legendary
+  return <StarIcon />; // first_rare / first_epic / first_mythic / first_legendary
 }
 
 /** Highest defined level title — levels above it reuse the top title. */
@@ -1267,13 +1267,20 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
   );
 }
 
-/** Band → CSS accent + i18n label. 1 = notable (cyan), 2 = rare (violet),
- *  3 = legendary (amber); the black theme greys them via activity.css. */
+/** Band → CSS accent + i18n label (higher = rarer). 1 Gewöhnlich (slate),
+ *  2 Ungewöhnlich (green), 3 Selten (blue), 4 Episch (violet), 5 Mythisch
+ *  (magenta), 6 Legendär (gold); the black theme greys them via activity.css. */
 const BAND_LABEL: Record<Band, string> = {
-  1: "learning.bandNotable",
-  2: "learning.bandRare",
-  3: "learning.bandLegendary",
+  1: "learning.bandCommon",
+  2: "learning.bandUncommon",
+  3: "learning.bandRare",
+  4: "learning.bandEpic",
+  5: "learning.bandMythic",
+  6: "learning.bandLegendary",
 };
+
+/** All bands, rarest last — drives the stat chips and filter chips. */
+const BANDS: Band[] = [1, 2, 3, 4, 5, 6];
 
 /** One collectible word, Pokédex-card style. */
 function DexCard({ find }: { find: WordFind }) {
@@ -1317,7 +1324,7 @@ function WortdexTab({ data }: { data: WortdexData | null }) {
   }
 
   const { finds, counts } = data;
-  const total = counts.notable + counts.rare + counts.legendary;
+  const total = counts.reduce((a, b) => a + b, 0);
 
   if (total === 0) {
     return (
@@ -1331,9 +1338,7 @@ function WortdexTab({ data }: { data: WortdexData | null }) {
   const shown = filter === "all" ? finds : finds.filter((f) => f.band === filter);
   const filters: { key: "all" | Band; label: string }[] = [
     { key: "all", label: t("learning.bandAll") },
-    { key: 1, label: t("learning.bandNotable") },
-    { key: 2, label: t("learning.bandRare") },
-    { key: 3, label: t("learning.bandLegendary") },
+    ...BANDS.map((b) => ({ key: b, label: t(BAND_LABEL[b]) })),
   ];
 
   return (
@@ -1347,12 +1352,10 @@ function WortdexTab({ data }: { data: WortdexData | null }) {
 
       {/* Per-band totals — display stat chips. */}
       <div className="dex-stats">
-        {([1, 2, 3] as Band[]).map((b) => (
+        {BANDS.map((b) => (
           <div key={b} className={`dex-stat dex-stat--band${b}`}>
             <span className="dex-dot" aria-hidden="true" />
-            <span className="dex-stat-num">
-              {b === 1 ? counts.notable : b === 2 ? counts.rare : counts.legendary}
-            </span>
+            <span className="dex-stat-num">{counts[b - 1]}</span>
             <span className="dex-stat-label">{t(BAND_LABEL[b])}</span>
           </div>
         ))}
@@ -2633,9 +2636,7 @@ export function Learning() {
     };
   }, []);
 
-  const dexTotal = wortdex
-    ? wortdex.counts.notable + wortdex.counts.rare + wortdex.counts.legendary
-    : 0;
+  const dexTotal = wortdex ? wortdex.counts.reduce((a, b) => a + b, 0) : 0;
 
   return (
     <div>

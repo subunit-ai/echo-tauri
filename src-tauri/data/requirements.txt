@@ -1,0 +1,9 @@
+# Build-time deps for gen_rarity.py (regenerating rarity_*.bin).
+# Run:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#       .venv/bin/python gen_rarity.py
+wordfreq>=3.0    # MIT — Zipf corpus frequencies (the rarity signal)
+spylls>=0.1.7    # MPL-2.0 — pure-Python Hunspell (the real-word / junk gate)
+
+# Dictionaries expected in ./dict/ (gitignored — obtain once, then regenerate):
+#   de_DE.dic / de_DE.aff  — igerman98 (GPL), e.g. any de_DE Hunspell dict
+#   en_US.dic / en_US.aff  — ships with spylls at spylls/hunspell/data/en/en_US.*
