@@ -10,6 +10,7 @@ import {
   fillerRemovedCounts,
   kataList,
   learningAnalysis,
+  learningDailyTasks,
   learningLeaderboard,
   learningSuggestions,
   learningSuggestionsLlm,
@@ -33,6 +34,7 @@ import {
   type Achievement,
   type Band,
   type Belt,
+  type DailyTasks,
   type DojoKind,
   type DojoResult,
   type DojoToday,
@@ -639,7 +641,153 @@ const XP_KIND_LABEL: Record<LearningEvent["kind"], string> = {
  *  leaderboard rows now carrying a level-ring avatar + worn title, the XP feed
  *  learning the new "word_find" kind, and the gamification header refreshing on
  *  a word-find too. */
-function CoachTab() {
+
+/** One line of the daily-tasks card: check state, label, optional word/detail,
+ *  the XP it pays and an optional progress fraction. Navigable lines render as
+ *  buttons with a chevron. */
+function TaskRow({
+  done,
+  label,
+  detail,
+  xp,
+  progress,
+  onClick,
+}: {
+  done: boolean;
+  label: string;
+  detail?: string;
+  xp: string;
+  progress?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      <span className={`task-check${done ? " done" : ""}`} aria-hidden="true">
+        {done && <CheckIcon />}
+      </span>
+      <span className="task-body">
+        <span className={`task-label${done ? " done" : ""}`}>{label}</span>
+        {detail && <span className="task-detail">{detail}</span>}
+      </span>
+      {progress && <span className="task-progress">{progress}</span>}
+      <span className={`task-xp${done ? " done" : ""}`}>{xp}</span>
+      {onClick && (
+        <svg className="task-go" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path
+            d="M9 6l6 6-6 6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+    </>
+  );
+  return onClick ? (
+    <button type="button" className="task-row navigable" onClick={onClick}>
+      {body}
+    </button>
+  ) : (
+    <div className="task-row">{body}</div>
+  );
+}
+
+/** Daily tasks — today's XP menu. Every line is one way to earn XP right now,
+ *  with its reward and done state read from the same ledgers the award paths
+ *  write (a checked task can never disagree with the XP header). The coach
+ *  line names concrete taught words from the user's own suggestions — the
+ *  personalised "say THIS today" — and the dojo/kata/pattern lines navigate
+ *  to their tab. */
+function DailyTasksCard({
+  tasks,
+  onNavigate,
+}: {
+  tasks: DailyTasks;
+  onNavigate: (tab: "dojo" | "prompts") => void;
+}) {
+  const { t } = useTranslation();
+  const coachDone = tasks.coach.earned_today >= tasks.coach.cap;
+  const findsDone = tasks.finds.today >= tasks.finds.cap;
+  const rows = [
+    tasks.wod.done,
+    coachDone,
+    tasks.dojo.done,
+    tasks.kata.train_done,
+    tasks.pattern.done,
+    findsDone,
+  ];
+  const doneCount = rows.filter(Boolean).length;
+  return (
+    <div className="chart-card tasks-card">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">{t("learning.tasks.title")}</div>
+          <div className="chart-sub">{t("learning.tasks.sub")}</div>
+        </div>
+        <span className="tasks-done-chip">
+          {t("learning.tasks.doneChip", { done: doneCount, total: rows.length })}
+        </span>
+      </div>
+      <div className="tasks-list">
+        <TaskRow
+          done={tasks.wod.done}
+          label={t("learning.tasks.wod")}
+          detail={tasks.wod.word}
+          xp={`+${tasks.wod.xp} XP`}
+        />
+        <TaskRow
+          done={coachDone}
+          label={t("learning.tasks.coach")}
+          detail={tasks.coach.words.length > 0 ? tasks.coach.words.join(" · ") : undefined}
+          xp={`+${tasks.coach.xp_each} XP`}
+          progress={`${tasks.coach.earned_today}/${tasks.coach.cap}`}
+        />
+        <TaskRow
+          done={tasks.dojo.done}
+          label={t("learning.tasks.dojo", {
+            name: t(`learning.dojo.kind.${tasks.dojo.kind}.name`),
+          })}
+          xp={`+${tasks.dojo.xp} XP`}
+          onClick={() => onNavigate("dojo")}
+        />
+        <TaskRow
+          done={tasks.kata.train_done}
+          label={t("learning.tasks.kataTrain")}
+          xp={`+${tasks.kata.train_xp} XP`}
+          onClick={() => onNavigate("dojo")}
+        />
+        {tasks.kata.next && (
+          <TaskRow
+            done={false}
+            label={t("learning.tasks.kataNext", {
+              name: t(`learning.kata.${tasks.kata.next}.title`),
+            })}
+            xp={`+${tasks.kata.next_xp} XP`}
+            onClick={() => onNavigate("dojo")}
+          />
+        )}
+        <TaskRow
+          done={tasks.pattern.done}
+          label={t("learning.tasks.pattern", {
+            name: t(`learning.prompts.patterns.${tasks.pattern.id}.name`),
+          })}
+          xp={`+${tasks.pattern.xp} XP`}
+          onClick={() => onNavigate("prompts")}
+        />
+        <TaskRow
+          done={findsDone}
+          label={t("learning.tasks.finds")}
+          xp={t("learning.tasks.findsXp")}
+          progress={`${tasks.finds.today}/${tasks.finds.cap}`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => void }) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
   // Own account picture — the freshest local truth for the "me" row (shows a
@@ -649,7 +797,6 @@ function CoachTab() {
   const [wod, setWod] = useState<WordOfDay | null>(null);
   const [xp, setXp] = useState<LearningXp | null>(null);
   const [lb, setLb] = useState<Leaderboard | null>(null);
-  const [board, setBoard] = useState<"week" | "total">("week");
   const [selectedMember, setSelectedMember] = useState<LeaderboardRow | null>(null);
   const [days, setDays] = useState<number>(30);
   const [analysis, setAnalysis] = useState<LearningAnalysis | null>(null);
@@ -672,10 +819,15 @@ function CoachTab() {
   // Word of the day + XP state: range-independent, but BOTH change the moment
   // a dictation uses a taught word OR lands a new collectible word — refresh on
   // both the reward event and the word-find event (and on history-changed).
+  const [tasks, setTasks] = useState<DailyTasks | null>(null);
+
   useEffect(() => {
     const refreshGamification = () => {
       wordOfDay().then(setWod).catch(() => {});
       learningXp().then(setXp).catch(() => {});
+      // The daily-tasks card follows the same two events: any award or find
+      // flips its check marks / progress fractions.
+      learningDailyTasks().then(setTasks).catch(() => {});
     };
     refreshGamification();
     const un = onLearningReward(refreshGamification);
@@ -816,6 +968,10 @@ function CoachTab() {
       )}
 
       {xp && <XpCard xp={xp} />}
+
+      {/* Today's XP menu — how to earn, right under the XP header. */}
+      {tasks && <DailyTasksCard tasks={tasks} onNavigate={onNavigate} />}
+
       {wod && <WordOfDayCard wod={wod} />}
 
       {/* The personalised weekly pack — directly under the word of the day. */}
@@ -863,14 +1019,14 @@ function CoachTab() {
         </div>
       )}
 
-      {/* Leaderboard — likewise its own box, so names and scores fit. Now a
-          clickable board: week/all-time toggle, top-ten, and every row opens
-          a member profile. */}
-      {lb?.available && ((lb.week?.length ?? 0) > 0 || (lb.total?.length ?? 0) > 0) && (() => {
-        const activeRows = (board === "week" ? lb.week : lb.total) ?? [];
-        const shown = activeRows.slice(0, 10);
-        const meRank = board === "week" ? lb.me?.rank_week : lb.me?.rank_total;
-        const meXp = board === "week" ? xp?.xp_week : xp?.xp_total;
+      {/* Leaderboard — likewise its own box, so names and scores fit. All-time
+          only (TJ: the week view made the numbers look unfair next to the
+          lifetime level rings): top-ten by xp_total, every row opens a member
+          profile. */}
+      {lb?.available && (lb.total?.length ?? 0) > 0 && (() => {
+        const shown = (lb.total ?? []).slice(0, 10);
+        const meRank = lb.me?.rank_total;
+        const meXp = xp?.xp_total;
         return (
           <div className="chart-card">
             <div className="chart-head">
@@ -878,20 +1034,6 @@ function CoachTab() {
                 <div className="chart-title">{t("learning.lbTitle")}</div>
                 <div className="chart-sub">{t("learning.lbSub")}</div>
               </div>
-            </div>
-            <div className="sub-tabs" style={{ marginBottom: 12 }}>
-              <button
-                className={`sub-tab ${board === "week" ? "active" : ""}`}
-                onClick={() => setBoard("week")}
-              >
-                {t("learning.lbBoardWeek")}
-              </button>
-              <button
-                className={`sub-tab ${board === "total" ? "active" : ""}`}
-                onClick={() => setBoard("total")}
-              >
-                {t("learning.lbBoardTotal")}
-              </button>
             </div>
             <div className="xp-feed">
               {shown.map((row) => (
@@ -2544,7 +2686,7 @@ export function Learning() {
         </button>
       </div>
 
-      {tab === "coach" && <CoachTab />}
+      {tab === "coach" && <CoachTab onNavigate={setTab} />}
       {tab === "dex" && <WortdexTab data={wortdex} />}
       {tab === "speech" && <SpeechProfileTab />}
       {tab === "dojo" && <DojoTab />}

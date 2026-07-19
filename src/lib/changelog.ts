@@ -31,6 +31,36 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.147",
+    date: "2026-07-19",
+    title: {
+      de: "Tagesaufgaben, XP-Banner für alles + Gesamt-Bestenliste",
+      en: "Daily tasks, XP banners for everything + all-time leaderboard",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Neue Tagesaufgaben-Karte im Wortschatz-Coach: alle Wege, heute XP zu verdienen — Wort des Tages, deine persönlichen Coach-Wörter, die Dojo-Übung des Tages, Kata-Training, das Prompt-Muster und Wortdex-Funde — mit Haken, Fortschritt und Sprung direkt in die passende Halle.",
+        en: "New daily-tasks card in the vocabulary coach: every way to earn XP today — word of the day, your personal coach words, the day's dojo drill, kata training, the prompt pattern and Wortdex finds — with check marks, progress and a jump straight into the right hall.",
+      },
+      {
+        kind: "feature",
+        de: "Jede Belohnung feiert jetzt sichtbar: Ein animiertes XP-Banner erscheint für jedes XP-Ereignis — auch im Dojo, bei Katas und Prompt-Mustern, bei Level-Aufstiegen und neuen Wortdex-Funden. Dazu ein neuer Belohnungs-Sound, abschaltbar in den Einstellungen.",
+        en: "Every reward now celebrates visibly: an animated XP banner appears for every XP event — dojo drills, katas, prompt patterns, level-ups and new Wortdex finds included. Plus a new reward chime, switchable off in Settings.",
+      },
+      {
+        kind: "improvement",
+        de: "Die Bestenliste zählt jetzt immer die gesamte Zeit statt nur dieser Woche — die XP neben jedem Namen sind dieselben Gesamt-XP wie Level und Ring. Kein Wochen-Umschalter mehr, keine scheinbar unfairen Zahlen.",
+        en: "The leaderboard now always counts all time instead of just this week — the XP next to each name is the same lifetime XP as the level and ring. No week toggle anymore, no seemingly unfair numbers.",
+      },
+      {
+        kind: "improvement",
+        de: "Fairness: Coach-Wörter geben jetzt höchstens fünfmal am Tag XP. Vorher konnte das bloße Aufsagen aller je gelernten Wörter jeden Tag beliebig viele Punkte einbringen.",
+        en: "Fairness: coach words now pay XP at most five times a day. Before, simply reciting every word ever taught could earn unlimited points every day.",
+      },
+    ],
+  },
+  {
     version: "0.5.146",
     date: "2026-07-19",
     title: {

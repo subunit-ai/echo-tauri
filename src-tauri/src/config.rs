@@ -392,6 +392,11 @@ pub struct Config {
     /// it's now independently silenceable.
     #[serde(default = "default_true")]
     pub sound_stop_enabled: bool,
+    /// Reward chime for the XP banner (word finds, taught words, dojo/kata/
+    /// pattern XP). Its own toggle beside the other cues; volume follows
+    /// `sound_volume`. New field → serde default keeps existing configs on.
+    #[serde(default = "default_true")]
+    pub sound_reward_enabled: bool,
     /// Which release-cue tone plays ("standard" / "tief" / "ausklang", v0.5.93) —
     /// same id-matching pattern as `sound_start_id`, resolved natively in
     /// sound.rs::play_stop (all three stop tones are bundled files, unlike the
@@ -626,6 +631,7 @@ impl Default for Config {
             sound_start_id: "standard".to_string(),
             sound_paste_id: "standard".to_string(),
             sound_stop_enabled: true,
+            sound_reward_enabled: true,
             sound_stop_id: "standard".to_string(),
             sound_split_migrated: false,
 

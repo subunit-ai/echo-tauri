@@ -36,7 +36,7 @@ import { OrbCanvas } from "../overlay/OrbCanvas";
 import type { OrbVisual } from "../overlay/orbRender";
 import { listen } from "@tauri-apps/api/event";
 import { LANGUAGES } from "../lib/languages";
-import { SOUND_PRESETS, STOP_SOUND_PRESETS, playSound } from "../lib/sounds";
+import { SOUND_PRESETS, STOP_SOUND_PRESETS, playReward, playSound } from "../lib/sounds";
 import { SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import { useConfig } from "../state/ConfigContext";
 
@@ -973,6 +973,21 @@ export function Settings({ tab: tabProp, onTab }: { tab?: SettingsTab; onTab?: (
                     className="sub-tab"
                     title={t("settings.soundPreview")}
                     onClick={() => playSound(c.sound_stop_id || "standard", "stop", c.sound_volume)}
+                  >
+                    ▶
+                  </button>
+                </div>
+              </Row>
+              <Row name={t("settings.soundReward")} hint={t("settings.soundRewardHint")}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Toggle
+                    checked={c.sound_reward_enabled}
+                    onChange={(v) => set("sound_reward_enabled", v)}
+                  />
+                  <button
+                    className="sub-tab"
+                    title={t("settings.soundPreview")}
+                    onClick={() => playReward(2, c.sound_volume)}
                   >
                     ▶
                   </button>

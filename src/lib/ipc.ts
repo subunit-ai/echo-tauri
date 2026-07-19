@@ -130,6 +130,7 @@ export interface Config {
   /** Independent cues + selectable tone per cue (ids → lib/sounds.ts). */
   sound_start_enabled: boolean;
   sound_paste_enabled: boolean;
+  sound_reward_enabled: boolean;
   sound_start_id: string;
   sound_paste_id: string;
   /** Release/stop cue on key release — its own on/off, so it no longer rides
@@ -660,13 +661,35 @@ export interface Leaderboard {
 }
 export const learningLeaderboard = () => invoke<Leaderboard>("learning_leaderboard");
 
+/** Every kind the award paths actually emit — vocabulary, dojo drills, katas
+ *  and prompt patterns all celebrate through this one event. */
+export type RewardKind =
+  | "word_of_day"
+  | "coach_word"
+  | "dojo"
+  | "kata"
+  | "kata_train"
+  | "prompt_pattern";
+
 export interface LearningReward {
-  events: { kind: "word_of_day" | "coach_word"; word: string; xp: number }[];
+  events: { kind: RewardKind; word: string; xp: number }[];
   xp_total: number;
   level: number;
 }
 export const onLearningReward = (cb: (r: LearningReward) => void): Promise<UnlistenFn> =>
   listen<LearningReward>("echo://learning-reward", (e) => cb(e.payload));
+
+/** Today's XP menu for the daily-tasks card — every way to earn XP right now,
+ *  each with its reward and done state, straight from the local ledgers. */
+export interface DailyTasks {
+  wod: { word: string; xp: number; done: boolean };
+  coach: { words: string[]; xp_each: number; earned_today: number; cap: number };
+  dojo: { kind: string; xp: number; done: boolean };
+  kata: { train_done: boolean; train_xp: number; next: string | null; next_xp: number };
+  pattern: { id: string; xp: number; done: boolean };
+  finds: { today: number; cap: number };
+}
+export const learningDailyTasks = () => invoke<DailyTasks>("learning_daily_tasks");
 
 // ---- Wortdex (collectible rare words) + achievements ----
 

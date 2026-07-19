@@ -153,6 +153,7 @@ pub fn run() {
             commands::activity_export,
             commands::word_of_day,
             commands::learning_xp,
+            commands::learning_daily_tasks,
             commands::learning_leaderboard,
             commands::speech_profile,
             commands::speech_profile_trend,

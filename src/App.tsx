@@ -16,7 +16,8 @@ import { Vocabulary } from "./sections/Vocabulary";
 import { MeetingPrompt } from "./components/MeetingPrompt";
 import { SessionBanner } from "./components/SessionBanner";
 import { WhatsNew } from "./components/WhatsNew";
-import { onState, onNeedsAccessibility, onLearningReward, onWordFind } from "./lib/ipc";
+import { onState, onNeedsAccessibility } from "./lib/ipc";
+import { XpBannerHost } from "./components/XpBanner";
 import { ConfigProvider, useConfig } from "./state/ConfigContext";
 import { ToastProvider, useToast } from "./state/ToastContext";
 
@@ -105,35 +106,11 @@ function EngineErrorToasts() {
     // macOS: auto-paste was blocked for lack of Accessibility permission. Text is on
     // the clipboard; nudge the user to grant it so future pastes land automatically.
     const ax = onNeedsAccessibility(() => toast(t("perm.needsAccessibility"), "error"));
-    // Gamification: taught vocabulary used in a dictation → celebrate in-app
-    // (the native notification covers the backgrounded case).
-    const reward = onLearningReward((r) => {
-      const first = r.events[0];
-      if (!first) return;
-      const xp = r.events.reduce((sum, e) => sum + e.xp, 0);
-      const key = first.kind === "word_of_day" ? "learning.rewardWodToast" : "learning.rewardCoachToast";
-      toast(t(key, { word: first.word, xp, count: r.events.length - 1 }), "success");
-    });
-    // Wortdex: a new collectible word was just spoken → celebrate with a band-
-    // specific toast (the native notification covers selten/legendär in the
-    // background; this is the in-app counterpart, and the only cue for notable).
-    const find = onWordFind((f) => {
-      // xp = 0 → find beyond the daily XP cap: the event only refreshes the
-      // Wortdex views; celebrating a reward that gives nothing would confuse.
-      if (f.xp <= 0) return;
-      const key =
-        f.band === 3
-          ? "learning.findToastLegendary"
-          : f.band === 2
-            ? "learning.findToastRare"
-            : "learning.findToastNotable";
-      toast(t(key, { word: f.display, xp: f.xp, dex: f.dex }), "success");
-    });
+    // XP celebrations (vocabulary, dojo, kata, prompt pattern, word finds) no
+    // longer run through these toasts — XpBannerHost owns them.
     return () => {
       sub.then((un) => un());
       ax.then((un) => un());
-      reward.then((un) => un());
-      find.then((un) => un());
     };
   }, [toast, t]);
   return null;
@@ -144,6 +121,8 @@ export default function App() {
     <ToastProvider>
       <EngineErrorToasts />
       <ConfigProvider>
+        {/* Inside ConfigProvider: the banner reads the reward-sound toggle. */}
+        <XpBannerHost />
         <Shell />
       </ConfigProvider>
     </ToastProvider>

@@ -643,7 +643,9 @@
     "liveTyping": "Live-Tippen",
     "liveTypingHint": "Text erscheint schon während du sprichst im Zielfenster. Aus = das komplette Ergebnis wird beim Loslassen eingefügt (empfohlen, schnellster Modus).",
     "tabVoice": "Stimme",
-    "secVoiceprint": "Stimmabdruck"
+    "secVoiceprint": "Stimmabdruck",
+    "soundReward": "Belohnungs-Sound",
+    "soundRewardHint": "Kurzer Jingle, wenn du XP verdienst oder ein Wort freischaltest."
   },
   "meetLocal": {
     "cardTitle": "Lokales Meeting",
@@ -940,19 +942,15 @@
     "kindWod": "Wort des Tages",
     "kindCoach": "Coach-Wort",
     "lbTitle": "Bestenliste",
-    "lbSub": "Wer erweitert seinen Wortschatz diese Woche am meisten?",
+    "lbSub": "Wer hat insgesamt den größten Wortschatz aufgebaut?",
     "lbYou": "Du {{name}}",
     "lbWords": "{{count}} Wörter",
-    "lbBoardWeek": "Diese Woche",
-    "lbBoardTotal": "Gesamt",
     "profileTitle": "Profil",
     "profileClose": "Schließen",
     "levelLabel": "Level {{level}}",
     "xpToLevel": "{{xp}} XP bis Level {{level}}",
     "achCount": "{{earned}} / {{total}} Erfolge",
     "wortdexSection": "Wortschatz-Sammlung",
-    "rewardWodToast": "Wort des Tages benutzt: „{{word}}“ · +{{xp}} XP",
-    "rewardCoachToast": "Neues Wort benutzt: „{{word}}“ · +{{xp}} XP",
     "topWordsTitle": "Häufigste Wörter",
     "topWordsSub": "Deine häufigsten Wörter im gewählten Zeitraum.",
     "distinctiveTitle": "Deine distinktiven Wörter",
@@ -981,9 +979,6 @@
     "bandLegendary": "Legendär",
     "kindFind": "Wortfund",
     "kindPattern": "Prompt-Muster",
-    "findToastNotable": "Bemerkenswertes Wort gefunden: „{{word}}“ · +{{xp}} XP",
-    "findToastRare": "Seltenes Wort entdeckt: „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
-    "findToastLegendary": "Legendäres Wort! „{{word}}“ · Nr. {{dex}} · +{{xp}} XP",
     "achTitle": "Erfolge",
     "achSub": "Meilensteine, die du beim Sammeln und Üben freischaltest — jeder verleiht einen tragbaren Titel.",
     "achLoading": "Erfolge werden geladen …",
@@ -1560,6 +1555,37 @@
         "title": "Gürtel-Zeremonie",
         "body": "{{rank}} erreicht"
       }
+    },
+    "tasks": {
+      "title": "Tagesaufgaben",
+      "sub": "So verdienst du heute XP",
+      "doneChip": "{{done}}/{{total}} erledigt",
+      "wod": "Benutze das Wort des Tages in einem Diktat",
+      "coach": "Nutze eines deiner Coach-Wörter",
+      "dojo": "Rhetorik-Dojo: {{name}}",
+      "kataTrain": "Kata-Training im Prompt-Dojo",
+      "kataNext": "Meistere die nächste Kata: {{name}}",
+      "pattern": "Wende das Prompt-Muster an: {{name}}",
+      "finds": "Entdecke seltene Wörter beim Sprechen",
+      "findsXp": "+10–100 XP"
+    },
+    "banner": {
+      "kind": {
+        "word_of_day": "Wort des Tages benutzt",
+        "coach_word": "Neues Wort benutzt",
+        "dojo": "Dojo-Übung bestanden",
+        "kata": "Kata gemeistert",
+        "kata_train": "Kata-Training absolviert",
+        "prompt_pattern": "Prompt-Muster angewendet"
+      },
+      "more_one": "+{{count}} weitere Belohnung",
+      "more_other": "+{{count}} weitere Belohnungen",
+      "findNotable": "Bemerkenswertes Wort entdeckt",
+      "findRare": "Seltenes Wort entdeckt",
+      "findLegendary": "Legendäres Wort entdeckt",
+      "findNoXp": "Neu im Wortdex",
+      "dexNo": "Nr. {{dex}}",
+      "levelUp": "Level {{level}} erreicht"
     }
   },
   "vp": {

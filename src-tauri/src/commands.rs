@@ -1346,6 +1346,10 @@ pub fn activity_export(kind: String, filename: String, contents_b64: String) -> 
 
 pub const XP_WORD_OF_DAY: i64 = 50;
 pub const XP_COACH_WORD: i64 = 20;
+/// At most this many coach words earn XP per local day. Without a cap, every
+/// word ever taught (pinned words of the day accumulate to 120+) pays again
+/// every single day — reciting the list would out-earn every other activity.
+pub const COACH_XP_DAILY_CAP: i64 = 5;
 
 /// Level from total XP — cumulative quadratic thresholds (level n needs
 /// 100·n² XP: 100, 400, 900, …). Returns (level, floor_xp, next_level_xp).
@@ -1449,8 +1453,13 @@ pub fn maybe_award_vocab(app: &AppHandle, cfg: &Config, account: &str, text: &st
     {
         events.push(serde_json::json!({ "kind": "word_of_day", "word": wod, "xp": XP_WORD_OF_DAY }));
     }
+    let mut coach_today = crate::store::learning_kind_count(account, "coach_word", Some(&day));
     for w in coach_hits {
+        if coach_today >= COACH_XP_DAILY_CAP {
+            break;
+        }
         if crate::store::learning_award(account, &day, "coach_word", &w, XP_COACH_WORD, now) {
+            coach_today += 1;
             events.push(serde_json::json!({ "kind": "coach_word", "word": w, "xp": XP_COACH_WORD }));
         }
     }
@@ -1958,6 +1967,90 @@ pub fn learning_xp(state: State<'_, AppState>) -> serde_json::Value {
         "wod_used_today": crate::store::learning_event_exists(&account, &day, "word_of_day"),
         "distinct_words": crate::store::learning_distinct_words(&account),
         "events": crate::store::learning_events_recent(&account, 10),
+    })
+}
+
+/// Today's XP menu for the daily-tasks card: every way to earn XP right now,
+/// each with its reward and done state — all read from the same local ledgers
+/// the award paths write, so a checked-off task can never disagree with the XP
+/// header. 100% local (SQLite only).
+#[tauri::command]
+pub fn learning_daily_tasks(state: State<'_, AppState>) -> serde_json::Value {
+    let cfg = state.config.lock().clone();
+    let account = crate::presets::account_key(&cfg);
+    let day = crate::store::today_local();
+    let day_num = day_number(&day).unwrap_or(0);
+
+    // Word of the day (pins today's word as a side effect, same as `word_of_day`).
+    let wod = ensure_wod_pinned(&day);
+    let wod_done = crate::store::learning_event_exists(&account, &day, "word_of_day");
+
+    // Coach words that still pay today: the taught pool (shown suggestions +
+    // earlier pinned words of the day) minus today's credits and the current
+    // word of the day, rotated by the day number so the card offers fresh
+    // words each day instead of pinning the alphabet's first three forever.
+    let credited: std::collections::HashSet<String> = crate::store::learning_words_today(
+        &account,
+        &day,
+        "coach_word",
+    )
+    .into_iter()
+    .collect();
+    let mut pool: Vec<String> = crate::store::suggested_words_all().into_iter().collect();
+    for w in crate::store::wod_words_before(&day, 120) {
+        pool.push(w.to_lowercase());
+    }
+    pool.sort();
+    pool.dedup();
+    pool.retain(|w| !credited.contains(w) && *w != wod.to_lowercase());
+    let coach_words: Vec<String> = if pool.is_empty() {
+        Vec::new()
+    } else {
+        let start = (day_num.max(0) as usize) % pool.len();
+        pool.iter().cycle().skip(start).take(3.min(pool.len())).cloned().collect()
+    };
+    let coach_today = crate::store::learning_kind_count(&account, "coach_word", Some(&day));
+
+    // Rhetoric dojo: today's rotating exercise; XP is once per day.
+    let ex = crate::dojo::pick_exercise(&day, day_num);
+    let dojo_done = crate::store::learning_event_exists(&account, &day, "dojo");
+
+    // Kata path: daily training XP + the next unfinished kata (once-ever XP).
+    let kata_train_done = crate::store::learning_event_exists(&account, &day, "kata_train");
+    let completed: std::collections::HashSet<String> = crate::store::kata_all(&account)
+        .into_iter()
+        .filter(|(_, _, done)| *done != 0)
+        .map(|(id, _, _)| id)
+        .collect();
+    let next_kata = crate::kata::KATAS
+        .iter()
+        .find(|k| !completed.contains(k.id))
+        .map(|k| k.id);
+
+    // Prompt pattern of the day (once per day).
+    let pat = crate::prompt_coach::pick_pattern(&day);
+    let pattern_done = crate::store::learning_event_exists(&account, &day, "prompt_pattern");
+
+    // Wortdex finds: XP-capped per day; the collection itself never caps.
+    let finds_today = crate::store::learning_kind_count(&account, "word_find", Some(&day));
+
+    serde_json::json!({
+        "wod": { "word": wod, "xp": XP_WORD_OF_DAY, "done": wod_done },
+        "coach": {
+            "words": coach_words,
+            "xp_each": XP_COACH_WORD,
+            "earned_today": coach_today,
+            "cap": COACH_XP_DAILY_CAP,
+        },
+        "dojo": { "kind": ex.kind.as_str(), "xp": crate::dojo::DOJO_XP, "done": dojo_done },
+        "kata": {
+            "train_done": kata_train_done,
+            "train_xp": crate::kata::KATA_TRAIN_XP,
+            "next": next_kata,
+            "next_xp": crate::kata::KATA_XP,
+        },
+        "pattern": { "id": pat.id, "xp": crate::prompt_coach::PROMPT_PATTERN_XP, "done": pattern_done },
+        "finds": { "today": finds_today, "cap": FIND_XP_DAILY_CAP },
     })
 }
 
