@@ -1063,6 +1063,13 @@
       "level_5": "Aufsteiger",
       "level_10": "Eloquenz-Adept"
     },
+    "verdictTitle": "Dein Gesamtbild",
+    "verdictSub": "Wortschatz und Rhetorik zusammen bewertet — und die drei Hebel, die jetzt am meisten bringen.",
+    "verdictRhetoric": "Rhetorik",
+    "verdictVocab": "Wortvielfalt",
+    "verdictUnique": "{{count}} verschiedene Wörter",
+    "verdictLevers": "Deine drei Hebel",
+    "verdictNotEnough": "Diktiere etwas mehr — dann bewerte ich Rhetorik und Wortschatz zusammen.",
     "speech": {
       "tab": "Sprechprofil",
       "overallLabel": "Rhetorik-Score",
@@ -1081,6 +1088,14 @@
       "insightsSub": "Konkrete Ansätze, abgeleitet aus deinen jüngsten Veränderungen.",
       "unitPer1000": "/ 1000 W.",
       "scoreOf100": "von 100",
+      "lever": {
+        "variety": "Greif bewusst zum selteneren Wort: Ersetz pro Diktat zwei, drei Allerweltswörter durch ein präziseres — dein Wortdex liefert die Kandidaten.",
+        "precision": "Streich die Weichmacher: „irgendwie\", „eigentlich\", „so ein bisschen\" raus und sag den Kern direkt. Präzision entsteht durchs Weglassen.",
+        "clarity": "Zerleg die Schachtelsätze: ein Gedanke, ein Satz. Wo ein „welcher\" oder „die dann\" auftaucht, setz lieber einen Punkt.",
+        "structure": "Führ deine Zuhörer mit Verbindungswörtern: „weil\", „obwohl\", „dagegen\", „danach\" — ohne sie wirkt alles gleich gewichtet.",
+        "active": "Sprich aktiv: „wir entscheiden\" statt „es wird entschieden\", und lös Nominalisierungen wie „zur Durchführung\" wieder in Verben auf.",
+        "fluency": "Halt kurz inne statt „äh\": Eine bewusste Pause klingt souveräner als ein Füllwort — und variier die Satzlängen für Rhythmus."
+      },
       "dim": {
         "variety": {
           "name": "Vielfalt",

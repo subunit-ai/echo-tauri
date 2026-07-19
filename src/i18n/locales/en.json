@@ -1061,6 +1061,13 @@
       "level_5": "The Ascendant",
       "level_10": "Eloquence Adept"
     },
+    "verdictTitle": "Your overall picture",
+    "verdictSub": "Vocabulary and rhetoric judged together — plus the three levers that pay off most right now.",
+    "verdictRhetoric": "Rhetoric",
+    "verdictVocab": "Word variety",
+    "verdictUnique": "{{count}} distinct words",
+    "verdictLevers": "Your three levers",
+    "verdictNotEnough": "Dictate a little more — then I'll judge rhetoric and vocabulary together.",
     "speech": {
       "tab": "Speech profile",
       "overallLabel": "Rhetoric score",
@@ -1079,6 +1086,14 @@
       "insightsSub": "Concrete pointers, drawn from your most recent changes.",
       "unitPer1000": "/ 1000 w.",
       "scoreOf100": "of 100",
+      "lever": {
+        "variety": "Reach for the rarer word on purpose: swap two or three everyday words per dictation for a sharper one — your Wortdex supplies the candidates.",
+        "precision": "Cut the softeners: drop \"somehow\", \"actually\", \"kind of\" and state the core directly. Precision comes from leaving things out.",
+        "clarity": "Break up nested sentences: one thought, one sentence. Where a \"which\" or \"that then\" appears, a full stop usually serves better.",
+        "structure": "Guide your listener with connectives: \"because\", \"although\", \"whereas\", \"afterwards\" — without them everything sounds equally weighted.",
+        "active": "Speak actively: \"we decide\" instead of \"it is decided\", and turn nominalisations like \"for the implementation of\" back into verbs.",
+        "fluency": "Pause instead of saying \"uh\": a deliberate pause sounds more assured than a filler — and vary sentence length for rhythm."
+      },
       "dim": {
         "variety": {
           "name": "Variety",

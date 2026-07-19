@@ -787,6 +787,84 @@ function DailyTasksCard({
   );
 }
 
+/** The unified verdict: vocabulary (this tab) and rhetoric (Sprechprofil) judged
+ *  TOGETHER, plus the three biggest levers. It re-uses exactly what both sides
+ *  already compute locally — no extra analysis, no network — so the coach reads
+ *  as ONE assessment instead of two separate tabs. The levers are the three
+ *  weakest rhetoric dimensions, each with its actionable tip. */
+function CoachVerdictCard({
+  profile,
+  analysis,
+  ttrPct,
+}: {
+  profile: SpeechProfile | null;
+  analysis: LearningAnalysis;
+  ttrPct: number;
+}) {
+  const { t } = useTranslation();
+  const levers = useMemo(
+    () => [...(profile?.dimensions ?? [])].sort((a, b) => a.score - b.score).slice(0, 3),
+    [profile],
+  );
+  const ready = profile?.enough_data === true;
+  // Progress against the previous window ("ghost") — the only honest way to say
+  // whether the user is actually getting better.
+  const ghostDelta =
+    ready && profile?.ghost ? Math.round(profile.overall - profile.ghost.overall) : null;
+
+  return (
+    <div className="card verdict-card">
+      <div className="chart-head">
+        <div>
+          <div className="chart-title">{t("learning.verdictTitle")}</div>
+          <div className="chart-sub">{t("learning.verdictSub")}</div>
+        </div>
+      </div>
+
+      <div className="verdict-scores">
+        <div className="verdict-score">
+          <div className="verdict-num">
+            {ready ? Math.round(profile!.overall) : "—"}
+            {ghostDelta !== null && ghostDelta !== 0 && (
+              <span className={`verdict-delta ${ghostDelta > 0 ? "up" : "down"}`}>
+                {ghostDelta > 0 ? "+" : ""}
+                {ghostDelta}
+              </span>
+            )}
+          </div>
+          <div className="verdict-label">{t("learning.verdictRhetoric")}</div>
+        </div>
+        <div className="verdict-score">
+          <div className="verdict-num">{Math.round(ttrPct)}%</div>
+          <div className="verdict-label">{t("learning.verdictVocab")}</div>
+          <div className="verdict-foot">
+            {t("learning.verdictUnique", { count: analysis.unique_words })}
+          </div>
+        </div>
+      </div>
+
+      {ready && levers.length > 0 ? (
+        <div className="verdict-levers">
+          <div className="verdict-levers-title">{t("learning.verdictLevers")}</div>
+          {levers.map((d) => (
+            <div key={d.key} className="verdict-lever">
+              <span className="verdict-lever-score">{Math.round(d.score)}</span>
+              <div>
+                <div className="verdict-lever-name">
+                  {t(`learning.speech.dim.${d.key}.name`)}
+                </div>
+                <div className="verdict-lever-tip">{t(`learning.speech.lever.${d.key}`)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="hint verdict-hint">{t("learning.verdictNotEnough")}</div>
+      )}
+    </div>
+  );
+}
+
 function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => void }) {
   const { t, i18n } = useTranslation();
   const toast = useToast();
@@ -806,6 +884,9 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
   // transcript reaches the history they are *gone* from it — counting the
   // history could never surface them.
   const [stripped, setStripped] = useState<WordFreq[]>([]);
+  // The rhetoric side of the unified verdict — same local engine the Sprechprofil
+  // tab uses, so both surfaces always agree.
+  const [profile, setProfile] = useState<SpeechProfile | null>(null);
 
   // ── Lern-Loop (Welle 3) state ──────────────────────────────────────────
   const [progress, setProgress] = useState<WordsProgress | null>(null);
@@ -901,6 +982,7 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
     learningAnalysis(d).then(setAnalysis).catch(() => {});
     learningSuggestions(d).then(setSuggestions).catch(() => {});
     fillerRemovedCounts(d).then(setStripped).catch(() => {});
+    speechProfile(d).then(setProfile).catch(() => {});
   }, []);
   useEffect(() => refresh(days), [days, refresh]);
   useEffect(() => {
@@ -1151,6 +1233,10 @@ function CoachTab({ onNavigate }: { onNavigate: (tab: "dojo" | "prompts") => voi
         <div className="empty">{t("learning.empty")}</div>
       ) : analysis === null ? null : (
         <>
+          {/* The headline: vocabulary and rhetoric judged together, with the
+              three levers worth pulling first. */}
+          <CoachVerdictCard profile={profile} analysis={analysis} ttrPct={ttrPct} />
+
           {/* Vocabulary richness */}
           <div className="card">
             <div className="chart-head">
