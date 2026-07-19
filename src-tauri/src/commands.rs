@@ -9,7 +9,7 @@ use crate::inject::Target;
 use crate::recorder::Recorder;
 use crate::transcribe::{self, EngineError, TranscriptResult};
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Manager, State};
 
 /// App-wide managed state.
@@ -34,6 +34,10 @@ pub struct AppState {
     /// re-entry guard gates on THIS (not `recorder.is_recording()`) so a held hotkey
     /// (auto-repeat fires Pressed repeatedly) can't re-enter do_start mid-session.
     pub session_active: AtomicBool,
+    /// Generation counter, bumped once per genuine record session in [`do_start`].
+    /// The per-session mic backstop ([`crate::hold_guard`]) captures the value at
+    /// arm time and exits the instant a newer session supersedes it.
+    pub session_epoch: AtomicU64,
     /// True when the user WAS signed in (we still hold their `account_email`) but
     /// the cloud session is gone — both tokens were cleared by a rejected refresh,
     /// or never restored since launch. Drives the global "Sitzung abgelaufen — bitte
@@ -66,6 +70,7 @@ impl AppState {
             overlay_hot_rects: Mutex::new(Vec::new()),
             meeting_capture: Mutex::new(None),
             session_active: AtomicBool::new(false),
+            session_epoch: AtomicU64::new(0),
             session_expired: AtomicBool::new(session_expired),
             prompt_pending: Mutex::new(Vec::new()),
             #[cfg(feature = "local-meet")]
@@ -133,6 +138,13 @@ pub fn do_start(app: &AppHandle) {
         return;
     }
     emit_state(app, EngineState::Recording, None);
+
+    // Arm the universal mic backstop for THIS session: whatever input path started
+    // it (combo hotkey, toggle, button, tray, or a platform without the hold-key
+    // tap), a lost release event can never strand the mic past the ceiling. The
+    // fast, exact release stays with each path (hold_key.rs polls the real key).
+    let epoch = state.session_epoch.fetch_add(1, Ordering::SeqCst) + 1;
+    crate::hold_guard::arm(app, epoch);
 
     // Record-start cue, played NATIVELY (sound.rs) so it's instant even when the
     // main window is hidden to the tray — a hidden WKWebView suspends its

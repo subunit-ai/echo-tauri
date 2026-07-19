@@ -322,7 +322,20 @@ mod macos {
                     b.active.store(true, Ordering::SeqCst);
                     b.armed.store(false, Ordering::SeqCst);
                     match b.action {
-                        HoldAction::Dictate => crate::commands::do_start(&st.app),
+                        HoldAction::Dictate => {
+                            crate::commands::do_start(&st.app);
+                            // Watch the real hardware key from the moment recording
+                            // starts — not only reactively from release(). If the
+                            // key-up event is ever dropped entirely (the tap gets
+                            // disabled during an input storm / slow handler, and
+                            // events in that window are lost), release() never runs
+                            // and nothing would arm this — stranding the mic (and the
+                            // OS mic indicator) on until the next trigger. Proactive
+                            // arming closes that gap: the poll finishes the take the
+                            // instant the key is physically up, dropped event or not.
+                            // The `watchdog` flag dedupes with release()'s arming.
+                            st.watch_for_real_release(i);
+                        }
                         HoldAction::Toggle => crate::prompt_console::toggle(&st.app),
                     }
                 }

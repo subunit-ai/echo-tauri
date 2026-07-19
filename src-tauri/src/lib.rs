@@ -18,6 +18,7 @@ mod diarize;
 mod events;
 mod hardware;
 mod help; // "Echo fragen" — grounded help assistant over the Abo backend
+mod hold_guard; // universal mic backstop: force-release a wedged session (all paths/OSes)
 mod hold_key; // lone key/modifier hold-to-dictate via listen-only CGEventTap (macOS)
 mod hotkey;
 mod http; // shared pooled HTTP client + prewarm for the cloud path
