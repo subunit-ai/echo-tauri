@@ -1,7 +1,7 @@
 {
   "name": "echo",
   "private": true,
-  "version": "0.5.147",
+  "version": "0.5.148",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -1482,10 +1482,14 @@ pub fn maybe_award_vocab(app: &AppHandle, cfg: &Config, account: &str, text: &st
 /// XP per NEW find, by band. Deliberately below the word-of-the-day reward —
 /// finds happen in passing, taught words are the actual work.
 fn find_xp(band: crate::rarity::Band) -> i64 {
+    use crate::rarity::Band::*;
     match band {
-        crate::rarity::Band::Notable => 10,
-        crate::rarity::Band::Rare => 25,
-        crate::rarity::Band::Legendary => 100,
+        Common => 5,
+        Uncommon => 10,
+        Rare => 20,
+        Epic => 40,
+        Mythic => 75,
+        Legendary => 150,
     }
 }
 
@@ -1596,16 +1600,18 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
         // Wortdex must refresh on every growth; the UI gates its toast on
         // xp > 0 (Codex-Review #141). Notifications stay XP-only.
         if celebrated.is_none() {
-            let (n, r, l) = crate::store::word_find_band_counts(account);
             celebrated = Some(serde_json::json!({
                 "word": word,
                 "display": display,
                 "band": band.as_i64(),
                 "dex": dex,
                 "xp": xp,
-                "counts": { "notable": n, "rare": r, "legendary": l },
+                "counts": crate::store::word_find_band_counts(account),
             }));
-            if xp > 0 && band >= crate::rarity::Band::Rare {
+            // Native OS notification only for the genuinely special finds
+            // (Episch and up); the lower tiers stay in-app toasts. XP-gated so
+            // capped finds still refresh the UI silently (Codex-Review #141).
+            if xp > 0 && band >= crate::rarity::Band::Epic {
                 notify_find(app, &cfg.ui_language, &display, band, xp);
             }
         }
@@ -1619,16 +1625,21 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
     }
 }
 
-/// Native find notification (de/en like notify_reward) — only for selten and
-/// legendaer; bemerkenswert stays an in-app toast so notifications stay special.
+/// Native find notification (de/en like notify_reward) — only for Episch and
+/// up; the lower tiers stay in-app toasts so OS notifications stay special.
 fn notify_find(app: &AppHandle, ui_language: &str, display: &str, band: crate::rarity::Band, xp: i64) {
+    use crate::rarity::Band::*;
     let de = ui_language.to_lowercase().starts_with("de");
-    let legendary = band == crate::rarity::Band::Legendary;
-    let title = match (de, legendary) {
-        (true, true) => "Legendäres Wort entdeckt!",
-        (true, false) => "Seltenes Wort entdeckt!",
-        (false, true) => "Legendary word discovered!",
-        (false, false) => "Rare word discovered!",
+    // (German adjective form, English tier name) for the tiers that notify.
+    let (de_adj, en_name) = match band {
+        Legendary => ("Legendäres", "Legendary"),
+        Mythic => ("Mythisches", "Mythic"),
+        _ => ("Episches", "Epic"), // notify_find is only called for band >= Epic
+    };
+    let title = if de {
+        format!("{de_adj} Wort entdeckt!")
+    } else {
+        format!("{en_name} word discovered!")
     };
     let body = if de {
         format!("„{display}“ ist jetzt in deinem Wortdex — +{xp} XP")
@@ -1643,10 +1654,10 @@ fn notify_find(app: &AppHandle, ui_language: &str, display: &str, band: crate::r
 #[tauri::command]
 pub fn wortdex_list(state: State<'_, AppState>) -> serde_json::Value {
     let account = crate::presets::account_key(&state.config.lock());
-    let (notable, rare, legendary) = crate::store::word_find_band_counts(&account);
+    // counts[0]=Gewoehnlich .. counts[5]=Legendaer.
     serde_json::json!({
         "finds": crate::store::word_finds_list(&account, 5000),
-        "counts": { "notable": notable, "rare": rare, "legendary": legendary },
+        "counts": crate::store::word_find_band_counts(&account),
     })
 }
 
@@ -1655,8 +1666,9 @@ pub fn wortdex_list(state: State<'_, AppState>) -> serde_json::Value {
 /// doubles as an equippable account title (learning.titles.<id> in the UI);
 /// `config.learning_title` stores the equipped id.
 const ACHIEVEMENTS: &[(&str, i64)] = &[
-    ("first_notable", 1),
     ("first_rare", 1),
+    ("first_epic", 1),
+    ("first_mythic", 1),
     ("first_legendary", 1),
     ("finds_10", 10),
     ("finds_50", 50),
@@ -1677,9 +1689,7 @@ const ACHIEVEMENTS: &[(&str, i64)] = &[
 /// derive the earned state.
 fn achievement_progress(
     id: &str,
-    notable: i64,
-    rare: i64,
-    legendary: i64,
+    counts: &[i64; 6], // [Gewoehnlich..Legendaer]
     finds_total: i64,
     wod: i64,
     coach: i64,
@@ -1687,9 +1697,10 @@ fn achievement_progress(
     level: i64,
 ) -> i64 {
     match id {
-        "first_notable" => notable.min(1),
-        "first_rare" => rare.min(1),
-        "first_legendary" => legendary.min(1),
+        "first_rare" => counts[2].min(1),
+        "first_epic" => counts[3].min(1),
+        "first_mythic" => counts[4].min(1),
+        "first_legendary" => counts[5].min(1),
         "finds_10" | "finds_50" | "finds_200" => finds_total,
         "wod_7" | "wod_30" => wod,
         "coach_25" => coach,
@@ -1706,8 +1717,8 @@ fn achievement_progress(
 /// target`; `earned_ts` is only meaningful once earned (the datable ids look up
 /// their moment; the rest are `None`).
 fn achievement_states(account: &str) -> Vec<(&'static str, i64, i64, Option<i64>)> {
-    let (notable, rare, legendary) = crate::store::word_find_band_counts(account);
-    let finds_total = notable + rare + legendary;
+    let counts = crate::store::word_find_band_counts(account); // [Gewoehnlich..Legendaer]
+    let finds_total: i64 = counts.iter().sum();
     let wod = crate::store::learning_kind_count(account, "word_of_day", None);
     let coach = crate::store::learning_kind_count(account, "coach_word", None);
     let (_, longest_streak, _, _) = compute_streak(account);
@@ -1716,12 +1727,13 @@ fn achievement_states(account: &str) -> Vec<(&'static str, i64, i64, Option<i64>
         .iter()
         .map(|(id, target)| {
             let progress = achievement_progress(
-                id, notable, rare, legendary, finds_total, wod, coach, longest_streak, level,
+                id, &counts, finds_total, wod, coach, longest_streak, level,
             );
             let earned_ts: Option<i64> = match *id {
-                "first_notable" => crate::store::word_find_first_ts(account, 1),
-                "first_rare" => crate::store::word_find_first_ts(account, 2),
-                "first_legendary" => crate::store::word_find_first_ts(account, 3),
+                "first_rare" => crate::store::word_find_first_ts(account, 3),
+                "first_epic" => crate::store::word_find_first_ts(account, 4),
+                "first_mythic" => crate::store::word_find_first_ts(account, 5),
+                "first_legendary" => crate::store::word_find_first_ts(account, 6),
                 "finds_10" | "finds_50" | "finds_200" => {
                     crate::store::word_finds_nth_ts(account, *target as u32)
                 }
@@ -1915,11 +1927,12 @@ fn push_learning_score(cfg: &Config, account: &str) {
     };
     let url = cfg.subunit_endpoint.replace("/v1/transcribe", "/v1/learning/score");
     // Profile payload for the clickable leaderboard cards: the member's earned
-    // badge ids + Wortdex band counts [notable, rare, legendary]. Both are
-    // derived from the same local ledgers the UI reads, so a card mirrors the
-    // account's own Achievements/Wortdex tabs exactly.
+    // badge ids + the three PRESTIGE Wortdex tiers [Episch, Mythisch, Legendär].
+    // The server contract keeps three band slots (unchanged), so we surface the
+    // top three of the six local tiers — the ones worth showing off; the profile
+    // renders them with their own labels. (Full 6-tier leaderboard = server work.)
     let earned = earned_achievement_ids(account);
-    let (band_notable, band_rare, band_legendary) = crate::store::word_find_band_counts(account);
+    let counts = crate::store::word_find_band_counts(account); // [Gewoehnlich..Legendaer]
     let mut req = crate::http::client()
         .post(&url)
         .timeout(std::time::Duration::from_secs(10))
@@ -1933,7 +1946,7 @@ fn push_learning_score(cfg: &Config, account: &str) {
             // client; unknown/empty ids are simply not shown.
             "title": cfg.learning_title,
             "achievements": earned,
-            "bands": [band_notable, band_rare, band_legendary],
+            "bands": [counts[3], counts[4], counts[5]], // Episch, Mythisch, Legendär
             // Account profile-picture URL so the leaderboard can show this
             // member's photo to everyone else. Empty/None → the row stays on
             // initials; old servers ignore the extra field.
@@ -3161,11 +3174,19 @@ mod wortdex_tests {
 
     #[test]
     fn own_vocabulary_never_counts() {
+        // Taught vocabulary is never a find. Since the six-tier system also
+        // collects everyday words, the sentence may yield other hits — but the
+        // taught "diskrepanz" must never be among them.
         let hits = detect_finds(
             "Die Diskrepanz zwischen den beiden Angeboten war am Ende wirklich enorm",
             &own(&["diskrepanz"]),
         );
-        assert!(hits.is_none(), "taught words are not finds");
+        if let Some(hits) = hits {
+            assert!(
+                !hits.iter().any(|h| h.0 == "diskrepanz"),
+                "taught words are not finds"
+            );
+        }
     }
 
     #[test]
@@ -3178,9 +3199,24 @@ mod wortdex_tests {
     }
 
     #[test]
-    fn everyday_dictation_stays_quiet() {
-        assert!(detect_finds(
+    fn everyday_dictation_grows_the_dex() {
+        // Six-tier change (Gewöhnlich/Ungewöhnlich are collectible): an ordinary
+        // sentence now grows the Wortdex — the dex is a living record of one's
+        // vocabulary, not only the rare showpieces. Every hit must be a valid
+        // band (1..=6). The daily XP cap + rarest-first celebration keep this
+        // from feeling spammy.
+        let hits = detect_finds(
             "Bitte schick mir die Datei morgen früh, dann schaue ich sie mir direkt an",
+            &own(&[]),
+        );
+        if let Some(hits) = hits {
+            assert!(hits.iter().all(|h| (1..=6).contains(&h.1.as_i64())));
+        }
+
+        // The ceiling still holds: a sentence of only ultra-common function
+        // words (Zipf ≥ 4.6) stays silent — nothing there is collectible.
+        assert!(detect_finds(
+            "und dann haben wir das noch mit ihnen zusammen so gemacht",
             &own(&[]),
         )
         .is_none());
@@ -3254,21 +3290,17 @@ mod achievement_tests {
     /// and the connection is a process-wide singleton (a second DB-touching test
     /// would race that one).
     fn earned(
-        notable: i64,
-        rare: i64,
-        legendary: i64,
+        counts: [i64; 6], // [Gewoehnlich..Legendaer]
         wod: i64,
         coach: i64,
         streak: i64,
         level: i64,
     ) -> Vec<&'static str> {
-        let finds_total = notable + rare + legendary;
+        let finds_total: i64 = counts.iter().sum();
         ACHIEVEMENTS
             .iter()
             .filter(|(id, target)| {
-                achievement_progress(
-                    id, notable, rare, legendary, finds_total, wod, coach, streak, level,
-                ) >= *target
+                achievement_progress(id, &counts, finds_total, wod, coach, streak, level) >= *target
             })
             .map(|(id, _)| *id)
             .collect()
@@ -3277,16 +3309,19 @@ mod achievement_tests {
     #[test]
     fn earned_ids_match_seeded_ledgers() {
         // Empty account → no badges (level starts at 0, so even level_5 is out).
-        assert!(earned(0, 0, 0, 0, 0, 0, 0).is_empty());
+        assert!(earned([0, 0, 0, 0, 0, 0], 0, 0, 0, 0).is_empty());
 
-        // Mid-game: 12 notable + 3 rare + 1 legendary (=16 finds → clears
-        // finds_10, not finds_50/200), first sighting of every band, 8 WoD,
-        // 25 coach words, a 30-day streak, level 6. Result in catalog order.
+        // Mid-game: 5 gewöhnlich + 4 ungewöhnlich + 3 selten + 2 episch + 1
+        // mythisch + 1 legendär (=16 finds → clears finds_10, not finds_50/200),
+        // first sighting of every "first" band (selten…legendär), 8 WoD, 25 coach
+        // words, a 30-day streak, level 6. Result in catalog order. (Gewöhnlich
+        // and Ungewöhnlich have no "first" badge — they only feed finds_N.)
         assert_eq!(
-            earned(12, 3, 1, 8, 25, 30, 6),
+            earned([5, 4, 3, 2, 1, 1], 8, 25, 30, 6),
             vec![
-                "first_notable",
                 "first_rare",
+                "first_epic",
+                "first_mythic",
                 "first_legendary",
                 "finds_10",
                 "wod_7",
@@ -3297,14 +3332,14 @@ mod achievement_tests {
             ]
         );
 
-        // Exact boundaries only: 10 finds (all notable, so no first_rare/
-        // legendary), wod=7, coach=25, streak=7, level=5.
+        // Exact boundaries only: 10 finds all in the low tiers (no first_rare/
+        // epic/mythic/legendary), wod=7, coach=25, streak=7, level=5.
         assert_eq!(
-            earned(10, 0, 0, 7, 25, 7, 5),
-            vec!["first_notable", "finds_10", "wod_7", "coach_25", "streak_7", "level_5"]
+            earned([6, 4, 0, 0, 0, 0], 7, 25, 7, 5),
+            vec!["finds_10", "wod_7", "coach_25", "streak_7", "level_5"]
         );
 
-        // Everything maxed → all 13 badges.
-        assert_eq!(earned(200, 50, 3, 30, 25, 30, 10).len(), ACHIEVEMENTS.len());
+        // Everything maxed → all badges.
+        assert_eq!(earned([200, 50, 20, 10, 5, 3], 30, 25, 30, 10).len(), ACHIEVEMENTS.len());
     }
 }

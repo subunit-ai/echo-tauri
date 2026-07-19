@@ -187,14 +187,15 @@ export function MemberProfile({ row, onClose }: { row: LeaderboardRow; onClose: 
             <div className="mp-section-head">
               <span className="mp-section-title">{t("learning.wortdexSection")}</span>
             </div>
+            {/* The three prestige tiers (server slots carry Episch/Mythisch/Legendär). */}
             <div className="mp-band-row">
               <span className="mp-band band-1">
                 <span className="mp-band-n">{row.bands.notable}</span>
-                {t("learning.bandNotable")}
+                {t("learning.bandEpic")}
               </span>
               <span className="mp-band band-2">
                 <span className="mp-band-n">{row.bands.rare}</span>
-                {t("learning.bandRare")}
+                {t("learning.bandMythic")}
               </span>
               <span className="mp-band band-3">
                 <span className="mp-band-n">{row.bands.legendary}</span>

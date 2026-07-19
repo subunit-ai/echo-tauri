@@ -945,6 +945,7 @@
     "lbSub": "Wer hat insgesamt den größten Wortschatz aufgebaut?",
     "lbYou": "Du {{name}}",
     "lbWords": "{{count}} Wörter",
+    "lbLevelProgress": "Level {{level}} · {{pct}}% zum nächsten",
     "profileTitle": "Profil",
     "profileClose": "Schließen",
     "levelLabel": "Level {{level}}",
@@ -974,8 +975,11 @@
     "dexFirstFound": "Erstfund {{date}}",
     "dexQuote": "„{{context}}“",
     "bandAll": "Alle",
-    "bandNotable": "Bemerkenswert",
+    "bandCommon": "Gewöhnlich",
+    "bandUncommon": "Ungewöhnlich",
     "bandRare": "Selten",
+    "bandEpic": "Episch",
+    "bandMythic": "Mythisch",
     "bandLegendary": "Legendär",
     "kindFind": "Wortfund",
     "kindPattern": "Prompt-Muster",
@@ -986,13 +990,17 @@
     "achWearTitle": "Titel tragen",
     "achRemoveTitle": "Titel ablegen",
     "ach": {
-      "first_notable": {
-        "name": "Aufgehorcht",
-        "desc": "Sprich dein erstes bemerkenswertes Wort."
-      },
       "first_rare": {
         "name": "Rarität entdeckt",
         "desc": "Sprich dein erstes seltenes Wort."
+      },
+      "first_epic": {
+        "name": "Episch gesprochen",
+        "desc": "Sprich dein erstes episches Wort."
+      },
+      "first_mythic": {
+        "name": "Mythos beschworen",
+        "desc": "Sprich dein erstes mythisches Wort."
       },
       "first_legendary": {
         "name": "Legende gesprochen",
@@ -1040,8 +1048,9 @@
       }
     },
     "titles": {
-      "first_notable": "Aufhorcher",
       "first_rare": "Raritätenjäger",
+      "first_epic": "Epiker",
+      "first_mythic": "Mythenweber",
       "first_legendary": "Legendenflüsterer",
       "finds_10": "Silbensammler",
       "finds_50": "Lexikon-Lehrling",
@@ -1580,9 +1589,7 @@
       },
       "more_one": "+{{count}} weitere Belohnung",
       "more_other": "+{{count}} weitere Belohnungen",
-      "findNotable": "Bemerkenswertes Wort entdeckt",
-      "findRare": "Seltenes Wort entdeckt",
-      "findLegendary": "Legendäres Wort entdeckt",
+      "find": "{{tier}}-Wort entdeckt",
       "findNoXp": "Neu im Wortdex",
       "dexNo": "Nr. {{dex}}",
       "levelUp": "Level {{level}} erreicht"

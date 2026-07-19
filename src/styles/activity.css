@@ -1351,10 +1351,11 @@
 
 /* ================================================================
    Wortdex — the "Pokédex for words". Tier rings, collectible cards,
-   achievement grid. Band accents: 1 = notable (cyan), 2 = rare
-   (violet), 3 = legendary (amber); each element carries the accent in
-   its own --band custom property so one rule set styles all three, and
-   the black (zero-hue) theme only has to remap the property.
+   achievement grid. Six rarity bands, rarest last: 1 Gewöhnlich (slate),
+   2 Ungewöhnlich (green), 3 Selten (blue), 4 Episch (violet),
+   5 Mythisch (magenta), 6 Legendär (gold). Each element carries its
+   accent in a --band custom property so one rule set styles them all,
+   and the black (zero-hue) theme only has to remap the property.
    ================================================================ */
 
 /* ---- Tier ring (level-gated halo around an avatar) ----
@@ -1446,38 +1447,72 @@
   font-weight: 700;
 }
 
-/* ---- Wortdex band accents (drive every band-coloured element) ---- */
+/* ---- Wortdex band accents (drive every band-coloured element) ----
+   Six-tier rarity spectrum, rarest last: slate → green → blue → violet →
+   magenta → gold (the Legendär grail). Each element carries the accent in its
+   own --band custom property, so one rule set styles cards, stat chips and
+   filters alike; the black (zero-hue) theme only remaps the property. */
 .dex-card--band1,
 .dex-stat--band1,
 .dex-filter--band1 {
-  --band: var(--cyan);
+  --band: #8a94a6; /* Gewöhnlich — slate */
 }
 .dex-card--band2,
 .dex-stat--band2,
 .dex-filter--band2 {
-  --band: var(--violet);
+  --band: var(--emerald); /* Ungewöhnlich — green */
 }
 .dex-card--band3,
 .dex-stat--band3,
 .dex-filter--band3 {
-  --band: var(--amber);
+  --band: #4c8dff; /* Selten — blue */
 }
-/* Zero-hue override: amber is NOT greyed by tokens.css, so all three bands are
-   remapped to a brightness ramp (legendary = brightest). */
+.dex-card--band4,
+.dex-stat--band4,
+.dex-filter--band4 {
+  --band: var(--violet); /* Episch — violet */
+}
+.dex-card--band5,
+.dex-stat--band5,
+.dex-filter--band5 {
+  --band: #ec5aa6; /* Mythisch — magenta */
+}
+.dex-card--band6,
+.dex-stat--band6,
+.dex-filter--band6 {
+  --band: var(--amber); /* Legendär — gold */
+}
+/* Zero-hue override: colours don't survive the black theme, so the six bands
+   become a brightness ramp instead (Legendär = brightest). */
 :root[data-theme="black"] .dex-card--band1,
 :root[data-theme="black"] .dex-stat--band1,
 :root[data-theme="black"] .dex-filter--band1 {
-  --band: #7f7f82;
+  --band: #6f6f72;
 }
 :root[data-theme="black"] .dex-card--band2,
 :root[data-theme="black"] .dex-stat--band2,
 :root[data-theme="black"] .dex-filter--band2 {
-  --band: #b2b2b5;
+  --band: #8c8c8f;
 }
 :root[data-theme="black"] .dex-card--band3,
 :root[data-theme="black"] .dex-stat--band3,
 :root[data-theme="black"] .dex-filter--band3 {
-  --band: #f0f0f2;
+  --band: #a7a7aa;
+}
+:root[data-theme="black"] .dex-card--band4,
+:root[data-theme="black"] .dex-stat--band4,
+:root[data-theme="black"] .dex-filter--band4 {
+  --band: #c2c2c5;
+}
+:root[data-theme="black"] .dex-card--band5,
+:root[data-theme="black"] .dex-stat--band5,
+:root[data-theme="black"] .dex-filter--band5 {
+  --band: #dcdcdf;
+}
+:root[data-theme="black"] .dex-card--band6,
+:root[data-theme="black"] .dex-stat--band6,
+:root[data-theme="black"] .dex-filter--band6 {
+  --band: #f2f2f4;
 }
 
 /* ---- Wortdex band stat chips ---- */
@@ -1547,7 +1582,10 @@
 /* Band filters take on their band colour when active. */
 .dex-filter--band1.active,
 .dex-filter--band2.active,
-.dex-filter--band3.active {
+.dex-filter--band3.active,
+.dex-filter--band4.active,
+.dex-filter--band5.active,
+.dex-filter--band6.active {
   color: var(--band);
   border-color: color-mix(in srgb, var(--band) 48%, transparent);
   background: color-mix(in srgb, var(--band) 13%, transparent);
@@ -3320,13 +3358,36 @@
 }
 
 /* Level number beside the ring — small, tabular, unobtrusive. */
+/* Level number + a thin progress track: two members on the same coarse level
+   (100·n² buckets) are still told apart by how full their bar is. */
 .lb-level {
   flex-shrink: 0;
-  min-width: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 22px;
+}
+.lb-level-n {
   font-size: 11px;
   font-weight: 800;
   color: var(--cyan-ink);
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.lb-level-track {
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  overflow: hidden;
+}
+.lb-level-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--cyan);
+  transition: width 0.3s ease;
 }
 
 /* ---- Member profile modal ---- */

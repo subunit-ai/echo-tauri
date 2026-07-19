@@ -1,0 +1,5 @@
+# generator inspection dumps (regenerated each run)
+samples_*.txt
+# build-time Hunspell dictionaries (fetch on demand; see requirements.txt).
+# The shipped app embeds only the generated rarity_*.bin, not these ~3MB dicts.
+dict/

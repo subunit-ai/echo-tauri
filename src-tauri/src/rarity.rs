@@ -2,16 +2,22 @@
 //!
 //! Two embedded tables (de/en) generated from wordfreq (MIT) Zipf frequencies
 //! by `src-tauri/data/gen_rarity.py`. A word is *collectible* when it exists in
-//! a table, i.e. it is a real, alphabetic word of length >= 5 that is rare
-//! enough (Zipf < 4.2) to be worth celebrating. Common words and unknown
+//! a table, i.e. it is a real, alphabetic word of length >= 5 whose corpus
+//! frequency is rare enough (Zipf < 4.6) to be worth celebrating. The generator
+//! also runs every candidate through an affix-aware Hunspell check (igerman98 /
+//! en_US) so proper nouns, foreign tokens and typos never make it in — that is
+//! what fixed the old "junk in Legendary" problem. Common words and unknown
 //! tokens (ASR noise, typos) are equally non-collectible — absence carries no
 //! information, which is exactly what keeps the Fund detection precise.
 //!
 //! Record format (little-endian, sorted by hash for binary search):
 //!   b"EDX1" + u32 count + count x { u32 fnv1a32(word), u8 band, u16 dex }
-//! Bands: 1 = bemerkenswert (3.0<=zipf<3.6), 2 = selten (2.0<=zipf<3.0),
-//! 3 = legendaer (zipf<2.0). `dex` = frequency rank / 10 — a stable, meaningful
-//! "Pokedex number": the higher, the deeper the word sits in the language.
+//! Six bands, rarer = higher: 1 Gewoehnlich [3.8,4.6), 2 Ungewoehnlich
+//! [3.2,3.8), 3 Selten [2.6,3.2), 4 Episch [2.0,2.6), 5 Mythisch [1.4,2.0),
+//! 6 Legendaer [1.0,1.4). The top two bands additionally require the word to be
+//! an exact dictionary lemma, so they hold only opaque, evocative words — not
+//! rare inflections or transparent compounds. `dex` = frequency rank / 10 — a
+//! stable "Pokedex number": the higher, the deeper the word sits in the language.
 
 const TABLE_DE: &[u8] = include_bytes!("../data/rarity_de.bin");
 const TABLE_EN: &[u8] = include_bytes!("../data/rarity_en.bin");
@@ -22,9 +28,12 @@ const REC: usize = 7;
 /// Rarity band of a collectible word. Ordered: higher = rarer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Band {
-    Notable = 1,
-    Rare = 2,
-    Legendary = 3,
+    Common = 1,    // Gewoehnlich
+    Uncommon = 2,  // Ungewoehnlich
+    Rare = 3,      // Selten
+    Epic = 4,      // Episch
+    Mythic = 5,    // Mythisch
+    Legendary = 6, // Legendaer
 }
 
 impl Band {
@@ -33,9 +42,12 @@ impl Band {
     }
     fn from_u8(b: u8) -> Option<Band> {
         match b {
-            1 => Some(Band::Notable),
-            2 => Some(Band::Rare),
-            3 => Some(Band::Legendary),
+            1 => Some(Band::Common),
+            2 => Some(Band::Uncommon),
+            3 => Some(Band::Rare),
+            4 => Some(Band::Epic),
+            5 => Some(Band::Mythic),
+            6 => Some(Band::Legendary),
             _ => None,
         }
     }
@@ -107,7 +119,7 @@ mod tests {
         for table in [TABLE_DE, TABLE_EN] {
             assert_eq!(&table[0..4], MAGIC);
             let count = u32::from_le_bytes([table[4], table[5], table[6], table[7]]) as usize;
-            assert!(count > 100_000, "table suspiciously small: {count}");
+            assert!(count > 50_000, "table suspiciously small: {count}");
             assert_eq!(table.len(), 8 + count * REC);
             let body = &table[8..];
             let mut prev = 0u32;
@@ -127,14 +139,13 @@ mod tests {
     fn known_words_band_correctly() {
         // German educated vocabulary — bands verified against wordfreq Zipf
         // values at generation time (gen_rarity.py spot-checks the same).
-        assert_eq!(lookup("diskrepanz").map(|r| r.0), Some(Band::Notable));
-        assert_eq!(lookup("prägnant").map(|r| r.0), Some(Band::Notable));
-        assert_eq!(lookup("eloquenz").map(|r| r.0), Some(Band::Rare));
-        assert_eq!(lookup("kohärent").map(|r| r.0), Some(Band::Rare));
-        assert_eq!(lookup("apodiktisch").map(|r| r.0), Some(Band::Legendary));
+        assert_eq!(lookup("diskrepanz").map(|r| r.0), Some(Band::Uncommon));
+        assert_eq!(lookup("prägnant").map(|r| r.0), Some(Band::Rare));
+        assert_eq!(lookup("eloquenz").map(|r| r.0), Some(Band::Epic));
+        assert_eq!(lookup("kohärent").map(|r| r.0), Some(Band::Epic));
+        assert_eq!(lookup("apodiktisch").map(|r| r.0), Some(Band::Mythic));
         assert_eq!(lookup("ephemer").map(|r| r.0), Some(Band::Legendary));
-        // English side.
-        assert_eq!(lookup("eloquent").map(|r| r.0), Some(Band::Notable));
+        // English side (curated).
         assert_eq!(lookup("sesquipedalian").map(|r| r.0), Some(Band::Legendary));
     }
 
@@ -166,8 +177,12 @@ mod tests {
 
     #[test]
     fn band_ordering_matches_rarity() {
-        assert!(Band::Legendary > Band::Rare);
-        assert!(Band::Rare > Band::Notable);
-        assert_eq!(Band::Legendary.as_i64(), 3);
+        assert!(Band::Legendary > Band::Mythic);
+        assert!(Band::Mythic > Band::Epic);
+        assert!(Band::Epic > Band::Rare);
+        assert!(Band::Rare > Band::Uncommon);
+        assert!(Band::Uncommon > Band::Common);
+        assert_eq!(Band::Legendary.as_i64(), 6);
+        assert_eq!(Band::Common.as_i64(), 1);
     }
 }

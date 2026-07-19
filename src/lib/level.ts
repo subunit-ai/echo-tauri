@@ -18,6 +18,20 @@ export function levelForXp(xp: number): number {
   return level;
 }
 
+/** Level plus progress (0..1) toward the next level. Because the level number
+ *  is a coarse quadratic bucket (100·n²), two members with different XP can share
+ *  a level — this fraction differentiates them: more XP within the band = fuller.
+ *  Used for the per-row progress on the leaderboard. */
+export function levelProgress(xp: number): { level: number; pct: number } {
+  const level = levelForXp(xp);
+  const floor = 100 * level * level;
+  const next = 100 * (level + 1) * (level + 1);
+  const span = next - floor;
+  const pct =
+    span > 0 && Number.isFinite(xp) ? Math.min(1, Math.max(0, (xp - floor) / span)) : 0;
+  return { level, pct };
+}
+
 /** Tier of a level ring: below 3 there is no ring at all. The bands mirror the
  *  achievement/title cadence (bronze at 3, up to the animated "eloquenz" gradient
  *  at 16). Returned string doubles as the `.tier-ring--<tier>` CSS modifier. */

@@ -632,6 +632,13 @@ export interface LearningXp {
 }
 export const learningXp = () => invoke<LearningXp>("learning_xp");
 
+/** Leaderboard prestige tiers as the server returns them: three positional
+ *  slots (legacy field names) now carrying [Episch, Mythisch, Legendär]. */
+export interface LeaderboardBands {
+  notable: number; // Episch
+  rare: number; // Mythisch
+  legendary: number; // Legendär
+}
 export interface LeaderboardRow {
   rank: number;
   name: string;
@@ -646,8 +653,11 @@ export interface LeaderboardRow {
   /** Earned achievement ids (see ACHIEVEMENTS / learning.ach.<id>). Absent on
    *  old servers — callers must degrade gracefully (hide, don't show all-locked). */
   achievements?: string[];
-  /** Wortdex collection tallies per rarity band. Absent on old servers. */
-  bands?: BandCounts;
+  /** The member's three PRESTIGE Wortdex tiers [Episch, Mythisch, Legendär] —
+   *  the top three of the six local tiers. The server keeps three band slots
+   *  (legacy field names), so this stays a 3-field object, decoupled from the
+   *  local 6-tier BandCounts. Absent on old servers. */
+  bands?: LeaderboardBands;
   /** Account profile-picture URL (auth.subunit.ai), mirrored from the member's
    *  last score push. Absent on old servers / old clients → the row falls back
    *  to initials. */
@@ -693,15 +703,12 @@ export const learningDailyTasks = () => invoke<DailyTasks>("learning_daily_tasks
 
 // ---- Wortdex (collectible rare words) + achievements ----
 
-/** Rarity band of a collectible word: 1 = notable, 2 = rare, 3 = legendary
- *  (higher = rarer, mirrors rarity::Band). */
-export type Band = 1 | 2 | 3;
+/** Rarity band of a collectible word (higher = rarer, mirrors rarity::Band):
+ *  1 Gewöhnlich · 2 Ungewöhnlich · 3 Selten · 4 Episch · 5 Mythisch · 6 Legendär. */
+export type Band = 1 | 2 | 3 | 4 | 5 | 6;
 
-export interface BandCounts {
-  notable: number;
-  rare: number;
-  legendary: number;
-}
+/** Per-band find totals, indexed by band-1: [0]=Gewöhnlich … [5]=Legendär. */
+export type BandCounts = [number, number, number, number, number, number];
 
 /** One collected word in the Wortdex. `dex` is its immutable "Nr." in the
  *  rarity table; `context` is the (possibly empty) first-sighting sentence;

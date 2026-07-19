@@ -188,21 +188,28 @@ export function XpBannerHost() {
     });
 
     const unFind = onWordFind((f) => {
-      const bandTitle: Record<Band, string> = {
-        1: "learning.banner.findNotable",
-        2: "learning.banner.findRare",
-        3: "learning.banner.findLegendary",
+      // Six-tier band → its localized label, interpolated into the banner title.
+      const bandKey: Record<Band, string> = {
+        1: "learning.bandCommon",
+        2: "learning.bandUncommon",
+        3: "learning.bandRare",
+        4: "learning.bandEpic",
+        5: "learning.bandMythic",
+        6: "learning.bandLegendary",
       };
       const capped = f.xp <= 0;
       push(
         {
           cls: `find-${f.band}`,
-          title: t(capped ? "learning.banner.findNoXp" : bandTitle[f.band]),
+          title: capped
+            ? t("learning.banner.findNoXp")
+            : t("learning.banner.find", { tier: t(bandKey[f.band]) }),
           word: f.display,
           sub: t("learning.banner.dexNo", { dex: f.dex }),
           xp: f.xp,
         },
-        capped ? 1 : f.band === 3 ? 3 : 2,
+        // Chime tier (3 levels): Mythisch/Legendär → 3, Selten/Episch → 2, rest → 1.
+        capped ? 1 : f.band >= 5 ? 3 : f.band >= 3 ? 2 : 1,
       );
     });
 

@@ -1152,11 +1152,11 @@ pub fn word_finds_list(account: &str, limit: u32) -> Vec<Value> {
     }
 }
 
-/// Per-band find counts: (bemerkenswert, selten, legendaer).
-pub fn word_find_band_counts(account: &str) -> (i64, i64, i64) {
+/// Per-band find counts, indexed by band-1: out[0]=Gewoehnlich .. out[5]=Legendaer.
+pub fn word_find_band_counts(account: &str) -> [i64; 6] {
     let guard = DB.lock();
-    let Some(conn) = guard.as_ref() else { return (0, 0, 0) };
-    let mut out = (0i64, 0i64, 0i64);
+    let mut out = [0i64; 6];
+    let Some(conn) = guard.as_ref() else { return out };
     let Ok(mut stmt) = conn.prepare_cached(
         "SELECT band, COUNT(*) FROM word_finds WHERE account = ?1 GROUP BY band",
     ) else {
@@ -1165,12 +1165,9 @@ pub fn word_find_band_counts(account: &str) -> (i64, i64, i64) {
     if let Ok(rows) = stmt.query_map(params![account], |r| {
         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
     }) {
-        for row in rows.flatten() {
-            match row.0 {
-                1 => out.0 = row.1,
-                2 => out.1 = row.1,
-                3 => out.2 = row.1,
-                _ => {}
+        for (band, count) in rows.flatten() {
+            if (1..=6).contains(&band) {
+                out[(band - 1) as usize] = count;
             }
         }
     }
@@ -2471,8 +2468,8 @@ mod tests {
         assert_eq!(disk["last_ts"], 1500);
         assert_eq!(disk["first_ts"], 1000); // first sighting wins
         assert_eq!(disk["context"], "Die Diskrepanz war groß."); // original context kept
-        assert_eq!(word_find_band_counts("em:w"), (1, 1, 1));
-        assert_eq!(word_find_band_counts("em:x"), (0, 1, 0)); // isolation
+        assert_eq!(word_find_band_counts("em:w"), [1, 1, 1, 0, 0, 0]);
+        assert_eq!(word_find_band_counts("em:x"), [0, 1, 0, 0, 0, 0]); // isolation
         assert_eq!(word_find_first_ts("em:w", 3), Some(3000));
         assert_eq!(word_find_first_ts("em:x", 3), None);
         assert_eq!(word_finds_nth_ts("em:w", 2), Some(2000)); // 2nd find chronologically

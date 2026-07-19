@@ -31,6 +31,31 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.148",
+    date: "2026-07-19",
+    title: {
+      de: "Sechs Seltenheitsstufen im Wortdex + feinerer Level-Fortschritt",
+      en: "Six rarity tiers in the Wortdex + finer level progress",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Der Wortschatz-Sammler hat jetzt sechs Seltenheitsstufen statt drei — Gewöhnlich, Ungewöhnlich, Selten, Episch, Mythisch und Legendär. Die seltenen Fächer sind gründlich aufgeräumt: Nur noch echte, besondere Wörter landen dort — kein Wortmüll und keine Namen mehr.",
+        en: "The vocabulary collector now has six rarity tiers instead of three — Common, Uncommon, Rare, Epic, Mythic and Legendary. The rare tiers are thoroughly cleaned up: only genuine, remarkable words land there now — no more junk tokens or names.",
+      },
+      {
+        kind: "improvement",
+        de: "Auch alltägliche Wörter zählen jetzt für die Sammlung, sodass dein Wortdex beim Diktieren stetig wächst — die richtig seltenen Funde bleiben aber die besonderen Momente.",
+        en: "Everyday words now count toward the collection too, so your Wortdex keeps growing as you dictate — while the truly rare finds stay the special moments.",
+      },
+      {
+        kind: "improvement",
+        de: "In der Bestenliste zeigt jede Zeile jetzt einen feinen Fortschrittsbalken unter der Level-Zahl. Zwei Mitglieder auf demselben Level werden so nach ihrem echten Punktestand unterschieden — dein Vorsprung ist auf einen Blick sichtbar.",
+        en: "In the leaderboard, every row now shows a fine progress bar under the level number. Two members on the same level are told apart by their real score — your edge is visible at a glance.",
+      },
+    ],
+  },
+  {
     version: "0.5.147",
     date: "2026-07-19",
     title: {
