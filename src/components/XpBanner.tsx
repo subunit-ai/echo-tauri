@@ -4,6 +4,7 @@ import {
   onLearningReward,
   onWordFind,
   type Band,
+  type Config,
   type RewardKind,
 } from "../lib/ipc";
 import { playReward } from "../lib/sounds";
@@ -105,13 +106,30 @@ function LevelIcon() {
   );
 }
 
-export function XpBannerHost() {
+/** `config` / `onActive` exist so this host also works in the SATELLITE toast
+ *  window, which has no ConfigProvider (it fetches the config itself) and needs
+ *  to show/hide its OS window exactly while a banner is on screen. Inside the
+ *  main app both are omitted and it behaves as before. */
+export function XpBannerHost({
+  config: configProp,
+  onActive,
+}: {
+  config?: Config | null;
+  onActive?: (active: boolean) => void;
+} = {}) {
   const { t } = useTranslation();
-  const { config } = useConfig();
+  const { config: ctxConfig } = useConfig();
+  const config = configProp ?? ctxConfig;
   const cfgRef = useRef(config);
   cfgRef.current = config;
   const [banners, setBanners] = useState<Banner[]>([]);
   const idRef = useRef(0);
+
+  // Drives the satellite window's visibility: it must only occupy the screen
+  // while something is actually shown.
+  useEffect(() => {
+    onActive?.(banners.length > 0);
+  }, [banners.length, onActive]);
 
   const dismiss = useCallback((id: number) => {
     setBanners((list) => list.map((b) => (b.id === id ? { ...b, leaving: true } : b)));

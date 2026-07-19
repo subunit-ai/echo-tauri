@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window + orb overlay + prompt console",
+  "description": "Capability for the main window + orb overlay + prompt console + achievement toast",
   "windows": [
     "main",
     "overlay",
-    "prompt"
+    "prompt",
+    "toast"
   ],
   "permissions": [
     "core:default",

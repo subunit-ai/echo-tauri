@@ -1473,7 +1473,6 @@ pub fn maybe_award_vocab(app: &AppHandle, cfg: &Config, account: &str, text: &st
         "echo://learning-reward",
         serde_json::json!({ "events": events, "xp_total": xp_total, "level": level }),
     );
-    notify_reward(app, &cfg.ui_language, &events);
     push_learning_score_detached(cfg.clone(), account.to_string());
 }
 
@@ -1617,12 +1616,6 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
                 "xp": xp,
                 "counts": crate::store::word_find_band_counts(account),
             }));
-            // Native OS notification only for the genuinely special finds
-            // (Episch and up); the lower tiers stay in-app toasts. XP-gated so
-            // capped finds still refresh the UI silently (Codex-Review #141).
-            if xp > 0 && band >= crate::rarity::Band::Epic {
-                notify_find(app, &cfg.ui_language, &display, band, xp);
-            }
         }
     }
     if let Some(payload) = celebrated {
@@ -1634,30 +1627,6 @@ pub fn maybe_award_finds(app: &AppHandle, cfg: &Config, account: &str, text: &st
     }
 }
 
-/// Native find notification (de/en like notify_reward) — only for Episch and
-/// up; the lower tiers stay in-app toasts so OS notifications stay special.
-fn notify_find(app: &AppHandle, ui_language: &str, display: &str, band: crate::rarity::Band, xp: i64) {
-    use crate::rarity::Band::*;
-    let de = ui_language.to_lowercase().starts_with("de");
-    // (German adjective form, English tier name) for the tiers that notify.
-    let (de_adj, en_name) = match band {
-        Legendary => ("Legendäres", "Legendary"),
-        Mythic => ("Mythisches", "Mythic"),
-        _ => ("Episches", "Epic"), // notify_find is only called for band >= Epic
-    };
-    let title = if de {
-        format!("{de_adj} Wort entdeckt!")
-    } else {
-        format!("{en_name} word discovered!")
-    };
-    let body = if de {
-        format!("„{display}“ ist jetzt in deinem Wortdex — +{xp} XP")
-    } else {
-        format!("“{display}” is now in your Wortdex — +{xp} XP")
-    };
-    use tauri_plugin_notification::NotificationExt;
-    let _ = app.notification().builder().title(title).body(body).show();
-}
 
 /// The collection for the Wortdex tab: rows + per-band counts. 100% local.
 #[tauri::command]
@@ -1889,30 +1858,6 @@ pub fn prompt_pattern_today(state: State<'_, AppState>) -> serde_json::Value {
     })
 }
 
-/// Native reward notification, best-effort. DE for German UIs, EN otherwise —
-/// the backend has no i18n catalog (only de/en ship as bundled UI languages).
-fn notify_reward(app: &AppHandle, ui_language: &str, events: &[serde_json::Value]) {
-    let Some(first) = events.first() else { return };
-    let word = first["word"].as_str().unwrap_or("").to_string();
-    let xp: i64 = events.iter().map(|e| e["xp"].as_i64().unwrap_or(0)).sum();
-    let de = ui_language.to_lowercase().starts_with("de");
-    let wod = first["kind"].as_str() == Some("word_of_day");
-    let title = match (de, wod) {
-        (true, true) => "Wort des Tages benutzt!".to_string(),
-        (true, false) => "Neues Wort benutzt!".to_string(),
-        (false, true) => "Word of the day used!".to_string(),
-        (false, false) => "New word used!".to_string(),
-    };
-    let extra = events.len().saturating_sub(1);
-    let body = match (de, extra) {
-        (true, 0) => format!("„{word}“ — +{xp} XP"),
-        (true, _) => format!("„{word}“ und {extra} weitere — +{xp} XP"),
-        (false, 0) => format!("“{word}” — +{xp} XP"),
-        (false, _) => format!("“{word}” and {extra} more — +{xp} XP"),
-    };
-    use tauri_plugin_notification::NotificationExt;
-    let _ = app.notification().builder().title(title).body(body).show();
-}
 
 /// Best-effort leaderboard sync over the subunit lane (detached — never
 /// delays a dictation). Mirrors word_upgrade_curate's endpoint/auth recipe.
@@ -2588,7 +2533,7 @@ fn maybe_weekly_report(app: &AppHandle, state: &State<'_, AppState>, cfg: &Confi
     notify_weekly(app, &cfg.ui_language, xp, finds);
 }
 
-/// Native weekly-report notification (de/en like `notify_reward`).
+/// Native weekly-report notification (de for German UIs, EN otherwise).
 fn notify_weekly(app: &AppHandle, ui_language: &str, xp: i64, finds: i64) {
     let de = ui_language.to_lowercase().starts_with("de");
     let (title, body) = if de {

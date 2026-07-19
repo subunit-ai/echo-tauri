@@ -342,7 +342,7 @@ pub fn ensure_hit_test(app: &AppHandle) {
 /// the floating level (3), which other floating/fullscreen windows can still
 /// cover. No-op elsewhere (their `always_on_top` already suffices).
 #[cfg(target_os = "macos")]
-fn pin_topmost(win: &WebviewWindow) {
+pub(crate) fn pin_topmost(win: &WebviewWindow) {
     use objc::runtime::Object;
     use objc::{msg_send, sel, sel_impl};
     let Ok(ptr) = win.ns_window() else {
@@ -360,7 +360,7 @@ fn pin_topmost(win: &WebviewWindow) {
     }
 }
 #[cfg(not(target_os = "macos"))]
-fn pin_topmost(_win: &WebviewWindow) {}
+pub(crate) fn pin_topmost(_win: &WebviewWindow) {}
 
 /// Whether the LEFT mouse button is currently held — polled by the hit-test
 /// loop to catch a plain click on the orb in click-trigger mode. The webview

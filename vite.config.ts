@@ -27,6 +27,7 @@ export default defineConfig(async () => ({
         main: "index.html",
         overlay: "overlay.html",
         prompt: "prompt.html",
+        toast: "toast.html",
       },
     },
   },

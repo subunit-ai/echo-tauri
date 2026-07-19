@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.150",
+    date: "2026-07-20",
+    title: {
+      de: "Erfolge poppen jetzt überall auf",
+      en: "Achievements now pop up everywhere",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Wenn du ein Wort freischaltest oder ein Level aufsteigst, erscheint der Erfolg jetzt dort, wo du gerade arbeitest — über jeder App, wie ein Konsolen-Achievement. Bisher lag er im Echo-Fenster, das beim Diktieren ja im Hintergrund ist. Er stiehlt dabei nie den Fokus und du kannst durch ihn hindurchklicken.",
+        en: "When you unlock a word or gain a level, the achievement now appears where you're actually working — on top of any app, like a console achievement. Until now it sat in the Echo window, which is in the background while you dictate. It never steals focus, and you can click straight through it.",
+      },
+    ],
+  },
+  {
     version: "0.5.149",
     date: "2026-07-20",
     title: {
