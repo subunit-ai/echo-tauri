@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.144",
+    date: "2026-07-19",
+    title: {
+      de: "Das Mikrofon lässt jetzt zuverlässig los — kein hängendes Mikro-Symbol mehr",
+      en: "The mic now always lets go — no more stuck microphone indicator",
+    },
+    changes: [
+      {
+        kind: "fix",
+        de: "In seltenen Fällen konnte nach einem Diktat das orange Mikrofon-Symbol im Menü an bleiben, obwohl Echo längst nicht mehr zuhörte — nämlich wenn das System das Loslassen der Diktattaste verschluckt hat. Echo gibt das Mikrofon jetzt garantiert frei, sobald du die Taste loslässt, mit einem zusätzlichen Sicherheitsnetz, das eine hängende Aufnahme spätestens nach einer wirklich langen Zeit beendet.",
+        en: "In rare cases the orange microphone indicator could stay on after a dictation even though Echo had long stopped listening — when the system dropped the release of your dictation key. Echo now guarantees the mic is freed the moment you let go, with an added safety net that ends a stuck take after an unusually long time as a last resort.",
+      },
+    ],
+  },
+  {
     version: "0.5.142",
     date: "2026-07-18",
     title: { de: "Bestenliste mit Profilen — sieh, wie weit die anderen gekommen sind", en: "Leaderboard profiles — see how far everyone has come" },
