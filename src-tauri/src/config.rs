@@ -256,6 +256,13 @@ pub struct Config {
     /// style sticks forever. Old configs lack the field → default false → migrates.
     #[serde(default)]
     pub cleanup_style_migrated: bool,
+    /// One-time guard for the retirement of the "tidy" (Standard) lane on
+    /// 2026-07-20. Installs sitting on that style get the cleanup switched OFF
+    /// once — it was measurably doing nothing on real dictation while adding
+    /// 3–9 s. A deliberately chosen TRANSFORMING style (email/prompt/…) is never
+    /// touched. Old configs lack the field → default false → migrates once.
+    #[serde(default)]
+    pub cleanup_tidy_retired: bool,
     pub cleanup_auto_mode: bool,
     pub auto_mode_overrides: HashMap<String, String>,
 
@@ -401,7 +408,9 @@ pub struct Config {
     pub sound_stop_enabled: bool,
     /// Reward chime for the XP banner (word finds, taught words, dojo/kata/
     /// pattern XP). Its own toggle beside the other cues; volume follows
-    /// `sound_volume`. New field → serde default keeps existing configs on.
+    /// `sound_volume`. Default true for FRESH installs only — existing configs
+    /// inherit their answer from `sound_paste_enabled` via `sound_reward_migrated`
+    /// (see migrate), because this cue fires at the very moment of insertion.
     #[serde(default = "default_true")]
     pub sound_reward_enabled: bool,
     /// Which release-cue tone plays ("standard" / "tief" / "ausklang", v0.5.93) —
@@ -412,6 +421,13 @@ pub struct Config {
     pub sound_stop_id: String,
     /// One-time guard: seed the two new toggles from the legacy `sound_enabled` once.
     pub sound_split_migrated: bool,
+    /// One-time guard for the XP reward chime added in v0.5.147. It shipped with
+    /// `default = true`, so configs that had deliberately muted the insertion cue
+    /// suddenly made noise again at exactly the moment they'd silenced. Seed it
+    /// from `sound_paste_enabled` exactly once; a later deliberate choice is then
+    /// respected forever. Old configs lack the field → default false → migrates.
+    #[serde(default)]
+    pub sound_reward_migrated: bool,
 
     /// Master switch for the whole vocabulary feature — Whisper bias prompt AND
     /// the deterministic whole-word post-replace ("Sky" → "SCAI"). Independent of
@@ -570,18 +586,18 @@ impl Default for Config {
             diarization_enabled: false,
             diarization_max_speakers: 8,
 
-            // Cleanup is ON by default: without it the dictation ships raw ASR
-            // text (history shows style "-"). The default lane is "tidy"
-            // (Standard) — local + DSGVO-safe, so on-by-default is harmless.
-            // Existing opt-in-era installs are lifted once via
-            // `cleanup_enabled_migrated`.
-            cleanup_enabled: true,
-            cleanup_enabled_migrated: false,
-            // "tidy" = the lightest, DSGVO-safe LOCAL cleanup lane, the new default
-            // (existing installs on the old "prompt" default are lifted once via
-            // `cleanup_style_migrated`).
-            cleanup_style: "tidy".to_string(),
-            cleanup_style_migrated: false,
+            // Cleanup ist seit 2026-07-20 AUS ab Werk. Der frühere Default
+            // "tidy" (Standard) wurde entfernt: auf echten Diktaten kamen 4 von
+            // 6 Testblöcken byte-identisch zurück, Komma- und Satzende-Güte
+            // waren mit und ohne Cleanup gleich, die Wortlaut-Schäden stiegen —
+            // bei 3–9 s Zusatzlatenz. Die verbleibenden Stile TRANSFORMIEREN
+            // den Text (Mail, Prompt, …) und werden bewusst gewählt; wer einen
+            // auswählt, schaltet `cleanup_enabled` damit selbst ein.
+            cleanup_enabled: false,
+            cleanup_enabled_migrated: true,
+            cleanup_style: "prompt".to_string(),
+            cleanup_style_migrated: true,
+            cleanup_tidy_retired: true, // Neuinstallationen kennen "tidy" nie
             cleanup_auto_mode: false,
             auto_mode_overrides: HashMap::new(),
             filler_removal_enabled: true,
@@ -642,6 +658,7 @@ impl Default for Config {
             sound_reward_enabled: true,
             sound_stop_id: "standard".to_string(),
             sound_split_migrated: false,
+            sound_reward_migrated: true, // Neuinstallationen starten bewusst mit Belohnungston
 
             vocab_enabled: true,
             vocabulary: Vec::new(),
@@ -865,6 +882,17 @@ impl Config {
             self.sound_paste_enabled = self.sound_enabled;
             self.sound_split_migrated = true;
         }
+        // v0.5.147 hat den XP-Belohnungston mit `default = true` ausgeliefert. Wer
+        // den Einfüge-Ton bewusst abgeschaltet hatte, bekam dadurch GENAU im Moment
+        // des Einfügens wieder Ton — der Schalter war neu und erbte nichts. Einmalig
+        // vom Einfüge-Ton übernehmen (der Ton feuert im selben Augenblick); eine
+        // spätere bewusste Entscheidung bleibt danach für immer unangetastet.
+        // Läuft NACH `sound_split_migrated`, damit `sound_paste_enabled` bereits
+        // aus dem alten Master-Schalter geseedet ist.
+        if !self.sound_reward_migrated {
+            self.sound_reward_enabled = self.sound_paste_enabled;
+            self.sound_reward_migrated = true;
+        }
         // v0.5.84: filler-word removal ("äh"/"ähm"/"hmm") is now on by default —
         // universally wanted, precision-safe, zero-latency. Existing configs saved
         // it as false (the old opt-in default), so flip it ON exactly once; a later
@@ -915,6 +943,18 @@ impl Config {
         if !self.cleanup_enabled_migrated {
             self.cleanup_enabled = true;
             self.cleanup_enabled_migrated = true;
+        }
+        // 2026-07-20: Die Standard-Spur ("tidy") ist entfallen. Wer noch darauf
+        // steht, bekommt das Cleanup EINMALIG abgeschaltet — die Stufe war auf
+        // echten Diktaten wirkungslos (byte-identische Ausgabe, gleiche
+        // Interpunktionsgüte, mehr Wortlaut-Schäden) und kostete 3–9 s. Wer
+        // einen TRANSFORMIERENDEN Stil gewählt hat, behält ihn unverändert.
+        if !self.cleanup_tidy_retired {
+            if self.cleanup_style == "tidy" {
+                self.cleanup_enabled = false;
+                self.cleanup_style = "prompt".to_string();
+            }
+            self.cleanup_tidy_retired = true;
         }
         // v0.6.x: History-Cap-Default 50→500 (mehr Datenbasis für Activity/Learning).
         // Nur wer den ALTEN Default (50) nie angefasst hat, wird einmalig angehoben.
@@ -1222,28 +1262,92 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_style_migrates_prompt_to_tidy_once() {
-        // Old config still on the "prompt" default → lifted to the local "tidy" lane.
-        let mut old = Config::default();
-        old.cleanup_style = "prompt".to_string();
-        old.cleanup_style_migrated = false;
-        old.migrate();
-        assert_eq!(old.cleanup_style, "tidy", "old prompt default must move to tidy once");
-        assert!(old.cleanup_style_migrated, "guard must trip so it never re-runs");
+    fn tidy_lane_retires_and_transforming_styles_survive() {
+        // Eine ECHTE Alt-Konfiguration hat KEINEN der Guards — genau so kommt sie
+        // von der Platte (serde default = false). Sie stand auf "tidy" und muss
+        // danach ohne Cleanup dastehen.
+        let mut alt = Config::default();
+        alt.cleanup_style = "tidy".to_string();
+        alt.cleanup_enabled = true;
+        alt.cleanup_tidy_retired = false;
+        alt.migrate();
+        assert!(!alt.cleanup_enabled, "die Standard-Spur muss abgeschaltet werden");
+        assert_ne!(alt.cleanup_style, "tidy", "\"tidy\" darf nicht stehen bleiben");
+        assert!(alt.cleanup_tidy_retired, "Guard muss greifen, damit es nie erneut läuft");
 
-        // A deliberately-chosen style must survive untouched.
-        let mut chosen = Config::default();
-        chosen.cleanup_style = "email".to_string();
-        chosen.cleanup_style_migrated = false;
-        chosen.migrate();
-        assert_eq!(chosen.cleanup_style, "email", "chosen style must survive migration");
+        // Auch der Weg über die ALTE Migration (prompt → tidy) darf nicht in
+        // "tidy" enden: beide Migrationen laufen im selben Durchgang.
+        let mut ueber_alt = Config::default();
+        ueber_alt.cleanup_style = "prompt".to_string();
+        ueber_alt.cleanup_style_migrated = false;
+        ueber_alt.cleanup_tidy_retired = false;
+        ueber_alt.migrate();
+        assert_ne!(ueber_alt.cleanup_style, "tidy", "Kettenmigration darf nicht in tidy landen");
+        assert!(!ueber_alt.cleanup_enabled, "und muss ebenfalls abgeschaltet sein");
 
-        // Someone who deliberately switches BACK to prompt after the migration keeps it.
-        let mut back = Config::default();
-        back.cleanup_style = "prompt".to_string();
-        back.cleanup_style_migrated = true;
-        back.migrate();
-        assert_eq!(back.cleanup_style, "prompt", "post-migration prompt choice must stick");
+        // Ein bewusst gewählter TRANSFORMIERENDER Stil bleibt unangetastet —
+        // inklusive eingeschaltetem Cleanup.
+        let mut gewaehlt = Config::default();
+        gewaehlt.cleanup_style = "email".to_string();
+        gewaehlt.cleanup_enabled = true;
+        gewaehlt.cleanup_tidy_retired = false;
+        gewaehlt.migrate();
+        assert_eq!(gewaehlt.cleanup_style, "email", "gewählter Stil muss überleben");
+        assert!(gewaehlt.cleanup_enabled, "und darf nicht abgeschaltet werden");
+
+        // Neuinstallation: kennt "tidy" gar nicht und startet ohne Cleanup.
+        let frisch = Config::default();
+        assert!(!frisch.cleanup_enabled, "ab Werk kein automatisches Cleanup");
+        assert_ne!(frisch.cleanup_style, "tidy");
+    }
+
+    #[test]
+    fn reward_chime_inherits_the_paste_cue_from_a_real_old_config() {
+        // WICHTIG: nicht von `Config::default()` ausgehen — dort stehen die Guards
+        // schon auf true, der Test wäre wertlos. Wir laden echte Alt-Configs von
+        // "Platte": JSON OHNE `sound_reward_enabled` und OHNE `sound_reward_migrated`,
+        // genau wie sie vor v0.5.147 geschrieben wurden.
+        let laden = |json: &str| -> Config {
+            let mut c: Config = serde_json::from_str(json).expect("Alt-Config muss laden");
+            // Vorbedingung: das neue Feld kam per serde-Default auf true herein —
+            // GENAU das ist der gemeldete Fehler.
+            assert!(c.sound_reward_enabled, "serde default liefert true (der Bug)");
+            assert!(!c.sound_reward_migrated, "Alt-Config hat den Guard nicht");
+            c.migrate();
+            c
+        };
+
+        // TJs Fall: Einfüge-Ton bewusst aus, Sound-Split längst gelaufen.
+        let tj = laden(r#"{"sound_enabled":false,"sound_start_enabled":false,
+            "sound_paste_enabled":false,"sound_split_migrated":true}"#);
+        assert!(!tj.sound_reward_enabled, "wer den Einfüge-Ton aus hatte, bleibt still");
+        assert!(tj.sound_reward_migrated, "Guard muss greifen, damit es nie erneut läuft");
+
+        // Wer den Einfüge-Ton anhatte, behält den Belohnungston.
+        let laut = laden(r#"{"sound_paste_enabled":true,"sound_split_migrated":true}"#);
+        assert!(laut.sound_reward_enabled, "mit Einfüge-Ton bleibt der Belohnungston an");
+
+        // Sehr alte Config VOR dem Sound-Split (v0.4.18): nur der Master-Schalter
+        // existiert und steht auf aus. Die Kette split → reward muss in Stille enden.
+        let uralt = laden(r#"{"sound_enabled":false}"#);
+        assert!(!uralt.sound_paste_enabled, "Split-Migration muss zuerst greifen");
+        assert!(!uralt.sound_reward_enabled, "und der Belohnungston erbt die Stille");
+
+        // Gegenprobe: die Migration darf NICHT ein zweites Mal laufen. Wer den
+        // Belohnungston bewusst AN gestellt hat, obwohl der Einfüge-Ton aus ist,
+        // behält ihn für immer.
+        let mut bewusst: Config = serde_json::from_str(
+            r#"{"sound_paste_enabled":false,"sound_reward_enabled":true,
+                "sound_reward_migrated":true,"sound_split_migrated":true}"#,
+        )
+        .expect("Config muss laden");
+        bewusst.migrate();
+        assert!(bewusst.sound_reward_enabled, "bewusste Wahl bleibt unangetastet");
+
+        // Neuinstallation: Belohnungston an, Guard bereits gesetzt.
+        let frisch = Config::default();
+        assert!(frisch.sound_reward_enabled, "ab Werk klingelt es");
+        assert!(frisch.sound_reward_migrated, "und die Migration läuft nie");
     }
 
     #[test]

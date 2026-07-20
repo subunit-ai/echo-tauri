@@ -16,13 +16,15 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
-/* Toasts stack from the top edge here (in-app they sit bottom-right). */
+/* Toasts stack from the top edge here (in-app they sit bottom-right).
+   MITTIG zentriert (TJ 2026-07-20) — vorher `flex-end`, wodurch die Pille am
+   rechten Fensterrand klebte und bei breiten Meldungen links heraus lief. */
 .xpb-stack {
   position: absolute;
   top: 0;
   right: 0;
   left: 0;
   bottom: auto;
-  align-items: flex-end;
-  padding: 0 4px;
+  align-items: center;
+  padding: 8px 12px 0;
 }

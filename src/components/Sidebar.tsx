@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { Avatar } from "./Avatar";
 import { TierRing } from "./TierRing";
 import { learningXp, onLearningReward, onWordFind } from "../lib/ipc";
+import { levelProgress } from "../lib/level";
 import { useConfig } from "../state/ConfigContext";
 
 export type Section =
@@ -302,11 +303,17 @@ function AccountCard({
 
   const primary = nickname || name || emailLocal || t("account.guest");
 
-  // Learning level drives the avatar's tier ring. Loaded on mount, kept live by
-  // the same reward + word-find events the Learning section listens to.
-  const [level, setLevel] = useState(0);
+  // Learning level drives the avatar's tier ring AND — since TJ asked for it —
+  // the ring's fill plus the little level number on it. `levelProgress()` is the
+  // shared client mirror of the Rust rule, so ring and Learning tab can never
+  // disagree. Loaded on mount, kept live by the same reward + word-find events
+  // the Learning section listens to.
+  const [{ level, pct }, setLvl] = useState<{ level: number; pct: number }>({ level: 0, pct: 0 });
   useEffect(() => {
-    const load = () => learningXp().then((x) => setLevel(x.level)).catch(() => {});
+    const load = () =>
+      learningXp()
+        .then((x) => setLvl(levelProgress(x.xp_total)))
+        .catch(() => {});
     load();
     const un1 = onLearningReward(load);
     const un2 = onWordFind(load);
@@ -318,17 +325,14 @@ function AccountCard({
 
   return (
     <button className="side-account" onClick={onClick} title={t("account.openSettings")}>
-      <TierRing level={level} size={40}>
+      <TierRing level={level} size={40} progress={pct} showLevel>
         <Avatar name={nickname || name || email} src={config?.avatar_url} size={40} />
       </TierRing>
       <span className="sa-meta">
         <span className="sa-name">{primary}</span>
         <span className="sa-sub">
           {loggedIn ? (
-            <>
-              <span className={`sa-plan sa-plan--${plan}`}>{t(`header.plan.${plan}`)}</span>
-              {wornTitle && <span className="sa-title">{t(`learning.titles.${wornTitle}`)}</span>}
-            </>
+            <span className={`sa-plan sa-plan--${plan}`}>{t(`header.plan.${plan}`)}</span>
           ) : (
             t("account.notSignedIn")
           )}
@@ -337,6 +341,15 @@ function AccountCard({
       <svg className="sa-gear" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M9 18l6-6-6-6" />
       </svg>
+      {/* Getragener Titel auf EIGENER, voller Kartenbreite (TJ 2026-07: „Mythen-
+          flüsterer wird durch Punkt-Punkt-Punkt abgeschnitten, das sieht scheiße
+          aus"). Neben der Plan-Pille blieben nur ~110px — hier sind es ~184px,
+          und falls ein Titel je länger wird, bricht er um statt zu kürzen. */}
+      {loggedIn && wornTitle && (
+        <span className="sa-title-row">
+          <span className="sa-title">{t(`learning.titles.${wornTitle}`)}</span>
+        </span>
+      )}
     </button>
   );
 }

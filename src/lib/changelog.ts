@@ -31,6 +31,46 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.151",
+    date: "2026-07-20",
+    title: {
+      de: "Dein Rang auf einen Blick",
+      en: "Your rank at a glance",
+    },
+    changes: [
+      {
+        kind: "feature",
+        de: "Dein Profilbild zeigt jetzt dein Level und einen Ring, der sich füllt, je näher das nächste Level rückt — die Rangfarbe (Bronze, Gold …) bleibt dabei sichtbar.",
+        en: "Your avatar now shows your level plus a ring that fills as the next level approaches — your rank colour (bronze, gold …) stays visible.",
+      },
+      {
+        kind: "fix",
+        de: "Dein getragener Titel wird vollständig angezeigt statt mit „…“ abgeschnitten.",
+        en: "The title you wear is shown in full instead of being cut off with an ellipsis.",
+      },
+      {
+        kind: "fix",
+        de: "Das Erfolgs-Fenster erscheint jetzt mittig oben, wird nicht mehr am Rand abgeschnitten und erscheint auf dem Bildschirm, an dem du gerade arbeitest.",
+        en: "The achievement popup now appears top-centre, is no longer clipped at the edge, and shows up on the screen you are actually working on.",
+      },
+      {
+        kind: "improvement",
+        de: "Die Erfolgs-Animation läuft ruhiger: ein runder Ball taucht auf, dehnt sich und öffnet sich zur Pille — statt vorher als verzerrtes Oval zu starten.",
+        en: "The achievement animation is calmer: a round ball appears, stretches and opens into the pill — instead of starting as a distorted oval.",
+      },
+      {
+        kind: "fix",
+        de: "Wer den Einfüge-Ton ausgeschaltet hatte, bekommt nicht mehr ungefragt den neuen Belohnungs-Ton zu hören.",
+        en: "If you had turned the paste sound off, the new reward sound no longer starts playing unasked.",
+      },
+      {
+        kind: "improvement",
+        de: "Der Aufräum-Stil „Standard“ ist entfernt — er hat den Text messbar nicht verbessert und nur Wartezeit gekostet. Die umformenden Stile (E-Mail, Prompt, Notizen …) bleiben unverändert.",
+        en: "The “standard” cleanup style is gone — it measurably did not improve the text and only cost you time. The transforming styles (email, prompt, notes …) are unchanged.",
+      },
+    ],
+  },
+  {
     version: "0.5.150",
     date: "2026-07-20",
     title: {

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   onLearningReward,
@@ -32,8 +40,49 @@ interface Banner {
 }
 
 const SHOW_MS = 4600;
-const LEAVE_MS = 320;
+/** Muss zur Dauer von `xpb-morph-out` in xpbanner.css passen (Zuklappen +
+ *  Verschwinden), sonst wird die Pille mitten im Schliessen abgeraeumt. */
+const LEAVE_MS = 600;
 const MAX_STACK = 3;
+
+/** Traegt EIN Banner durch die Morph-Choreografie: auftauchen als Ball →
+ *  aufklappen zur Pille → Inhalt zeigen → wieder zuklappen.
+ *
+ *  „auto" ist nicht animierbar, deshalb wird die Zielbreite EINMAL im Layout
+ *  gemessen (Element rendert dafuer ein Frame lang unsichtbar und ungebremst)
+ *  und als `--xpb-w` gesetzt; erst danach laeuft die Animation. Ein Frame
+ *  Verzoegerung ist unsichtbar, verhindert aber das Springen, das entsteht,
+ *  wenn man die Breite waehrend der laufenden Animation misst. */
+function MorphBanner({
+  className,
+  onClick,
+  children,
+}: {
+  className: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (w === null && ref.current) {
+      setW(Math.ceil(ref.current.getBoundingClientRect().width));
+    }
+  }, [w]);
+  return (
+    <div
+      ref={ref}
+      className={className}
+      role="status"
+      onClick={onClick}
+      // Mess-Frame: keine Animation, unsichtbar, natuerliche Breite.
+      data-measuring={w === null ? "" : undefined}
+      style={w === null ? undefined : ({ "--xpb-w": `${w}px` } as CSSProperties)}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** XP number that counts up to its target on mount (~0.6 s, rAF). */
 function CountUp({ to }: { to: number }) {
@@ -241,10 +290,9 @@ export function XpBannerHost({
   return (
     <div className="xpb-stack" aria-live="polite">
       {banners.map((b) => (
-        <div
+        <MorphBanner
           key={b.id}
           className={`xpb xpb-${b.cls}${b.leaving ? " xpb-leaving" : ""}`}
-          role="status"
           onClick={() => dismiss(b.id)}
         >
           <span className="xpb-icon">
@@ -270,7 +318,7 @@ export function XpBannerHost({
               +<CountUp to={b.xp} /> XP
             </span>
           )}
-        </div>
+        </MorphBanner>
       ))}
     </div>
   );
