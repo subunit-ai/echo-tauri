@@ -9,6 +9,7 @@
 //! every call spawns a short-lived thread and swallows errors — local-first
 //! means a failed sync just retries on the next change / focus.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde_json::{json, Value};
@@ -17,15 +18,27 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::commands::AppState;
 use crate::config::Config;
 
+/// Single-flight guard: coalesce overlapping syncs. `kick` fires on every note
+/// change, window focus, and startup, so without this several round-trips race
+/// and their `apply_server_notes` reconciles can arrive out of order and clobber
+/// each other. A change that lands while a sync is in flight is safe — its dirty
+/// row persists and the next kick (focus/change/startup all re-fire) pushes it.
+static SYNC_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
 /// Fire a detached, best-effort sync. Safe to call after every note change, on
 /// window focus, and at startup / after login. No-op for signed-out accounts.
 pub fn kick(app: &AppHandle) {
+    // Skip if a sync is already running — coalesce instead of racing.
+    if SYNC_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        return;
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         let cfg = { app.state::<AppState>().config.lock().clone() };
         if let Err(e) = sync_blocking(&app, &cfg) {
             log::warn!("notes sync failed (ignored): {e}");
         }
+        SYNC_IN_FLIGHT.store(false, Ordering::Release);
     });
 }
 
@@ -37,6 +50,20 @@ fn endpoint_notes(cfg: &Config) -> String {
 fn endpoint_folders(cfg: &Config) -> String {
     cfg.subunit_endpoint
         .replace("/v1/transcribe", "/v1/note-folders/sync")
+}
+
+/// Extract an authoritative array field from a 2xx sync body. Returns `Some` ONLY
+/// for a real JSON array (including an explicit empty one — a legitimate "you have
+/// zero items" from the server); `None` for a missing field, `null`, or a
+/// non-array. Reconciling on `None` would treat a contract violation as an
+/// authoritative empty set and wipe every clean local note/folder — so callers
+/// MUST skip the reconcile when this returns `None`. Pure, so the data-loss guard
+/// is unit-tested without a network.
+fn authoritative_array<'a>(body: &'a Value, key: &str) -> Option<&'a Vec<Value>> {
+    match body.get(key) {
+        Some(Value::Array(a)) => Some(a),
+        _ => None,
+    }
 }
 
 fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
@@ -73,14 +100,8 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
         anyhow::bail!("notes sync {}", resp.status());
     }
     let server: Value = resp.json()?;
-    let notes = server
-        .get("notes")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
 
-    // Ack what we pushed (only clears dirty if unchanged since), then reconcile
-    // the authoritative set into the local store.
+    // Ack what we pushed (only clears dirty if unchanged since).
     let pushed: Vec<(String, i64)> = dirty
         .iter()
         .filter_map(|p| {
@@ -91,7 +112,21 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
         })
         .collect();
     crate::store::mark_notes_synced(&account, &pushed);
-    crate::store::apply_server_notes(&account, &notes);
+
+    // Reconcile the authoritative set into the local store — but ONLY when the
+    // server actually returned a well-formed `notes` array. A 2xx whose body
+    // lacks a valid `notes` array (missing field, `null`, wrong type) is a
+    // contract violation, NOT an authoritative empty set; treating it as one
+    // makes apply_server_notes DELETE every clean local note (data loss). An
+    // explicit empty array IS still honoured (fresh account, or all notes deleted
+    // on another device).
+    match authoritative_array(&server, "notes") {
+        Some(notes) => crate::store::apply_server_notes(&account, notes),
+        None => log::warn!(
+            "notes sync: 2xx response missing a valid `notes` array — skipping \
+             reconcile to protect local notes"
+        ),
+    }
 
     // ── Folders (same round-trip, against /v1/note-folders/sync) — folders are
     // first-class synced objects so they appear on every device even when empty.
@@ -109,11 +144,6 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
         anyhow::bail!("note-folders sync {}", resp_f.status());
     }
     let server_f: Value = resp_f.json()?;
-    let folders = server_f
-        .get("folders")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
     let pushed_f: Vec<(String, i64)> = dirty_f
         .iter()
         .filter_map(|p| {
@@ -124,9 +154,47 @@ fn sync_blocking(app: &AppHandle, cfg: &Config) -> anyhow::Result<()> {
         })
         .collect();
     crate::store::mark_folders_synced(&account, &pushed_f);
-    crate::store::apply_server_folders(&account, &folders);
+    // Same data-loss guard as notes above: only reconcile (which deletes local
+    // folders the server omitted) when the server sent a real `folders` array.
+    match authoritative_array(&server_f, "folders") {
+        Some(folders) => crate::store::apply_server_folders(&account, folders),
+        None => log::warn!(
+            "note-folders sync: 2xx response missing a valid `folders` array — \
+             skipping reconcile to protect local folders"
+        ),
+    }
 
     // Nudge any open Notes UI to reload its list (notes AND folders).
     let _ = app.emit("echo://notes-changed", ());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // A well-formed authoritative set is reconciled (incl. an explicit empty one).
+    #[test]
+    fn honours_a_real_array_including_empty() {
+        let one = json!({ "notes": [{ "id": "a" }] });
+        assert_eq!(authoritative_array(&one, "notes").map(Vec::len), Some(1));
+
+        // Explicit empty array = the server authoritatively has zero notes (fresh
+        // account / everything deleted elsewhere). This SHOULD reconcile.
+        let empty = json!({ "notes": [] });
+        assert_eq!(authoritative_array(&empty, "notes").map(Vec::len), Some(0));
+    }
+
+    // The data-loss cases: a 2xx body without a valid array must NOT reconcile,
+    // so apply_server_notes never runs with an empty set and never wipes locals.
+    #[test]
+    fn refuses_missing_null_or_wrong_type() {
+        assert!(authoritative_array(&json!({}), "notes").is_none());
+        assert!(authoritative_array(&json!({ "ok": true }), "notes").is_none());
+        assert!(authoritative_array(&json!({ "notes": null }), "notes").is_none());
+        assert!(authoritative_array(&json!({ "notes": "oops" }), "notes").is_none());
+        assert!(authoritative_array(&json!({ "notes": 42 }), "notes").is_none());
+        assert!(authoritative_array(&json!({ "notes": { "a": 1 } }), "notes").is_none());
+    }
 }
