@@ -5,10 +5,36 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+
+/// Pinned Hugging Face revision (immutable commit SHA) for the whisper.cpp GGML
+/// models. NEVER fetch from the mutable `main` branch: a silently re-pushed model
+/// would change our ASR output — or, worse, ship a tampered binary — under the
+/// same filename. This SHA is the whisper.cpp models repo's `main` as of
+/// 2024-10-29; all six MODELS files are verified present at it. Bump deliberately
+/// (and re-verify the files) when adopting a newer model set.
+const WHISPER_MODELS_REVISION: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
+
+/// Per-process download sequence — gives each in-flight download a UNIQUE `.part`
+/// file so two concurrent fetches of the same model can't write the same temp and
+/// corrupt each other. Both complete, verify, then atomically rename onto the
+/// final path (last writer wins with a fully-valid file).
+static PART_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Build the pinned download URL for a model file.
+fn model_url(file: &str) -> String {
+    format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/{WHISPER_MODELS_REVISION}/{file}")
+}
+
+/// A collision-free temp path for one download attempt (see [`PART_SEQ`]).
+fn part_path(path: &std::path::Path) -> PathBuf {
+    let seq = PART_SEQ.fetch_add(1, Ordering::Relaxed);
+    path.with_extension(format!("part.{seq}"))
+}
 
 /// (key, ggml filename, label). Ordered small → large.
 pub const MODELS: &[(&str, &str, &str)] = &[
@@ -113,8 +139,8 @@ async fn fetch_async(model: &str, app: Option<&AppHandle>) -> anyhow::Result<Pat
     if path.exists() && tokio::fs::metadata(&path).await.map(|m| m.len() > 1_000_000).unwrap_or(false) {
         return Ok(path);
     }
-    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file}");
-    let tmp = path.with_extension("part");
+    let url = model_url(file);
+    let tmp = part_path(&path);
     let _ = tokio::fs::remove_file(&tmp).await;
 
     let client = reqwest::Client::builder()
@@ -164,8 +190,8 @@ fn fetch(model: &str, app: Option<&AppHandle>) -> anyhow::Result<PathBuf> {
     if path.exists() && fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
         return Ok(path);
     }
-    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file}");
-    let tmp = path.with_extension("part");
+    let url = model_url(file);
+    let tmp = part_path(&path);
     let _ = fs::remove_file(&tmp);
 
     let client = reqwest::blocking::Client::builder()
