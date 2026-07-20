@@ -133,6 +133,33 @@ jobs:
         with:
           arch: arm64
 
+      - name: ort prebuilt cache seed (Windows ARM — pyke CDN 403s GitHub runners)
+        if: matrix.platform == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          # ort-sys (meet-core → onnxruntime) downloads a prebuilt static lib
+          # from cdn.pyke.io at build time. That CDN intermittently answers
+          # GitHub-hosted runners with 403 (3× in a row on 2026-07-03) while
+          # serving other networks fine — one flaky external CDN must not be
+          # able to block our releases. So seed ort-sys's download cache from
+          # our own mirror instead: with the extracted archive already at
+          # $ORT_CACHE_DIR/dfbin/<target>/<dist-hash>, its build.rs skips the
+          # download entirely (ort-sys 2.0.0-rc.12 build/main.rs). The mirror
+          # zip was byte-verified against ort-sys' pinned dist.txt SHA-256
+          # (8f3a87f1ab1a22d690534b1c67225ef6aadfb51bf960c5d87f250451e46aec8f)
+          # before upload; the layout inside the zip IS the dfbin tree.
+          # Fails soft: if the mirror asset is unreachable, fall through to
+          # the normal pyke download (maybe it works again).
+          $zip = "$env:RUNNER_TEMP\ort-cache-winarm.zip"
+          try {
+            Invoke-WebRequest -Uri "https://github.com/subunit-ai/echo-tauri/releases/download/build-assets-ort-1.24.2/ort-cache-winarm.zip" -OutFile $zip
+            Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\ort-cache\dfbin"
+            "ORT_CACHE_DIR=$env:RUNNER_TEMP\ort-cache" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Get-ChildItem -Recurse "$env:RUNNER_TEMP\ort-cache\dfbin" | Select-Object -ExpandProperty FullName
+          } catch {
+            Write-Host "::warning::ort mirror seed unavailable ($_) — falling back to pyke CDN download"
+          }
+
       - name: macOS build env (cmake + deployment target for whisper.cpp std::filesystem)
         if: matrix.platform == 'macos-14'
         run: |
