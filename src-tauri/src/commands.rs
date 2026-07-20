@@ -2630,14 +2630,17 @@ pub fn orb_cycle(
                     .unwrap_or(0);
                 c.language = order[next].to_string();
             }
-            // off → tidy (Standard) → prompt → email → slack → formal → notes → letter → social → off
+            // off → prompt → email → slack → formal → notes → letter → social → off
+            // ("tidy"/Standard ist am 2026-07-20 entfallen — die Stufe war auf
+            // echten Diktaten messbar wirkungslos; nur transformierende Stile
+            // bleiben. Siehe CLEANUP_STYLE_OPTIONS in Settings.tsx.)
             "cleanup" => {
                 if !c.cleanup_enabled {
                     c.cleanup_enabled = true;
-                    c.cleanup_style = "tidy".to_string();
+                    c.cleanup_style = "prompt".to_string();
                 } else {
                     let order = [
-                        "tidy", "prompt", "email", "slack", "formal", "notes", "letter", "social",
+                        "prompt", "email", "slack", "formal", "notes", "letter", "social",
                     ];
                     let idx = order.iter().position(|x| *x == c.cleanup_style).unwrap_or(0);
                     if idx + 1 >= order.len() {
@@ -2695,8 +2698,9 @@ pub fn orb_set(
                 c.cleanup_enabled = true;
                 c.cleanup_auto_mode = true;
             }
+            // "tidy" bewusst NICHT mehr annehmbar (entfernt 2026-07-20).
             ("cleanup", "prompt") | ("cleanup", "email") | ("cleanup", "slack")
-            | ("cleanup", "formal") | ("cleanup", "tidy") | ("cleanup", "notes")
+            | ("cleanup", "formal") | ("cleanup", "notes")
             | ("cleanup", "letter") | ("cleanup", "social") => {
                 c.cleanup_enabled = true;
                 c.cleanup_auto_mode = false; // a concrete pick overrides Auto

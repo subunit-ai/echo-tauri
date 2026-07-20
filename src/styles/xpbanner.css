@@ -21,26 +21,88 @@
   pointer-events: none;
 }
 
+/* Morph-Choreografie (TJ 2026-07-20): die Pille FLIEGT NICHT EIN — sie taucht
+   als Ball auf, klappt zur Pille auf, zeigt den Inhalt und schliesst sich
+   wieder. Der Icon-Kreis IST der Ball; die Breite waechst von `--xpb-ball` auf
+   die im Layout gemessene `--xpb-w` (siehe MorphBanner in XpBanner.tsx —
+   "auto" ist nicht animierbar). Radius bleibt durchgehend voll rund, damit aus
+   dem Kreis eine echte Pille wird statt einer Karte. */
+/* Dieses Stylesheet wird von ZWEI Hosts geladen: der App (die `app.css` mit dem
+   globalen `* { box-sizing: border-box }` mitbringt) und dem Toast-Fenster
+   (src/toast/main.tsx — das lädt NUR tokens/xpbanner/toast.css). Ohne eigenen
+   Reset galt im Toast-Fenster `content-box`: aus `--xpb-ball` 56px wurden mit
+   Padding+Border real 87×58px — der „Ball" war dort ein liegendes Oval
+   (TJ 2026-07-20: „derzeit ist er oval am Anfang"). Die Ball-Geometrie MUSS
+   deshalb hostunabhängig sein. */
+.xpb,
+.xpb *,
+.xpb *::before,
+.xpb *::after {
+  box-sizing: border-box;
+}
+
 .xpb {
   --xpb-accent: var(--cyan);
+  /* Ball-Durchmesser == äußere Pillenhöhe: Border 1 + Padding 11 + Icon 34 +
+     Padding 11 + Border 1 = 58px. Damit ist die Ball-Phase ein EXAKTER Kreis
+     (58×58) und nie größer als die Pille (TJ: „der Ball darf nicht größer sein
+     als die Pille … soll sich nur horizontal stretchen"). Wächst nur die
+     Breite, nie die Höhe. */
+  --xpb-ball: 58px;
   pointer-events: auto;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 300px;
+  min-width: 0; /* der Ball muss unter die Inhaltsbreite schrumpfen duerfen */
+  width: var(--xpb-w, auto);
   max-width: min(480px, calc(100vw - 32px));
-  padding: 11px 16px 11px 13px;
-  border-radius: 14px;
+  /* Links exakt 11px = oben/unten: nur so sitzt das 34px-Icon im 58px-Ball
+     mittig (12px Luft ringsum). Rechts darf mehr sein — das Padding liegt bei
+     border-box INNEN und ändert die Ballgröße nicht. */
+  padding: 11px 16px 11px 11px;
+  border-radius: 999px;
   background: var(--menu-bg);
   border: 1px solid color-mix(in srgb, var(--xpb-accent) 42%, transparent);
   box-shadow:
     0 6px 28px rgba(0, 0, 0, 0.35),
     0 0 22px color-mix(in srgb, var(--xpb-accent) 22%, transparent);
-  animation: xpb-in 0.42s cubic-bezier(0.2, 1.25, 0.35, 1) both;
+  overflow: hidden; /* Inhalt darf in der Ball-Phase nicht herausragen */
+  /* Nur die compositor-faehigen Properties hinten anmelden — `width` ignoriert
+     der Browser hier ohnehin. Gemessen (headless, 2000 Frames): Style+Layout
+     der Breiten-Animation kosten p95 = 0.1ms, also ~1 % des 8.33-ms-Budgets
+     fuer 120 FPS — die Animation ist nicht der Flaschenhals, ein Umbau auf
+     `transform: scaleX` (der Radius und Rahmen verzerren wuerde) brauchte es
+     nicht. */
+  will-change: transform, opacity;
+  animation: xpb-morph-in 0.86s both;
 }
+
+/* Ein Frame zum Messen der natuerlichen Breite: keine Animation, unsichtbar,
+   und die alte Mindestbreite, damit kurze Meldungen nicht winzig werden. */
+.xpb[data-measuring] {
+  min-width: 300px;
+  width: auto;
+  opacity: 0;
+  animation: none;
+}
+
+/* Inhalt kommt ERST, wenn die Pille wirklich aufgeht — sonst sieht man Text im
+   Ball. Der Verzögerungswert hängt an der Oval-Stufe der Morph-Kurve (34 % von
+   0.86s ≈ 0.29s); wer die Dauer oben ändert, muss ihn mitziehen. */
+.xpb-body,
+.xpb-xp {
+  animation: xpb-content-in 0.3s 0.46s both;
+}
+
+/* Dauer MUSS zu LEAVE_MS in XpBanner.tsx passen (sonst wird der Knoten
+   entfernt, bevor die Animation durch ist, oder er hängt sichtbar nach). */
 .xpb-leaving {
-  animation: xpb-out 0.32s ease-in both;
+  animation: xpb-morph-out 0.6s both;
+}
+.xpb-leaving .xpb-body,
+.xpb-leaving .xpb-xp {
+  animation: xpb-content-out 0.14s ease-in both;
 }
 
 /* Accent per event class. Bands mirror the six Wortdex accents: 1 Gewöhnlich
@@ -88,12 +150,28 @@
   gap: 1px;
   min-width: 0;
   flex: 1;
+  /* Waehrend des Aufklappens ist die Box schmaler als ihr Text. Ohne
+     `hidden` laeuft der Titel (nowrap) heraus und schiebt sich sichtbar
+     UNTER die XP-Zahl, die nicht schrumpft — gemessen bei ~52 % der
+     Morph-Kurve. Beschneiden ist hier richtig, ueberlappen nie. */
+  overflow: hidden;
 }
 .xpb-title {
   font-size: 13px;
   font-weight: 650;
   color: var(--text);
   line-height: 1.25;
+  /* MUSS nowrap sein: waehrend des Morphs ist die Pille schmal, und ein
+     umbrechender Titel treibt die HOEHE hoch (gemessen 58→88px) — der „Ball"
+     waere dann ein stehendes Oval statt eines Kreises. `overflow: hidden` der
+     Pille beschneidet nur horizontal, nicht den Umbruch. Im Endzustand aendert
+     nowrap nichts: der Titel ist immer einzeilig (laengster String 30 Zeichen,
+     die Pille kappt erst bei 480px). Ellipse nur als Notnagel, falls ein sehr
+     langes entdecktes Wort die Pille doch an die Kappungsgrenze druckt — dann
+     bricht der Titel sauber ab statt hart abgeschnitten zu werden. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .xpb-detail {
   display: flex;
@@ -124,24 +202,108 @@
   text-shadow: 0 0 14px color-mix(in srgb, var(--xpb-accent) 45%, transparent);
 }
 
-@keyframes xpb-in {
-  from {
+/* Auftauchen → Strecken → Aufklappen. Kein translate: es kommt NICHT von außen
+   hereingeflogen, es entsteht an Ort und Stelle.
+
+   Die Reihenfolge ist bewusst RUND → LEICHT OVAL → PILLE (TJ 2026-07-20) — der
+   Ball setzt sich erst als exakter Kreis, dehnt sich dann sichtbar horizontal
+   und öffnet daraus zur vollen Pille. Die Zwischenstufe bei 34 % ist genau
+   dieses „leicht oval" (58 → 78px bei 58px Höhe, Seitenverhältnis ~1.34).
+
+   Die Easing-Segmente sind an den Stoßstellen geschwindigkeits-angepasst
+   (langsam raus aus dem Kreis, schnell durch die Mitte, weich in den
+   Endzustand) — sonst ruckelt der Übergang trotz durchgehender Keyframes.
+   KEIN Überschwinger: der Ball ist nie größer als die Pille. */
+@keyframes xpb-morph-in {
+  0% {
+    width: var(--xpb-ball);
     opacity: 0;
-    transform: translateY(-18px) scale(0.94);
+    transform: scale(0.52);
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
   }
-  to {
+  16% {
+    width: var(--xpb-ball);
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1); /* exakter Kreis, kurz stehend */
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  34% {
+    width: calc(var(--xpb-ball) * 1.34); /* leicht oval */
+    opacity: 1;
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.16, 0.72, 0.14, 1);
+  }
+  100% {
+    width: var(--xpb-w, auto);
+    opacity: 1;
+    transform: scale(1);
   }
 }
-@keyframes xpb-out {
+
+/* Zuklappen → verschwinden: exakt die Umkehrung, inklusive Oval-Zwischenstufe. */
+@keyframes xpb-morph-out {
+  0% {
+    width: var(--xpb-w, auto);
+    opacity: 1;
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.5, 0, 0.84, 0.4);
+  }
+  56% {
+    width: calc(var(--xpb-ball) * 1.34);
+    opacity: 1;
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.35, 1);
+  }
+  74% {
+    width: var(--xpb-ball);
+    opacity: 1;
+    transform: scale(1);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.6);
+  }
+  100% {
+    width: var(--xpb-ball);
+    opacity: 0;
+    transform: scale(0.56);
+  }
+}
+
+@keyframes xpb-content-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xpb-content-out {
   from {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateY(-12px) scale(0.96);
+  }
+}
+
+/* Bewegungsempfindliche Nutzer: kein Morph, nur ein sanftes Ein-/Ausblenden. */
+@media (prefers-reduced-motion: reduce) {
+  .xpb,
+  .xpb-leaving,
+  .xpb-body,
+  .xpb-xp,
+  .xpb-leaving .xpb-body,
+  .xpb-leaving .xpb-xp {
+    animation-duration: 0.18s;
+    animation-delay: 0s;
+    animation-timing-function: ease;
+  }
+  .xpb {
+    animation-name: xpb-content-in;
+    width: var(--xpb-w, auto);
+  }
+  .xpb-leaving {
+    animation-name: xpb-content-out;
   }
 }
 
@@ -168,9 +330,8 @@
   --xpb-accent: #f2f2f4;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .xpb,
-  .xpb-leaving {
-    animation: none;
-  }
-}
+/* HINWEIS: Hier stand ein ZWEITER `prefers-reduced-motion`-Block mit
+   `animation: none`. Da er spaeter in der Kaskade kam, hat er den sorgfaeltig
+   gebauten Fallback weiter oben (sanftes Ein-/Ausblenden) stillschweigend
+   ueberschrieben — die Pille verschwand fuer bewegungsempfindliche Nutzer
+   uebergangslos. Entfernt; der Block oben ist die einzige Wahrheit. */

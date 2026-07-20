@@ -2318,7 +2318,11 @@ select:hover {
   z-index: 1;
   display: flex;
   align-items: center;
+  /* Umbruchfähig, weil der getragene Titel als eigene, volle Zeile unter der
+     Kopfzeile sitzt (siehe .sa-title-row in activity.css). */
+  flex-wrap: wrap;
   gap: 10px;
+  row-gap: 7px;
   width: 100%;
   text-align: left;
   padding: 8px;

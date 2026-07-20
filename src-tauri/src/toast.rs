@@ -18,12 +18,14 @@ use tauri::{AppHandle, LogicalPosition, Manager, WebviewUrl, WebviewWindow, Webv
 
 pub const LABEL: &str = "toast";
 
-/// Window box. Height fits the two-line banner plus the stack's breathing room;
-/// the webview itself is transparent, so unused space is invisible.
-const W: f64 = 380.0;
-const H: f64 = 190.0;
-/// Distance from the screen edge. The top gap clears the macOS menu bar.
-const MARGIN_RIGHT: f64 = 22.0;
+/// Window box. MUSS breiter sein als die maximale Bannerbreite (xpbanner.css:
+/// `max-width: min(480px, …)`) plus Stack-Padding und Schattenradius — sonst
+/// wird die Pille am Fensterrand abgeschnitten (Bug bis v0.5.150: W war 380).
+/// Die Höhe trägt den vollen Stapel (MAX_STACK = 3) samt Abständen und Schatten.
+/// Der Webview ist transparent, ungenutzte Fläche ist also unsichtbar.
+const W: f64 = 560.0;
+const H: f64 = 260.0;
+/// Abstand von der Bildschirmkante. Der obere Rand hält die macOS-Menüleiste frei.
 const MARGIN_TOP: f64 = 44.0;
 
 /// Create the toast window once — hidden, unfocused, click-through, pinned above
@@ -54,20 +56,33 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     // with, so we never toggle this (no hit-test loop).
     let _ = win.set_ignore_cursor_events(true);
     crate::overlay::pin_topmost(&win);
-    position(&win);
+    position(app, &win);
     Ok(win)
 }
 
-/// Park the window in the top-right corner of the monitor it currently sits on,
+/// Park the window CENTRED at the top edge of the monitor the user is actually
+/// working on (TJ 2026-07-20: „wird leider nicht mittig oben angezeigt"),
 /// clamped so it can never land off-screen.
-fn position(win: &WebviewWindow) {
-    let Ok(Some(mon)) = win.current_monitor() else {
+///
+/// Der Bildschirm wird über den MAUSZEIGER bestimmt, nicht über
+/// `current_monitor()`: das liefert den Monitor, auf dem das FENSTER zuletzt
+/// geparkt wurde. Nach einem Monitorwechsel wäre der Toast also weiter auf dem
+/// alten Schirm aufgetaucht — obwohl der Aufruf in `toast_show` genau das
+/// verhindern sollte. Fällt auf den Fenster-Monitor zurück, wenn keine
+/// Zeigerposition zu holen ist (z. B. headless/Tests).
+fn position(app: &AppHandle, win: &WebviewWindow) {
+    let mon = app
+        .cursor_position()
+        .ok()
+        .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
+        .or_else(|| win.current_monitor().ok().flatten());
+    let Some(mon) = mon else {
         return;
     };
     let scale = mon.scale_factor();
     let size = mon.size().to_logical::<f64>(scale);
     let origin = mon.position().to_logical::<f64>(scale);
-    let x = (origin.x + size.width - W - MARGIN_RIGHT).max(origin.x);
+    let x = (origin.x + (size.width - W) / 2.0).max(origin.x);
     let y = (origin.y + MARGIN_TOP).max(origin.y);
     let _ = win.set_position(LogicalPosition::new(x, y));
 }
@@ -88,7 +103,7 @@ pub fn toast_show(app: AppHandle) {
         },
     };
     // Re-position on every show: the user may have moved to another monitor.
-    position(&win);
+    position(&app, &win);
     let _ = win.show();
     crate::overlay::pin_topmost(&win);
 }

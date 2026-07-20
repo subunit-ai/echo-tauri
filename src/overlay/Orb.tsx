@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import {
   BAN_PATHS,
   BRIEFCASE_PATHS,
-  BROOM_PATHS,
   CLOUD_PATHS,
   HASH_PATHS,
   LETTER_PATHS,
@@ -680,12 +679,10 @@ export function Orb() {
               active={quick.cleanup === "auto"}
               onClick={pick("cleanup", "auto")}
             />
-            <Row
-              icon={BROOM_PATHS}
-              label={t("settings.cleanupStyleTidy")}
-              active={quick.cleanup === "tidy"}
-              onClick={pick("cleanup", "tidy")}
-            />
+            {/* "Standard" (tidy) entfernt 2026-07-20 — siehe CLEANUP_STYLE_OPTIONS
+                in Settings.tsx: die Stufe war auf echten Diktaten messbar
+                wirkungslos und kostete 3–9 s. Hier bleiben nur die Stile, die
+                den Text bewusst TRANSFORMIEREN. */}
             <Row
               icon={TERMINAL_PATHS}
               label={t("settings.cleanupStylePrompt")}

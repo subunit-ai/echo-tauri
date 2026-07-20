@@ -1384,17 +1384,27 @@
   mask-composite: exclude;
   pointer-events: none;
 }
+/* --arc-a/--arc-b = the SAME metal, read along the progress arc (dark shank →
+   bright leading edge, so the head of the sweep is the eye-catching end). */
 .tier-ring--bronze {
   --ring: linear-gradient(135deg, #c08b60, #7d5a3c);
+  --arc-a: #8a6442;
+  --arc-b: #dba572;
 }
 .tier-ring--silber {
   --ring: linear-gradient(135deg, #dfe4ea, #99a1ab);
+  --arc-a: #929aa5;
+  --arc-b: #f2f6fb;
 }
 .tier-ring--gold {
   --ring: linear-gradient(135deg, #f4d67f, #c8983a);
+  --arc-a: #c8983a;
+  --arc-b: #ffe6a0;
 }
 .tier-ring--platin {
   --ring: linear-gradient(135deg, #e2effb, #9ec4e8);
+  --arc-a: #96bee4;
+  --arc-b: #f2f9ff;
 }
 /* Eloquenz: the animated showpiece — a cyan→violet→amber conic sweep that
    slowly rotates. prefers-reduced-motion freezes it (still a full gradient). */
@@ -1406,6 +1416,8 @@
     var(--amber),
     var(--cyan)
   );
+  --arc-a: var(--violet);
+  --arc-b: var(--cyan);
 }
 .tier-ring--eloquenz::before {
   animation: tier-spin 5s linear infinite;
@@ -1437,6 +1449,131 @@
 }
 :root[data-theme="black"] .tier-ring--eloquenz {
   --ring: conic-gradient(from 0deg, #f2f2f4, #9a9a9d, #cfcfd2, #f2f2f4);
+}
+/* Same zero-hue rule for the progress arc — the sweep must not smuggle colour
+   back into the black theme. Brightness alone still ranks the tiers. */
+:root[data-theme="black"] .tier-ring--bronze {
+  --arc-a: #55555a;
+  --arc-b: #86868b;
+}
+:root[data-theme="black"] .tier-ring--silber {
+  --arc-a: #86868a;
+  --arc-b: #d6d6d9;
+}
+:root[data-theme="black"] .tier-ring--gold {
+  --arc-a: #9a9a9e;
+  --arc-b: #e6e6e8;
+}
+:root[data-theme="black"] .tier-ring--platin {
+  --arc-a: #b0b0b4;
+  --arc-b: #f2f2f4;
+}
+:root[data-theme="black"] .tier-ring--eloquenz {
+  --arc-a: #9a9a9d;
+  --arc-b: #f2f2f4;
+}
+
+/* Helles Theme: die hellen Metalle (Silber/Platin, teils Gold) verschwinden als
+   Bogen auf weißem Grund. Dort läuft der Verlauf deshalb ANDERSHERUM — die
+   führende Kante ist die DUNKLERE, damit der Fortschritt gegen die Fläche
+   ankommt. Die Tier-Zuordnung bleibt dieselbe Metall-Familie. */
+:root[data-theme="light"] .tier-ring--silber {
+  --arc-a: #b6bec8;
+  --arc-b: #737c88;
+}
+:root[data-theme="light"] .tier-ring--platin {
+  --arc-a: #a8cbeb;
+  --arc-b: #5f8fbe;
+}
+:root[data-theme="light"] .tier-ring--gold {
+  --arc-a: #edc975;
+  --arc-b: #a87d24;
+}
+
+/* ---- Level-Fortschritt am Ring (TierRing progress + showLevel) ----
+   TJ 2026-07: „der Ring soll sich füllen, wie weit man ist — aber man soll den
+   Rand trotzdem sehen, ob man Bronze, Gold oder sonst was hat." Deshalb ZWEI
+   Bänder auf exakt derselben Geometrie: das Basisband (::before) bleibt der
+   volle Tier-Farbverlauf, nur gedimmt, und der Bogen (.tier-ring-arc) liegt in
+   voller Sättigung darüber. Der Rang bleibt so immer als geschlossener Kreis
+   lesbar, der Fortschritt als heller Sektor obendrauf. */
+
+/* Unter Level 3 gibt es keinen Rang — der Fortschrittsring erscheint dann
+   NEUTRAL grau (keine Tier-Farbe suggerieren), damit Einsteiger trotzdem sehen,
+   wie weit sie sind. */
+.tier-ring--none {
+  --ring: linear-gradient(135deg, var(--ink3), var(--border-strong));
+  --arc-a: var(--ink3);
+  --arc-b: var(--muted);
+}
+/* Basisband dimmen, sobald ein Bogen darüber liegt (sonst konkurrieren beide). */
+.tier-ring--progress::before {
+  opacity: 0.34;
+}
+/* Die Transition MUSS auf dem Element liegen, das --tr-p setzt: der Bogen erbt
+   den Wert, und nur der Setzer interpoliert ihn (das Kind sähe sonst je nach
+   Engine einen harten Sprung). */
+.tier-ring--progress {
+  transition: --tr-p 0.5s var(--ease-out);
+}
+/* Animierbarer Winkel: ohne @property springt die conic-Kante beim XP-Zuwachs. */
+@property --tr-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+.tier-ring-arc {
+  /* Geometrie MUSS 1:1 zu .tier-ring::before passen, sonst sitzt der Bogen
+     versetzt auf dem Basisband. */
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  padding: 3px;
+  /* 0deg = 12 Uhr, im Uhrzeigersinn. `transparent 0` ist der Hard-Stop-Trick:
+     die 0 wird auf die vorige Stopp-Position hochgeklemmt. */
+  background: conic-gradient(
+    from 0deg,
+    var(--arc-a) 0deg,
+    var(--arc-b) calc(var(--tr-p) * 360deg),
+    transparent 0
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tier-ring--progress {
+    transition: none;
+  }
+}
+/* Level-Zahl als kleine Glas-Perle unten rechts am Avatar. Bewusst NEUTRAL
+   (Glas + --text): die Farbe gehört dem Rang-Ring, die Zahl darf ihm keine
+   Aufmerksamkeit klauen. Sie sitzt so weit AUSSEN wie möglich, damit sie vom
+   Fortschrittsbogen (startet 12 Uhr, läuft im Uhrzeigersinn) möglichst wenig
+   überdeckt. */
+.tier-ring-lvl {
+  position: absolute;
+  right: -9px;
+  bottom: -8px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  background: var(--menu-bg);
+  border: 1px solid var(--glass-edge2);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---- Primary sub-tabs (Coach / Wortdex / Erfolge) ----
@@ -1829,21 +1966,37 @@
   white-space: nowrap;
 }
 
-/* ---- Sidebar account: worn title beside the plan pill ---- */
+/* ---- Sidebar account: getragener Titel auf eigener Zeile ----
+   Vorher stand er neben der Plan-Pille und wurde per text-overflow gekürzt —
+   bei 220px Sidebar blieben ~110px, „Wandelndes Wörterbuch" war chancenlos.
+   Jetzt bekommt er die volle Kartenbreite (~184px) als eigene Flex-Zeile; er
+   wird NIE mehr abgeschnitten, sondern bricht im Zweifel um. */
 .side-account .sa-sub {
   display: flex;
   align-items: center;
   gap: 7px;
   overflow: hidden;
 }
-.sa-title {
+.sa-title-row {
+  flex: 0 0 100%;
   min-width: 0;
-  font-size: 11.5px;
+  display: flex;
+}
+/* Chip-Look wie der getragene Titel im Member-Profil (.mp-title-chip) — ein
+   System, zwei Orte. */
+.sa-title {
+  max-width: 100%;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--accent-bright);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  color: var(--cyan-ink);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 34%, transparent);
+  /* Kein Ellipsis mehr: umbrechen statt kürzen (auch ein einzelnes Monsterwort). */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* ================================================================

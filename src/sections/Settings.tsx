@@ -241,7 +241,13 @@ const ORB_STYLES: [string, string][] = [
  *  sync, and in sync with the orb satellite + the cycle order in commands.rs).
  *  Values must match the server-side cleanup style keys (cleanup.py PROMPTS). */
 const CLEANUP_STYLE_OPTIONS = (t: (k: string) => string): [string, string][] => [
-  ["tidy", t("settings.cleanupStyleTidy")], // "Standard" — the default, local DSGVO lane, always first
+  // "tidy" (Standard) ENTFERNT 2026-07-20 (TJ-Entscheid, datenbasiert): Auf echten
+  // Diktaten war die Stufe wirkungslos — 4 von 6 Testblöcken kamen BYTE-IDENTISCH
+  // zurück, Komma-F1 und Satzende-F1 waren mit und ohne Cleanup gleich (0,811 /
+  // 0,951), dafür stiegen die Wortlaut-Schäden von 30 auf 33. Whisper setzt die
+  // Interpunktion selbst, und zwar besser. Kosten waren 3–9 s Latenz pro langem
+  // Diktat. Übrig bleiben die TRANSFORMIERENDEN Stile, die den Text bewusst
+  // umformen (Mail, Prompt, …) — die leisten etwas, das die ASR nicht kann.
   ["prompt", t("settings.cleanupStylePrompt")],
   ["email", t("settings.cleanupStyleEmail")],
   ["slack", t("settings.cleanupStyleSlack")],
