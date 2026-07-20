@@ -7,7 +7,7 @@
 
    RULES honoured:
    • EVERY selector is scoped under `.meetc` → zero collision with app.css
-     (the frozen deep-dive/transcript classes dd-*/tr-*/spkassign are re-provided
+     (the frozen deep-dive/transcript classes dd-* / tr-* / spkassign are re-provided
      here under `.meetc` because the markdown renderer emits them and they exist
      nowhere else in the native app).
    • EVERY colour is an Echo token from tokens.css, or a color-mix() over one, so
