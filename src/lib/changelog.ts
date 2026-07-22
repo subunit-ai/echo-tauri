@@ -31,6 +31,21 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.152",
+    date: "2026-07-23",
+    title: {
+      de: "Erfolgs-Meldung wieder vollständig",
+      en: "Achievement toast fully visible again",
+    },
+    changes: [
+      {
+        kind: "fix",
+        de: "Die Erfolgs-Pille (neues Wort, Level-up, XP) außerhalb der App war am linken Rand abgeschnitten — jetzt erscheint sie vollständig und mittig am oberen Bildschirmrand.",
+        en: "The achievement pill (new word, level-up, XP) shown outside the app was clipped on its left edge — it now appears complete and centered at the top of the screen.",
+      },
+    ],
+  },
+  {
     version: "0.5.151",
     date: "2026-07-20",
     title: {
