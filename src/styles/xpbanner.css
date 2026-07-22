@@ -43,12 +43,12 @@
 
 .xpb {
   --xpb-accent: var(--cyan);
-  /* Ball-Durchmesser == äußere Pillenhöhe: Border 1 + Padding 11 + Icon 34 +
-     Padding 11 + Border 1 = 58px. Damit ist die Ball-Phase ein EXAKTER Kreis
-     (58×58) und nie größer als die Pille (TJ: „der Ball darf nicht größer sein
+  /* Ball-Durchmesser == äußere Pillenhöhe: Border 1 + Padding 11 + Icon 38 +
+     Padding 11 + Border 1 = 62px. Damit ist die Ball-Phase ein EXAKTER Kreis
+     (62×62) und nie größer als die Pille (TJ: „der Ball darf nicht größer sein
      als die Pille … soll sich nur horizontal stretchen"). Wächst nur die
      Breite, nie die Höhe. */
-  --xpb-ball: 58px;
+  --xpb-ball: 62px;
   pointer-events: auto;
   cursor: pointer;
   display: flex;
@@ -57,16 +57,22 @@
   min-width: 0; /* der Ball muss unter die Inhaltsbreite schrumpfen duerfen */
   width: var(--xpb-w, auto);
   max-width: min(480px, calc(100vw - 32px));
-  /* Links exakt 11px = oben/unten: nur so sitzt das 34px-Icon im 58px-Ball
-     mittig (12px Luft ringsum). Rechts darf mehr sein — das Padding liegt bei
-     border-box INNEN und ändert die Ballgröße nicht. */
-  padding: 11px 16px 11px 11px;
+  /* Links exakt 11px = oben/unten: nur so sitzt das 38px-Icon im 62px-Ball
+     mittig (12px Luft ringsum: Border 1 + Padding 11). Rechts darf mehr sein —
+     das Padding liegt bei border-box INNEN und ändert die Ballgröße nicht. */
+  padding: 11px 18px 11px 11px;
   border-radius: 999px;
   background: var(--menu-bg);
   border: 1px solid color-mix(in srgb, var(--xpb-accent) 42%, transparent);
+  /* GERICHTETER Tiefen-Schatten (nach unten), KEIN symmetrischer Accent-Glow.
+     Der alte `0 0 22px accent` strahlte rundum über die Pille hinaus und las
+     sich auf hellem Untergrund als „durchsichtige Umrandung, dicker als die
+     Pille" (TJ 2026-07-23). Negativer Spread zieht den Blur zusammen, sodass er
+     nur unten Tiefe gibt und nicht seitlich/oben als Ring austritt — sauber wie
+     eine macOS-Notification. Der Akzent lebt in Rahmen, Icon und Text. */
   box-shadow:
-    0 6px 28px rgba(0, 0, 0, 0.35),
-    0 0 22px color-mix(in srgb, var(--xpb-accent) 22%, transparent);
+    0 14px 30px -8px rgba(0, 0, 0, 0.42),
+    0 4px 10px -4px rgba(0, 0, 0, 0.28);
   overflow: hidden; /* Inhalt darf in der Ball-Phase nicht herausragen */
   /* Nur die compositor-faehigen Properties hinten anmelden — `width` ignoriert
      der Browser hier ohnehin. Gemessen (headless, 2000 Frames): Style+Layout
@@ -136,12 +142,12 @@
 .xpb-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   flex-shrink: 0;
   color: var(--xpb-accent);
-  background: color-mix(in srgb, var(--xpb-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--xpb-accent) 16%, transparent);
 }
 
 .xpb-body {
@@ -157,10 +163,11 @@
   overflow: hidden;
 }
 .xpb-title {
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 14.5px;
+  font-weight: 680;
   color: var(--text);
-  line-height: 1.25;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   /* MUSS nowrap sein: waehrend des Morphs ist die Pille schmal, und ein
      umbrechender Titel treibt die HOEHE hoch (gemessen 58→88px) — der „Ball"
      waere dann ein stehendes Oval statt eines Kreises. `overflow: hidden` der
@@ -180,26 +187,27 @@
   min-width: 0;
 }
 .xpb-word {
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13.5px;
+  font-weight: 580;
   color: var(--xpb-accent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .xpb-sub {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
 .xpb-xp {
-  font-size: 15px;
-  font-weight: 750;
+  font-size: 18px;
+  font-weight: 820;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
   color: var(--xpb-accent);
   flex-shrink: 0;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--xpb-accent) 45%, transparent);
+  text-shadow: 0 0 16px color-mix(in srgb, var(--xpb-accent) 50%, transparent);
 }
 
 /* Auftauchen → Strecken → Aufklappen. Kein translate: es kommt NICHT von außen

@@ -15,6 +15,13 @@ body {
   pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
+  /* Dieses Fenster lädt NICHT app.css — ohne diese drei Zeilen fällt die Pille
+     auf die Serifen-Standardschrift der WebView zurück und rendert ungeglättet
+     (TJ 2026-07-23: „Schrift nicht clean"). Exakt die body-Basis, die app.css
+     sonst liefert; `--font` (San Francisco / SF Pro) kommt aus tokens.css. */
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 /* Toasts stack from the top edge here (in-app they sit bottom-right).
    MITTIG zentriert (TJ 2026-07-20) — vorher `flex-end`, wodurch die Pille am
