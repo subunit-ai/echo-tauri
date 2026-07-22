@@ -25,6 +25,14 @@ body {
   right: 0;
   left: 0;
   bottom: auto;
+  /* xpbanner.css zentriert den In-App-Stack per `left: 50%; transform:
+     translateX(-50%)`. Hier spannt der Stack über die volle Fensterbreite
+     (left:0/right:0) und zentriert die Pille über `align-items: center` —
+     das geerbte transform würde den ganzen Stack zusätzlich um seine halbe
+     Breite (~280px) nach links schieben, sodass nur die rechte Hälfte der
+     Pille im Fenster bleibt (TJ 2026-07-23: „linker Teil abgeschnitten").
+     Deshalb explizit zurücksetzen. */
+  transform: none;
   align-items: center;
   padding: 8px 12px 0;
 }
