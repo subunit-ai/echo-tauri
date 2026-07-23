@@ -43,14 +43,16 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
+        // Kein OS-Fensterschatten. Auf einem transparenten, dekorationslosen
+        // Fenster zeichnet ihn das System um die sichtbare Fläche — auf macOS
+        // als „durchsichtiger Ring" etwas größer als die Pille (TJ 2026-07-23),
+        // auf Windows als permanenter DWM-Geisterrahmen um die Fenster-Rect.
+        // Der Orb-Overlay und die Prompt-Konsole schalten ihn aus demselben
+        // Grund ab (overlay.rs). Plattformübergreifend, nicht nur Windows.
+        .shadow(false)
         // Never take focus — the user is typing in another app while this pops.
         .focused(false)
         .visible(false);
-    // Windows: DWM draws the shadow around the WINDOW RECT, which on a
-    // transparent window is a permanent ghost frame (same reason the overlay and
-    // the prompt console disable it).
-    #[cfg(target_os = "windows")]
-    let builder = builder.shadow(false);
     let win = builder.build()?;
     // Permanently click-through: unlike the orb there is nothing to interact
     // with, so we never toggle this (no hit-test loop).

@@ -31,6 +31,26 @@ export const LAST_SEEN_KEY = "echo:lastSeenVersion";
 // Newest first. Trim to meaningful, user-noticeable changes — not every patch.
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.153",
+    date: "2026-07-23",
+    title: {
+      de: "Erfolgs-Meldung aufpoliert",
+      en: "Polished achievement toast",
+    },
+    changes: [
+      {
+        kind: "improvement",
+        de: "Die Erfolgs-Pille zeigt jetzt die System-Schrift (San Francisco) mit größerer, klarerer Beschriftung und deutlich sichtbarer XP-Zahl.",
+        en: "The achievement pill now uses the system font (San Francisco) with larger, cleaner labels and a much more visible XP figure.",
+      },
+      {
+        kind: "fix",
+        de: "Die diffuse Umrandung rund um die Pille (OS-Fensterschatten und Farb-Halo) ist entfernt — die Meldung wirkt sauber wie eine native Benachrichtigung.",
+        en: "Removed the fuzzy outline around the pill (OS window shadow and colour halo) — the toast now reads clean like a native notification.",
+      },
+    ],
+  },
+  {
     version: "0.5.152",
     date: "2026-07-23",
     title: {

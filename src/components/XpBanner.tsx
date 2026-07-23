@@ -115,7 +115,7 @@ function CountUp({ to }: { to: number }) {
  *  inline SVGs (no emoji), colored via currentColor by the banner class. */
 function SparkIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
       <path
         d="M12 2.5l1.9 6.1 6.1 1.9-6.1 1.9-1.9 6.1-1.9-6.1-6.1-1.9 6.1-1.9L12 2.5z"
         fill="currentColor"
@@ -127,7 +127,7 @@ function SparkIcon() {
 }
 function CheckBadgeIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
       <circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path
         d="M8 12.3l2.6 2.7 5.2-5.6"
@@ -142,7 +142,7 @@ function CheckBadgeIcon() {
 }
 function LevelIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
       <path
         d="M6 13.5l6-6 6 6M6 19l6-6 6 6"
         fill="none"
